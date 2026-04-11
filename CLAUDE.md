@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.0 — Faz 1 Reality Check sonrası (2026-04-11)
+> Versiyon: 1.2 — Faz 3.0 kickoff (Evidence Locker + ilk collector) — 2026-04-11
 
 ---
 
@@ -370,7 +370,7 @@ Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay:
   - Real DSR/liveview/silence/dlp delegation in mobile.Service.GetSummary
   - Fault-tolerant: per-query failures degrade individually, not the summary
 
-**Phase 3.0 kickoff — Evidence Locker dual-write** (this commit):
+**Phase 3.0 kickoff — Evidence Locker dual-write** (commit a98366f):
   - Migration 0025: evidence_items table with RLS + append-only (REVOKE UPDATE, DELETE)
   - `apps/api/internal/evidence/store.go` real implementation:
     WORM bucket PUT first → Postgres INSERT second; WORM failure short-circuits
@@ -381,7 +381,37 @@ Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay:
     WORM-failure short-circuit (no Postgres touch), canonicalize determinism
   - Wired into cmd/api/main.go with graceful degradation when WORM sink is
     unavailable at startup (domain collectors see nil Recorder and must handle)
-  - Recorder still uses NoopSigner pending Phase 3.0 Vault transit wiring
+
+**Phase 3.0.1 — Vault signer + first collector (liveview)** (commit f574786):
+  - NoopSigner replaced by `vault.Client` — the existing `Sign(ctx, payload)`
+    method already matches `evidence.Signer` by interface shape; a compile-time
+    assertion (`var _ evidence.Signer = (*vaultclient.Client)(nil)`) catches
+    signature drift at build time. Evidence items are now signed with the same
+    control-plane Ed25519 key used by daily audit checkpoints.
+  - **First domain collector: liveview.** `liveview.Service.terminateSession`
+    emits a `KindPrivilegedAccessSession` evidence item mapped to control
+    `CC6.1` for every terminated HR-approved session. Payload captures
+    requester, approver, endpoint, reason code + full justification text,
+    requested vs actual duration, final state, and the termination audit ID.
+  - New `ItemKind`: `KindPrivilegedAccessSession` (existing kinds don't fit
+    time-bounded dual-controlled screen view).
+  - Optional wiring pattern: `Service.SetEvidenceRecorder(r)` — constructor
+    signature stayed stable so existing tests and all callers unchanged.
+  - Emission is best-effort: Recorder errors are logged (loud) but never
+    propagate to the session termination path. Observability carries the
+    coverage gap signal, not user-facing error surfaces.
+  - 4 new liveview unit tests: happy path (CC6.1, correct payload JSON,
+    720s actual duration vs 900s requested), nil-recorder no-op, nil-approver
+    defence-in-depth skip, Recorder-error swallow.
+
+**Design pattern established**: domain services gain evidence via optional
+setter injection. Every future collector (DSR completion, policy deploy,
+backup run, etc.) follows the same shape:
+  1. Import `internal/evidence`
+  2. Add `evidenceRecorder evidence.Recorder` field + `SetEvidenceRecorder`
+  3. Emit in the post-success path of the relevant method
+  4. Swallow errors, log loudly, cite the relevant audit log ID(s)
+  5. Wire in `cmd/api/main.go` under the `if wormSink != nil` block
 
 ### Faz 2 remaining work (future commits)
 
@@ -404,10 +434,39 @@ Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay:
 - SIEM entegrasyonları: framework ready, real calls Phase 2.11
 - Windows minifilter driver (forensic DLP) — Phase 3
 
-### Faz 3 (SaaS + sertifikasyon)
+### Faz 3.0 — SOC 2 Type II observation window kickoff (🚧 in progress)
+
+2026-04-11 itibarıyla başladı. Observation window'un başlayabilmesi için
+design-level control substrate şart — bu sprint o altyapıyı kuruyor.
+
+**Tamamlananlar:**
+- ISO 27001 / SOC 2 policy suite (6 doküman, commit 30c96a4):
+  risk register + access review + change management + incident response
+  + vendor management + BCDR, Türkçe gövde + İngilizce auditor özeti
+- Evidence Locker (commit a98366f): dual-write implementation,
+  migration 0025, RLS, append-only, WORM anchor, 4 unit test
+- Vault signer + ilk collector (commit f574786): `liveview` artık her
+  sonlandırılan ayrıcalıklı erişim oturumunu `CC6.1` kanıtı olarak üretiyor
+
+**Phase 3.0 kalan iş:**
+- Ek domain collector'ları (öncelik sırasına göre):
+  * DSR completion → `CtrlP5_1` + `CtrlP7_1` (KVKK m.11 + GDPR Art. 28)
+  * Policy deploy → `CtrlCC7_1` + `CtrlCC8_1` (change mgmt)
+  * Backup run → `CtrlA1_2` (availability)
+  * Vendor review → `CtrlCC9_2`
+- Evidence pack export API — `POST /v1/dpo/evidence-packs` → ZIP stream,
+  DPO-only, `PackBuilder` canonical manifest + signature
+- `/healthz` evidence coverage check (tenant × period × control matrix)
+- Vault transit anahtarlarının key-rotation testi (5 yıllık retention için
+  historical signature verification path)
+- HRIS → Keycloak 4h revocation automation (ADR 0018 scaffold → real)
+- DPA template + sub-processor registry (yasal dokümantasyon; research
+  agent iş)
+
+### Faz 3.1+ (planlandı, başlamadı)
 
 - Multi-tenant SaaS deployment (K8s)
-- SOC 2 Type II + ISO 27001 + ISO 27701
+- ISO 27001 + ISO 27701 sertifikasyonu (SOC 2 Type II sonrası)
 - GDPR genişleme (AB pazarı)
 - Sektörel benchmark (anonim havuzlu)
 - White-label / reseller portalı
@@ -610,7 +669,7 @@ Faz 1 Reality Check sonrası kalan açık maddeler — polish sprint için:
 ### Compliance & Legal
 
 - [ ] `docs/compliance/dlp-opt-in-form.md` — ADR 0013'ün referans ettiği imzalı form template'i, compliance-auditor tarafından yazılmalı
-- [ ] **Postgres audit trigger bypass riski**: DBA superuser `ALTER TABLE ... DISABLE TRIGGER` yapabilir. Sekonder WORM sink (OpenSearch write-once index veya S3 Object Lock) pilot öncesi gerekli. (devops-engineer bayrakladı, architect henüz ele almadı)
+- [~] **Postgres audit trigger bypass riski**: DBA superuser `ALTER TABLE ... DISABLE TRIGGER` yapabilir. `audit.WORMSink` (MinIO Object Lock Compliance mode) Phase 3.0'da devreye alındı; daily checkpoint'ler WORM'a yazılıyor, evidence locker da aynı bucket'ı paylaşıyor. Kalan açık: audit_log *entry-level* WORM mirror (şu an sadece günlük checkpoint; ara saatlerde DBA manipülasyonu bir sonraki checkpoint'e kadar tespit edilemez). Entry-level mirror veya daha sık checkpoint cadence kararı bekliyor.
 - [ ] Schema ownership dokümantasyonu: API migration 0001 `init.sql` baseline varsayıyor mu yoksa idempotent mi oluşturuyor? README netleştirmesi.
 
 ### Backend (Admin API)
@@ -750,4 +809,5 @@ Bu repo'da çalışırken:
 
 ---
 
-*Versiyon 1.0 — Faz 1 reality check commit'inde yazıldı. Güncelleme: her major milestone sonrası.*
+*Versiyon 1.2 — Faz 3.0 kickoff (Evidence Locker dual-write + Vault signer + ilk
+domain collector: liveview). Güncelleme: her major milestone sonrası.*
