@@ -66,6 +66,7 @@ services:
       - postgres-data:/var/lib/postgresql/data
       - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
       - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/00-create-databases.sh:/docker-entrypoint-initdb.d/00-create-databases.sh:ro
       - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     environment:
       POSTGRES_PASSWORD: dev-postgres-do-not-use-in-prod
@@ -107,3 +108,32 @@ services:
 
   minio-init: !reset null
   minio-worm-init: !reset null
+
+  # ---------------------------------------------------------------------------
+  # Keycloak — dev-file H2 backend so we don't need a separate
+  # personel_keycloak Postgres database. Removes --optimized so Keycloak
+  # rebuilds for the dev-file storage at start time. For real
+  # deployments the production compose wires Keycloak to Postgres; this
+  # override is dev-only and loses realm state on container restart.
+  # ---------------------------------------------------------------------------
+  keycloak:
+    # start-dev performs a fresh Quarkus build at startup (not --optimized)
+    # so the postgres JDBC driver is selected correctly based on KC_DB.
+    # We removed --import-realm to simplify the first smoke test; once
+    # postgres bring-up is green, re-add it with the dev realm JSON.
+    command: ["start-dev"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - keycloak-data:/opt/keycloak/data
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: "jdbc:postgresql://postgres:5432/personel_keycloak"
+      KC_DB_USERNAME: postgres
+      KC_DB_PASSWORD: dev-postgres-do-not-use-in-prod
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin-dev-only
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_HEALTH_ENABLED: "true"
