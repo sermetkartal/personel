@@ -130,6 +130,15 @@ services:
       # Port 8000 is used by Docker Desktop internals on macOS — move
       # the dev API to 8001 to avoid "port already allocated".
       - "127.0.0.1:8001:8000"
+    # The base Dockerfile defines HEALTHCHECK [/personel-api healthcheck]
+    # but main.go has no healthcheck subcommand — the binary just
+    # re-runs the full server, which fails with "address already in
+    # use" on port 8000 and keeps marking the container unhealthy even
+    # though the real server is serving 200s. TODO: implement a real
+    # healthcheck subcommand that HTTP-GETs /healthz and exits 0/1.
+    # For dev, disable the check entirely.
+    healthcheck:
+      disable: true
     depends_on: !reset
       postgres:
         condition: service_healthy
@@ -164,6 +173,32 @@ services:
       OPENSEARCH_URL: http://opensearch:9200
       OPENSEARCH_USER: admin
       OPENSEARCH_PASSWORD: dev
+
+  # ---------------------------------------------------------------------------
+  # Console — depends_on api only (no healthchecks — api health was
+  # disabled above), points at the dev API URL. NextAuth secret is a
+  # dev placeholder; real deployments rotate.
+  # ---------------------------------------------------------------------------
+  console:
+    ports:
+      # Port 3000 (and 3002) may already be owned by unrelated local
+      # dev servers on this macOS host. 13000 is an arbitrary free
+      # port above the common dev range. Real deployments bind 3000
+      # behind a reverse proxy.
+      - "127.0.0.1:13000:3000"
+    depends_on: !reset
+      - api
+      - keycloak
+    healthcheck:
+      disable: true
+    environment:
+      NEXTAUTH_SECRET: dev-nextauth-secret-not-for-prod
+      NEXTAUTH_URL: http://localhost:13000
+      NEXT_PUBLIC_API_URL: http://localhost:8001
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: personel
+      KEYCLOAK_CLIENT_ID: console
+      NODE_ENV: production
 
   # ---------------------------------------------------------------------------
   # ClickHouse — use stock image config (no custom mount). The production
