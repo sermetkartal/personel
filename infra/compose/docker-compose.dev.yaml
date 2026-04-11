@@ -110,6 +110,81 @@ services:
   minio-worm-init: !reset null
 
   # ---------------------------------------------------------------------------
+  # NATS — dev JetStream config, no encryption / TLS / operator JWT.
+  # The production nats.conf substitutes $NATS_STORE_ENCRYPTION_KEY and
+  # imports an NSC-generated operator JWT; neither exist in dev.
+  # ---------------------------------------------------------------------------
+  nats:
+    volumes:
+      - nats-data:/data/jetstream
+      - ./nats/nats.dev.conf:/etc/nats/nats.conf:ro
+
+  # ---------------------------------------------------------------------------
+  # API — dev config. Postgres sslmode=disable, vault http, minio http,
+  # opensearch left as an invalid URL (not started in dev; API config
+  # loader tolerates unreachable search backends as long as startup
+  # doesn't probe them).
+  # ---------------------------------------------------------------------------
+  api:
+    ports: !override
+      # Port 8000 is used by Docker Desktop internals on macOS — move
+      # the dev API to 8001 to avoid "port already allocated".
+      - "127.0.0.1:8001:8000"
+    depends_on: !reset
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    volumes: !override
+      - ./api/api.dev.yaml:/configs/api.yaml:ro
+    environment:
+      PERSONEL_CONFIG_PATH: /configs/api.yaml
+      VAULT_ADDR: http://vault:8200
+      VAULT_ROLE_ID: dev-role-id-not-used
+      POSTGRES_DSN: "host=postgres port=5432 dbname=personel user=postgres password=dev-postgres-do-not-use-in-prod sslmode=disable"
+      CLICKHOUSE_DSN: "tcp://clickhouse:9000?database=personel&username=default&secure=false"
+      NATS_URL: nats://nats:4222
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: personel
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin-dev-only
+      MINIO_AUDIT_SINK_ACCESS_KEY: minioadmin
+      MINIO_AUDIT_SINK_SECRET_KEY: minioadmin-dev-only
+      TENANT_ID: 00000000-0000-0000-0000-000000000001
+      JWT_ISSUER: http://keycloak:8080/realms/personel
+      DPO_EMAIL: dpo@example.com
+      DPO_SECONDARY_EMAIL: dpo2@example.com
+      OPENSEARCH_URL: http://opensearch:9200
+      OPENSEARCH_USER: admin
+      OPENSEARCH_PASSWORD: dev
+
+  # ---------------------------------------------------------------------------
+  # ClickHouse — use stock image config (no custom mount). The production
+  # clickhouse/config.xml references TLS certs and a user_directories
+  # structure that stock 24.3 expects but our custom XML doesn't define
+  # (Error: "Not found: user_directories.users_xml.path"). For smoke
+  # testing we let the stock image bring its own defaults. Volumes list
+  # is overridden explicitly — docker compose doesn't deep-merge list
+  # overrides, it replaces them, which is what we want here.
+  # ---------------------------------------------------------------------------
+  clickhouse:
+    depends_on: !reset []
+    volumes: !override
+      - clickhouse-data:/var/lib/clickhouse
+    environment:
+      CLICKHOUSE_DB: personel
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+
+  # ---------------------------------------------------------------------------
   # Keycloak — dev-file H2 backend so we don't need a separate
   # personel_keycloak Postgres database. Removes --optimized so Keycloak
   # rebuilds for the dev-file storage at start time. For real
@@ -125,6 +200,14 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Disable healthcheck in dev — the stock Keycloak image is
+    # distroless and lacks curl/wget, so the base compose file's
+    # `curl -f http://localhost:8080/health/ready` always fails even
+    # though the endpoint itself returns 200. In dev we verify health
+    # from the host side instead. For prod, a sidecar init container
+    # or a different base image is the right long-term fix.
+    healthcheck:
+      disable: true
     volumes:
       - keycloak-data:/opt/keycloak/data
     environment:
@@ -132,8 +215,25 @@ services:
       KC_DB_URL: "jdbc:postgresql://postgres:5432/personel_keycloak"
       KC_DB_USERNAME: postgres
       KC_DB_PASSWORD: dev-postgres-do-not-use-in-prod
+      # KC_BOOTSTRAP_ADMIN_* only applies to the `bootstrap-admin` sub-
+      # command in Keycloak 24+, NOT to `start-dev`. For start-dev we
+      # need the legacy KEYCLOAK_ADMIN / KEYCLOAK_ADMIN_PASSWORD envs
+      # which create the admin on first boot if no master-realm user
+      # exists. Caught 2026-04-11 after an empty user_entity table.
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin-dev-only
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin-dev-only
+      # Base file sets KC_HOSTNAME=personel.example.com which Keycloak
+      # embeds in its OIDC discovery document as the issuer. The API
+      # then compares the discovered issuer to its configured
+      # issuer_url (http://keycloak:8080/realms/personel) and fails
+      # because they don't match. Force the in-network name here.
+      # Keycloak 24 rejects "both hostname and hostname-url" — use just
+      # hostname-url to pin the issuer to the in-network name.
+      KC_HOSTNAME: ""
+      KC_HOSTNAME_URL: "http://keycloak:8080"
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"

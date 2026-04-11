@@ -137,6 +137,11 @@
     <mark_cache_size>5368709120</mark_cache_size>
     <uncompressed_cache_size>8589934592</uncompressed_cache_size>
 
-    <!-- Include user-specific config -->
-    <include_from>/etc/clickhouse-server/config.d/*.xml</include_from>
+    <!-- include_from was pointed at /etc/clickhouse-server/config.d/*.xml
+         but nothing in the compose tree mounts that directory, so
+         ClickHouse crashlooped with "File not found: .../config.d/*.xml"
+         at startup. Commented out so dev stack bring-up works. A real
+         deployment adds macros.xml / replication config here and can
+         re-enable this line. Fixed 2026-04-11. -->
+    <!-- <include_from>/etc/clickhouse-server/config.d/*.xml</include_from> -->
 </clickhouse>

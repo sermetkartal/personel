@@ -1,0 +1,84 @@
+# =============================================================================
+# API dev configuration for docker-compose.dev.yaml smoke test.
+# Mounted into /configs/api.yaml; main.go reads PERSONEL_CONFIG_PATH.
+# NEVER use this file in production — all secrets are dev placeholders.
+# =============================================================================
+
+http:
+  addr: ":8000"
+  read_timeout: 30s
+  write_timeout: 60s
+  idle_timeout: 120s
+  shutdown_timeout: 15s
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:3001"
+
+postgres:
+  dsn: "postgres://postgres:dev-postgres-do-not-use-in-prod@postgres:5432/personel?sslmode=disable"
+  max_conns: 20
+  min_conns: 2
+  max_conn_lifetime: 1h
+  max_conn_idle_time: 30m
+
+clickhouse:
+  addr: "clickhouse:9000"
+  database: "personel"
+  username: "default"
+  password: ""
+  tls_enable: false
+
+minio:
+  endpoint: "minio:9000"
+  access_key_id: "minioadmin"
+  secret_access_key: "minioadmin-dev-only"
+  use_ssl: false
+  bucket_screenshots: "personel-screenshots"
+  bucket_dsr: "personel-dsr"
+  bucket_destruction: "personel-destruction"
+  audit_sink_access_key: "minioadmin"
+  audit_sink_secret_key: "minioadmin-dev-only"
+  presign_ttl: 60s
+
+nats:
+  url: "nats://nats:4222"
+  creds_file: ""
+  connect_timeout: 5s
+  policy_subject: "policy.v1"
+  live_view_subject: "liveview.v1"
+
+vault:
+  addr: "http://vault:8200"
+  # Dev AppRole — provisioned by a one-shot vault exec script on first
+  # bring-up. When vault container is rebuilt, these IDs change and
+  # this file must be regenerated. Real deployments use systemd
+  # credentials or a Vault agent sidecar to rotate these.
+  app_role_id: "8b153db4-f8eb-0d8f-8164-b7dccf76ae12"
+  app_role_secret_id: "984ff106-042c-900c-8b9c-5384cfd5bc4c"
+  tls_ca_cert: ""
+  control_plane_signing_key: "control-plane-signing"
+  token_renew_interval: 10m
+
+keycloak:
+  issuer_url: "http://keycloak:8080/realms/personel"
+  client_id: "personel-admin-api"
+
+observability:
+  metrics_path: "/metrics"
+  tracing_enabled: false
+  service_name: "personel-admin-api"
+  service_version: "0.1.0-dev"
+
+livekit:
+  host: "http://localhost:7880"
+  api_key: "devkey"
+  api_secret: "devsecret"
+  max_session_duration: 15m
+  approval_timeout: 10m
+
+tenant:
+  default_tenant_id: "00000000-0000-0000-0000-000000000001"
+
+rate_limit:
+  requests_per_minute: 300
+  burst_size: 50
