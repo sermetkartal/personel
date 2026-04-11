@@ -19,6 +19,8 @@ const ROLE_STYLES: Record<Role, string> = {
   investigator: "bg-red-100 text-red-700 border-red-200 dark:bg-red-900/30 dark:text-red-400",
   auditor: "bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900/30 dark:text-teal-400",
   employee: "bg-gray-100 text-gray-700 border-gray-200 dark:bg-gray-800/50 dark:text-gray-400",
+  it_operator: "bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900/30 dark:text-cyan-400",
+  it_manager: "bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900/30 dark:text-indigo-400",
 };
 
 export function RoleBadge({ role, className, size = "md" }: RoleBadgeProps): JSX.Element {

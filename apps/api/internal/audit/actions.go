@@ -98,15 +98,21 @@ const (
 
 // --- Live view ---
 const (
-	ActionLiveViewRequested       Action = "live_view.requested"
-	ActionLiveViewApproved        Action = "live_view.approved"
-	ActionLiveViewDenied          Action = "live_view.denied"
-	ActionLiveViewStarted         Action = "live_view.started"
-	ActionLiveViewStopped         Action = "live_view.stopped"
-	ActionLiveViewTerminatedByHR  Action = "live_view.terminated_by_hr"
-	ActionLiveViewTerminatedByDPO Action = "live_view.terminated_by_dpo"
-	ActionLiveViewExpired         Action = "live_view.expired"
-	ActionLiveViewFailed          Action = "live_view.failed"
+	ActionLiveViewRequested         Action = "live_view.requested"
+	ActionLiveViewApproved          Action = "live_view.approved"
+	ActionLiveViewDenied            Action = "live_view.denied"
+	ActionLiveViewStarted           Action = "live_view.started"
+	ActionLiveViewStopped           Action = "live_view.stopped"
+	// ActionLiveViewTerminatedByHR is retained only as a compile-time
+	// constant so existing migrations/tests don't break; the real
+	// authority for live view termination is IT (_byIT / _byAdmin).
+	// HR has no termination authority in the IT-owned hierarchy.
+	ActionLiveViewTerminatedByHR    Action = "live_view.terminated_by_hr"
+	ActionLiveViewTerminatedByITMgr Action = "live_view.terminated_by_it_manager"
+	ActionLiveViewTerminatedByAdmin Action = "live_view.terminated_by_admin"
+	ActionLiveViewTerminatedByDPO   Action = "live_view.terminated_by_dpo"
+	ActionLiveViewExpired           Action = "live_view.expired"
+	ActionLiveViewFailed            Action = "live_view.failed"
 )
 
 // --- DLP ---
@@ -240,6 +246,8 @@ var AllActions = []Action{
 	ActionLiveViewStarted,
 	ActionLiveViewStopped,
 	ActionLiveViewTerminatedByHR,
+	ActionLiveViewTerminatedByITMgr,
+	ActionLiveViewTerminatedByAdmin,
 	ActionLiveViewTerminatedByDPO,
 	ActionLiveViewExpired,
 	ActionLiveViewFailed,

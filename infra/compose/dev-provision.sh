@@ -136,7 +136,7 @@ done
 echo "mappers: ensured"
 
 # Realm roles
-for ROLE in dpo admin auditor hr investigator manager employee; do
+for ROLE in dpo admin auditor hr investigator manager employee it_operator it_manager; do
   curl -sS -o /dev/null -X POST "http://localhost:8080/admin/realms/personel/roles" \
     -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
     -d "{\"name\":\"$ROLE\"}" || true
@@ -163,13 +163,19 @@ USER_ID=$(curl -sS "http://localhost:8080/admin/realms/personel/users?username=d
   -H "Authorization: Bearer $TOKEN" \
   | python3 -c "import sys,json;print(json.load(sys.stdin)[0]['id'])")
 
-# assign dpo role
-DPO_ROLE=$(curl -sS "http://localhost:8080/admin/realms/personel/roles/dpo" -H "Authorization: Bearer $TOKEN")
+# assign dpo + admin + it_manager roles (dev convenience: one login to cover
+# request→approve flows across DPO, IT Manager and Admin authority paths)
+ROLE_PAYLOAD="["
+for RN in dpo admin it_manager; do
+  R=$(curl -sS "http://localhost:8080/admin/realms/personel/roles/$RN" -H "Authorization: Bearer $TOKEN")
+  ROLE_PAYLOAD+="$R,"
+done
+ROLE_PAYLOAD="${ROLE_PAYLOAD%,}]"
 curl -sS -o /dev/null -X POST \
   "http://localhost:8080/admin/realms/personel/users/$USER_ID/role-mappings/realm" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-  -d "[$DPO_ROLE]"
-echo "dpo role assigned to dpo-test"
+  -d "$ROLE_PAYLOAD"
+echo "dpo + admin + it_manager roles assigned to dpo-test"
 
 green "==> 4/4 Postgres seed tenant (public.tenants)"
 docker exec personel-postgres psql -U postgres -d personel -c "

@@ -59,7 +59,9 @@
       "dpo": "Veri Koruma Görevlisi",
       "investigator": "Araştırmacı",
       "auditor": "Denetçi",
-      "employee": "Çalışan"
+      "employee": "Çalışan",
+      "it_operator": "BT Operatör",
+      "it_manager": "BT Yönetici"
     },
     "kvkk": "KVKK",
     "copy": "Kopyala",
@@ -141,7 +143,7 @@
       "pendingDsrs": "Bekleyen Veri Talepleri",
       "pendingDsrsDesc": "Yanıt bekleyen m.11 talepleri",
       "pendingLiveViewApprovals": "Onay Bekleyen Canlı İzleme",
-      "pendingLiveViewApprovalsDesc": "İK onayı bekleyen talepler",
+      "pendingLiveViewApprovalsDesc": "BT Yönetici onayı bekleyen talepler",
       "overduedsrs": "Süre Aşımı DSR",
       "overduedsrsDesc": "30 günlük SLA süresi geçmiş",
       "atRiskDsrs": "Riskli DSR",
@@ -317,10 +319,10 @@
     },
     "request": {
       "title": "Canlı İzleme Talebi",
-      "subtitle": "İK onayı gereklidir. Onay farklı bir kullanıcıdan gelmelidir.",
+      "subtitle": "BT Yönetici onayı gereklidir. Onay farklı bir kullanıcıdan gelmelidir.",
       "kvkkNoticeTitle": "KVKK Uyarısı",
       "kvkkNoticeBody": "Canlı izleme yalnızca meşru amaçlarla ve orantılılık ilkesi çerçevesinde kullanılabilir. Her oturum denetim izine kaydedilir.",
-      "dualControlNote": "Bu talep İK rolündeki farklı bir kullanıcı tarafından onaylanmalıdır (ikili kontrol). Kendi talebinizi onaylayamazsınız.",
+      "dualControlNote": "Bu talep BT Yönetici rolündeki farklı bir kullanıcı tarafından onaylanmalıdır (ikili kontrol). Kendi talebinizi onaylayamazsınız.",
       "endpointLabel": "Hedef Uç Nokta",
       "endpointPlaceholder": "Uç nokta seçin",
       "noEndpoints": "Aktif uç nokta bulunamadı",
@@ -333,15 +335,15 @@
       "submit": "Talep Gönder",
       "submitting": "Gönderiliyor...",
       "cancel": "İptal",
-      "successToast": "Canlı izleme talebi gönderildi. İK onayı bekleniyor.",
+      "successToast": "Canlı izleme talebi gönderildi. BT Yönetici onayı bekleniyor.",
       "endpoint": "Uç Nokta",
       "selectEndpoint": "Uç nokta seçin",
       "reasonCode": "Neden Kodu",
       "reasonCodeHint": "Bilet no., olay no. veya soruşturma referansı. Serbest metin kabul edilmez.",
       "duration": "Süre (dakika)",
       "durationHint": "Varsayılan: 15 dk, Maksimum: 60 dk",
-      "waitingApproval": "İK onayı bekleniyor...",
-      "approvalNotice": "Bu talep İK rolündeki farklı bir kullanıcı tarafından onaylanmalıdır.",
+      "waitingApproval": "BT Yönetici onayı bekleniyor...",
+      "approvalNotice": "Bu talep BT Yönetici rolündeki farklı bir kullanıcı tarafından onaylanmalıdır.",
       "submitted": "Talep gönderildi. Onay bildirimi bekleyin."
     },
     "viewer": {
@@ -377,7 +379,7 @@
     },
     "approval": {
       "title": "Canlı İzleme Onay Kuyruğu",
-      "subtitle": "İK onayı bekleyen talepler",
+      "subtitle": "BT Yönetici onayı bekleyen talepler",
       "approve": "Onayla",
       "deny": "Reddet",
       "selfApprovalBlocked": "Kendi talebinizi onaylayamazsınız.",
@@ -412,7 +414,7 @@
       "DENIED": "Reddedildi",
       "EXPIRED": "Süresi Doldu",
       "FAILED": "Başarısız",
-      "TERMINATED_BY_HR": "İK Tarafından Kapatıldı",
+      "TERMINATED_BY_HR": "BT Tarafından Kapatıldı",
       "TERMINATED_BY_DPO": "VKG Tarafından Kapatıldı"
     }
   },

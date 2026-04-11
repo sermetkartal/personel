@@ -17,6 +17,17 @@ const (
 	RoleInvestigator Role = "investigator"
 	RoleAuditor     Role = "auditor"
 	RoleEmployee    Role = "employee"
+	// IT department hierarchy — correct authority model for live view
+	// and endpoint management in Turkish enterprise deployments. HR
+	// does NOT have authority over technical device access; the IT
+	// department has top authority with its own internal hierarchy.
+	// RoleITOperator: first-level IT staff, can request live view,
+	// can view fleet, cannot approve operator-initiated requests.
+	// RoleITManager: IT department manager, approves live view
+	// requests (dual-control against the operator), can override.
+	// RoleAdmin sits above both as the ultimate authority.
+	RoleITOperator  Role = "it_operator"
+	RoleITManager   Role = "it_manager"
 	// RoleDLPAdmin is a privileged service-account role used exclusively for
 	// the POST /v1/system/dlp-bootstrap-keys endpoint. It is issued as a
 	// Vault-backed short-lived token by dlp-enable.sh.
@@ -40,6 +51,10 @@ func parseRole(s string) (Role, bool) {
 		return RoleAuditor, true
 	case string(RoleEmployee):
 		return RoleEmployee, true
+	case string(RoleITOperator):
+		return RoleITOperator, true
+	case string(RoleITManager):
+		return RoleITManager, true
 	case string(RoleDLPAdmin):
 		return RoleDLPAdmin, true
 	default:
@@ -148,14 +163,19 @@ func can(role Role, op Op, resource Resource) bool {
 		return role == RoleDPO
 	}
 
-	// Live view approval — HR only.
+	// Live view approval — IT Manager (dual-control against the IT
+	// operator who requested) or Admin (ultimate IT authority).
+	// HR has NO authority over technical device access in the Turkish
+	// enterprise model; the IT department owns all company devices and
+	// runs its own internal approval hierarchy.
 	if resource == ResourceLiveView && (op == OpApprove || op == OpReject) {
-		return role == RoleHR
+		return role == RoleITManager || role == RoleAdmin
 	}
 
-	// Live view termination — HR or DPO.
+	// Live view termination — IT Manager, Admin, or DPO (compliance
+	// override for KVKK scope boundary violations only).
 	if resource == ResourceLiveView && op == OpTerminate {
-		return role == RoleHR || role == RoleDPO
+		return role == RoleITManager || role == RoleAdmin || role == RoleDPO
 	}
 
 	// DSR respond/assign — DPO only.
@@ -204,13 +224,55 @@ func can(role Role, op Op, resource Resource) bool {
 		}
 
 	case RoleHR:
+		// HR has NO live view authority in the IT-owned hierarchy.
+		// HR can read the employee directory (for payroll/reviews)
+		// and general reports, that's it.
 		switch resource {
-		case ResourceLiveView:
-			// approve/reject are handled above; HR can also read
-			return op == OpRead
 		case ResourceEmployee:
 			return op == OpRead || op == OpWrite
 		case ResourceReport:
+			return op == OpRead
+		}
+
+	case RoleITOperator:
+		// First-level IT: can request a live view session, browse
+		// the fleet, read reports, view the employee directory to
+		// correlate users-to-devices. Cannot approve their own
+		// requests (dual-control enforced above).
+		switch resource {
+		case ResourceEndpoint:
+			return op == OpRead
+		case ResourceLiveView:
+			return op == OpRequest || op == OpRead
+		case ResourceReport:
+			return op == OpRead
+		case ResourceEmployee:
+			return op == OpRead
+		case ResourceSilence:
+			return op == OpRead
+		}
+
+	case RoleITManager:
+		// IT Manager: approves/rejects live view requests (dual-
+		// control against the IT operator), manages endpoints,
+		// pushes policies, reads everything except DSR and legal
+		// holds which are DPO territory.
+		switch resource {
+		case ResourceEndpoint, ResourcePolicy:
+			return true
+		case ResourceLiveView:
+			// approve/reject/terminate are handled above; also
+			// read + request for their own investigations
+			return op == OpRequest || op == OpRead
+		case ResourceReport:
+			return op == OpRead
+		case ResourceEmployee:
+			return op == OpRead
+		case ResourceSilence:
+			return op == OpRead
+		case ResourceDLPMatch:
+			return op == OpRead
+		case ResourceUser:
 			return op == OpRead
 		}
 

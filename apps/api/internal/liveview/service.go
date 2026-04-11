@@ -133,10 +133,13 @@ func (s *Service) RequestLiveView(ctx context.Context, p *auth.Principal, endpoi
 	return sess, nil
 }
 
-// Approve approves a live view request. The approver MUST be HR and MUST NOT
-// be the same person as the requester.
+// Approve approves a live view request. The approver MUST be in the IT
+// hierarchy (it_manager or admin) AND MUST NOT be the same person as
+// the requester. HR has no live-view authority in this model — company
+// devices are IT-department property and approval is an IT-internal
+// dual-control ceremony.
 func (s *Service) Approve(ctx context.Context, p *auth.Principal, sessionID, notes string) (*Session, error) {
-	if !auth.HasRole(p, auth.RoleHR) {
+	if !auth.HasRole(p, auth.RoleITManager) && !auth.HasRole(p, auth.RoleAdmin) {
 		return nil, auth.ErrForbidden
 	}
 
@@ -239,9 +242,10 @@ func (s *Service) Approve(ctx context.Context, p *auth.Principal, sessionID, not
 	return sess, nil
 }
 
-// Reject denies a live view request.
+// Reject denies a live view request. IT Manager or Admin only —
+// mirrors Approve's authority check.
 func (s *Service) Reject(ctx context.Context, p *auth.Principal, sessionID, notes string) error {
-	if !auth.HasRole(p, auth.RoleHR) {
+	if !auth.HasRole(p, auth.RoleITManager) && !auth.HasRole(p, auth.RoleAdmin) {
 		return auth.ErrForbidden
 	}
 
@@ -274,17 +278,23 @@ func (s *Service) EndSession(ctx context.Context, p *auth.Principal, sessionID s
 	return s.terminateSession(ctx, p, sessionID, "end", audit.ActionLiveViewStopped, "admin_end")
 }
 
-// Terminate terminates a session (HR or DPO kill switch).
+// Terminate terminates a session (IT Manager, Admin, or DPO kill switch).
+// IT is the primary authority; DPO is a compliance override path for
+// KVKK scope violations only.
 func (s *Service) Terminate(ctx context.Context, p *auth.Principal, sessionID string) error {
 	var action audit.Action
 	var event string
-	if auth.HasRole(p, auth.RoleHR) {
-		action = audit.ActionLiveViewTerminatedByHR
-		event = "hr_terminate"
-	} else if auth.HasRole(p, auth.RoleDPO) {
+	switch {
+	case auth.HasRole(p, auth.RoleAdmin):
+		action = audit.ActionLiveViewTerminatedByAdmin
+		event = "admin_terminate"
+	case auth.HasRole(p, auth.RoleITManager):
+		action = audit.ActionLiveViewTerminatedByITMgr
+		event = "it_manager_terminate"
+	case auth.HasRole(p, auth.RoleDPO):
 		action = audit.ActionLiveViewTerminatedByDPO
 		event = "dpo_terminate"
-	} else {
+	default:
 		return auth.ErrForbidden
 	}
 	return s.terminateSession(ctx, p, sessionID, event, action, event)

@@ -15,7 +15,9 @@ export type Role =
   | "dpo"
   | "investigator"
   | "auditor"
-  | "employee";
+  | "employee"
+  | "it_operator"
+  | "it_manager";
 
 export type EndpointStatus = "active" | "revoked" | "offline";
 

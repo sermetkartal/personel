@@ -230,11 +230,14 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 		})
 
 		// --- Live View ---
+		// Authority model: IT Operator requests → IT Manager (or Admin)
+		// approves. HR has NO live-view authority. DPO has a compliance
+		// override for termination only (KVKK scope violations).
 		r.Route("/live-view", func(r chi.Router) {
 			r.Route("/requests", func(r chi.Router) {
-				// Request: Admin or Manager
+				// Request: IT Operator / IT Manager / Admin
 				r.Post("/", liveview.RequestHandler(svc.LiveView))
-				// List pending: HR (to approve)
+				// List pending: IT Manager / Admin (to approve)
 				r.Get("/", liveview.ListRequestsHandler(svc.LiveView))
 				r.Route("/{requestID}", func(r chi.Router) {
 					r.Get("/", liveview.GetRequestHandler(svc.LiveView))

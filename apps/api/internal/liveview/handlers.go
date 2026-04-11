@@ -75,7 +75,7 @@ func GetRequestHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-// ApproveHandler — POST /v1/live-view/requests/{requestID}/approve (HR only)
+// ApproveHandler — POST /v1/live-view/requests/{requestID}/approve (IT Manager or Admin; dual-control)
 func ApproveHandler(svc *Service) http.HandlerFunc {
 	type reqBody struct {
 		Notes string `json:"notes"`
@@ -104,7 +104,7 @@ func ApproveHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-// RejectHandler — POST /v1/live-view/requests/{requestID}/reject (HR only)
+// RejectHandler — POST /v1/live-view/requests/{requestID}/reject (IT Manager or Admin)
 func RejectHandler(svc *Service) http.HandlerFunc {
 	type reqBody struct {
 		Notes string `json:"notes"`
@@ -171,7 +171,7 @@ func EndSessionHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
-// TerminateHandler — POST /v1/live-view/sessions/{sessionID}/terminate (HR or DPO)
+// TerminateHandler — POST /v1/live-view/sessions/{sessionID}/terminate (IT Manager, Admin, or DPO compliance override)
 func TerminateHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p := auth.PrincipalFromContext(r.Context())

@@ -45,7 +45,13 @@ func Transition(current State, event string) (State, error) {
 		{StateApproved, "agent_fail", StateFailed},
 		{StateApproved, "agent_decline", StateFailed},
 		{StateActive, "end", StateEnded},
+		// Legacy HR terminate kept as a no-op transition target so old
+		// rows in live_view_sessions don't break state machine lookups.
+		// New IT-based terminations land in the same terminal state
+		// family — the audit action is what distinguishes them.
 		{StateActive, "hr_terminate", StateTerminatedByHR},
+		{StateActive, "admin_terminate", StateTerminatedByHR},
+		{StateActive, "it_manager_terminate", StateTerminatedByHR},
 		{StateActive, "dpo_terminate", StateTerminatedByDPO},
 		{StateActive, "expire", StateExpired},
 	}

@@ -59,7 +59,9 @@
       "dpo": "Data Protection Officer",
       "investigator": "Investigator",
       "auditor": "Auditor",
-      "employee": "Employee"
+      "employee": "Employee",
+      "it_operator": "IT Operator",
+      "it_manager": "IT Manager"
     },
     "kvkk": "KVKK",
     "copy": "Copy",
@@ -141,7 +143,7 @@
       "pendingDsrs": "Pending DSRs",
       "pendingDsrsDesc": "Data subject requests awaiting response",
       "pendingLiveViewApprovals": "Live View Awaiting Approval",
-      "pendingLiveViewApprovalsDesc": "Requests pending HR approval",
+      "pendingLiveViewApprovalsDesc": "Requests pending IT Manager approval",
       "overduedsrs": "Overdue DSRs",
       "overduedsrsDesc": "30-day SLA deadline passed",
       "atRiskDsrs": "At-Risk DSRs",
@@ -317,10 +319,10 @@
     },
     "request": {
       "title": "Live View Request",
-      "subtitle": "HR approval required. Approval must come from a different user.",
+      "subtitle": "IT Manager approval required. Approval must come from a different user.",
       "kvkkNoticeTitle": "KVKK Notice",
       "kvkkNoticeBody": "Live view may only be used for legitimate purposes within the proportionality principle. Every session is logged to the audit trail.",
-      "dualControlNote": "This request must be approved by a different user with the HR role (dual control). You cannot approve your own request.",
+      "dualControlNote": "This request must be approved by a different user with the IT Manager role (dual control). You cannot approve your own request.",
       "endpointLabel": "Target Endpoint",
       "endpointPlaceholder": "Select an endpoint",
       "noEndpoints": "No active endpoints found",
@@ -333,15 +335,15 @@
       "submit": "Submit Request",
       "submitting": "Submitting...",
       "cancel": "Cancel",
-      "successToast": "Live view request submitted. Awaiting HR approval.",
+      "successToast": "Live view request submitted. Awaiting IT Manager approval.",
       "endpoint": "Endpoint",
       "selectEndpoint": "Select an endpoint",
       "reasonCode": "Reason Code",
       "reasonCodeHint": "Ticket number, incident ID, or investigation reference. Free text only is not accepted.",
       "duration": "Duration (minutes)",
       "durationHint": "Default: 15 min, Maximum: 60 min",
-      "waitingApproval": "Waiting for HR approval...",
-      "approvalNotice": "This request must be approved by a different user with the HR role.",
+      "waitingApproval": "Waiting for IT Manager approval...",
+      "approvalNotice": "This request must be approved by a different user with the IT Manager role.",
       "submitted": "Request submitted. Wait for approval notification."
     },
     "viewer": {
@@ -377,7 +379,7 @@
     },
     "approval": {
       "title": "Live View Approval Queue",
-      "subtitle": "Requests awaiting HR approval",
+      "subtitle": "Requests awaiting IT Manager approval",
       "approve": "Approve",
       "deny": "Deny",
       "selfApprovalBlocked": "You cannot approve your own request.",
@@ -412,7 +414,7 @@
       "DENIED": "Denied",
       "EXPIRED": "Expired",
       "FAILED": "Failed",
-      "TERMINATED_BY_HR": "Terminated by HR",
+      "TERMINATED_BY_HR": "Terminated by IT",
       "TERMINATED_BY_DPO": "Terminated by DPO"
     }
   },

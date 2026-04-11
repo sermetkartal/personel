@@ -23,6 +23,8 @@ const ROLE_LEVELS: Record<Role, number> = {
   investigator: 2,
   hr: 3,
   manager: 3,
+  it_operator: 3,
+  it_manager: 4,
   dpo: 4,
   admin: 5,
 };
@@ -51,7 +53,11 @@ export function canViewEmployees(role: Role): boolean {
     role === "admin" ||
     role === "dpo" ||
     role === "hr" ||
-    role === "manager"
+    role === "manager" ||
+    role === "it_manager" ||
+    role === "it_operator" ||
+    role === "investigator" ||
+    role === "auditor"
   );
 }
 
@@ -63,29 +69,46 @@ export function canViewPolicies(role: Role): boolean {
   return role === "admin" || role === "dpo" || role === "manager";
 }
 
+// Live view authority is IT-department-owned. HR has no authority
+// over technical device access in the Turkish enterprise model.
+//
+//   it_operator → requests
+//   it_manager  → approves + terminates (dual-control vs requester)
+//   admin       → approves + terminates (ultimate IT authority)
+//   dpo         → compliance-override termination only (KVKK scope)
+//
+// Other roles (hr, manager, investigator) can only watch existing
+// sessions as observers where permitted, never approve or terminate.
 export function canRequestLiveView(role: Role): boolean {
-  return role === "admin" || role === "manager";
+  return role === "admin" || role === "it_manager" || role === "it_operator";
 }
 
 export function canApproveLiveView(role: Role): boolean {
-  return role === "hr";
+  return role === "admin" || role === "it_manager";
 }
 
 export function canTerminateLiveView(role: Role): boolean {
-  return role === "hr" || role === "dpo";
+  return role === "admin" || role === "it_manager" || role === "dpo";
 }
 
 export function canViewLiveViewSessions(role: Role): boolean {
   return (
     role === "admin" ||
+    role === "it_manager" ||
+    role === "it_operator" ||
     role === "manager" ||
-    role === "hr" ||
-    role === "dpo"
+    role === "dpo" ||
+    role === "investigator"
   );
 }
 
 export function canWatchLiveView(role: Role): boolean {
-  return role === "admin" || role === "manager" || role === "dpo";
+  return (
+    role === "admin" ||
+    role === "it_manager" ||
+    role === "it_operator" ||
+    role === "dpo"
+  );
 }
 
 export function canViewDSR(role: Role): boolean {
