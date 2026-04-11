@@ -5,14 +5,24 @@ import (
 	"fmt"
 	"log/slog"
 	"time"
+
+	"github.com/oklog/ulid/v2"
 )
 
 // RecorderImpl is the default Recorder. It signs each item via Vault
-// control-plane key and delegates to Store for persistence.
+// control-plane key and delegates to a storeInserter for persistence.
 type RecorderImpl struct {
-	store  *Store
+	store  storeInserter
 	signer Signer
 	log    *slog.Logger
+}
+
+// storeInserter is the narrow interface the Recorder needs from Store.
+// Used as an interface so unit tests can inject a fake without having
+// to build a pgxpool or spin up a Postgres container. The concrete
+// *Store satisfies this by virtue of its Insert method.
+type storeInserter interface {
+	Insert(ctx context.Context, item Item) (string, error)
 }
 
 // Signer abstracts the Vault transit signing call. Injected for testability.
@@ -30,11 +40,27 @@ func NewRecorder(store *Store, signer Signer, log *slog.Logger) *RecorderImpl {
 	}
 }
 
+// newRecorderWithInserter is a test helper that lets unit tests inject
+// a fake storeInserter bypassing the pgxpool.Pool dependency.
+func newRecorderWithInserter(si storeInserter, signer Signer, log *slog.Logger) *RecorderImpl {
+	return &RecorderImpl{store: si, signer: signer, log: log}
+}
+
 // Record signs and stores an evidence item. See the interface in types.go.
 func (r *RecorderImpl) Record(ctx context.Context, item Item) (string, error) {
 	if item.RecordedAt.IsZero() {
 		item.RecordedAt = time.Now().UTC()
 	}
+	// Truncate RecordedAt to microsecond precision BEFORE signing.
+	// Postgres timestamptz stores microseconds (6 digits); any
+	// nanosecond-precision input gets silently truncated at INSERT.
+	// If we sign with nanosecond precision and then read back the
+	// microsecond value, canonicalize() produces a different byte
+	// string and signature verification fails. Match the precision
+	// of the downstream storage BEFORE the signature is computed.
+	// Discovered 2026-04-11 running the integration test round-trip.
+	item.RecordedAt = item.RecordedAt.UTC().Truncate(time.Microsecond)
+
 	if item.TenantID == "" {
 		return "", fmt.Errorf("evidence: tenant_id is required")
 	}
@@ -43,6 +69,25 @@ func (r *RecorderImpl) Record(ctx context.Context, item Item) (string, error) {
 	}
 	if item.Kind == "" {
 		return "", fmt.Errorf("evidence: kind is required")
+	}
+
+	// Derive ID and CollectionPeriod BEFORE canonicalize so they are
+	// covered by the signature. Previously Store.Insert filled these
+	// fields after the fact, which meant the signed payload had empty
+	// ID + period while the Postgres row had the real values — a latent
+	// integrity bug where re-verifying the row's canonical form would
+	// compute a different payload than what was signed. Caught by the
+	// round-trip verification in the evidence integration test on
+	// 2026-04-11.
+	//
+	// IMPORTANT: any field canonicalize() reads must be set here
+	// BEFORE the Sign call. If you add a new canonicalize field that
+	// can be auto-derived, derive it here too or update the list.
+	if item.ID == "" {
+		item.ID = ulid.Make().String()
+	}
+	if item.CollectionPeriod == "" {
+		item.CollectionPeriod = item.RecordedAt.Format("2006-01")
 	}
 
 	// Build canonical payload for signing. The signature covers every
@@ -92,6 +137,14 @@ func (r *RecorderImpl) Record(ctx context.Context, item Item) (string, error) {
 //	id | tenant_id | control | kind | collection_period |
 //	recorded_at RFC3339 | actor | summary_tr | summary_en |
 //	payload | referenced_audit_ids (sorted asc) | attachment_refs (sorted)
+//
+// IMPORTANT: RecordedAt is normalised to UTC + microsecond precision
+// BEFORE formatting. Postgres timestamptz stores microseconds and may
+// return times in the session timezone — without normalisation the
+// round-trip would produce a different canonical byte string than what
+// was originally signed, breaking signature verification. Match these
+// normalisations exactly in Recorder.Record so both sign time and
+// verify time produce the same output.
 func canonicalize(item Item) []byte {
 	var buf []byte
 	appendField := func(s string) {
@@ -106,7 +159,11 @@ func canonicalize(item Item) []byte {
 	appendField(string(item.Control))
 	appendField(string(item.Kind))
 	appendField(item.CollectionPeriod)
-	appendField(item.RecordedAt.Format(time.RFC3339Nano))
+	// Normalise UTC + microsecond precision at format time so post-DB
+	// round-trips produce identical bytes to the sign-time form even
+	// if the pgx driver returned a local-time value. See the method
+	// comment for the precision rationale.
+	appendField(item.RecordedAt.UTC().Truncate(time.Microsecond).Format(time.RFC3339Nano))
 	appendField(item.Actor)
 	appendField(item.SummaryTR)
 	appendField(item.SummaryEN)

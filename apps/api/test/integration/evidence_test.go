@@ -6,7 +6,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"io"
 	"testing"
 	"time"
@@ -36,22 +38,32 @@ func (f *fakeWORM) PutEvidence(_ context.Context, tenantID, period, id string, c
 	return key, nil
 }
 
-// fakeSigner produces deterministic signatures so manifest and item
-// signatures can be asserted byte-for-byte across runs.
+// fakeSigner produces SHA-256-based deterministic signatures so manifest
+// and item signatures can be asserted byte-for-byte across runs AND the
+// companion fakeVerifier can detect payload drift. Real Vault returns
+// Ed25519 but the structural invariant (payload → signature → verify) is
+// the same.
 type fakeSigner struct{}
 
 func (fakeSigner) Sign(_ context.Context, payload []byte) ([]byte, string, error) {
-	// Length-prefixed "fake" scheme: first 8 bytes = payload length,
-	// rest = deterministic marker. Real Vault returns 64-byte Ed25519.
-	out := append([]byte{0xFA, 0xCE, 0xFA, 0xCE}, payload[:min(4, len(payload))]...)
+	h := sha256.Sum256(payload)
+	out := append([]byte("sig:control-plane-signing:v1:"), h[:]...)
 	return out, "control-plane-signing:v1", nil
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+// Verify lets the integration test check that every stored item's
+// signature can be recomputed from its canonical form. Guards against
+// the CollectionPeriod-at-sign-time bug discovered 2026-04-11.
+func (fakeSigner) Verify(_ context.Context, payload, signature []byte, keyVersion string) error {
+	if keyVersion != "control-plane-signing:v1" {
+		return fmt.Errorf("unknown key version: %s", keyVersion)
 	}
-	return b
+	h := sha256.Sum256(payload)
+	expect := append([]byte("sig:control-plane-signing:v1:"), h[:]...)
+	if !bytes.Equal(signature, expect) {
+		return fmt.Errorf("signature mismatch")
+	}
+	return nil
 }
 
 func TestEvidence_EndToEnd(t *testing.T) {
@@ -153,6 +165,22 @@ func TestEvidence_EndToEnd(t *testing.T) {
 	all, err := store.ListByPeriod(ctx, tenantID, period, nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 3)
+
+	// ── Round-trip signature verification — regression guard for the
+	// CollectionPeriod-at-sign-time bug found 2026-04-11. Every stored
+	// item must re-canonicalise to the same bytes that were signed, so
+	// a Verify call against the stored Signature must succeed. If this
+	// ever fails, the signature integrity invariant is broken and the
+	// SOC 2 chain is unusable — treat as a blocking bug.
+	for _, stored := range all {
+		err := evidence.VerifyItem(ctx, fakeSigner{}, stored)
+		assert.NoErrorf(t, err, "round-trip verify failed for item %s (control=%s): %v",
+			stored.ID, stored.Control, err)
+		// Every stored item must have CollectionPeriod populated —
+		// empty value would mean Store.Insert used the default path
+		// without the Recorder setting it first.
+		assert.NotEmpty(t, stored.CollectionPeriod, "stored item %s has empty collection_period", stored.ID)
+	}
 
 	cc61Only, err := store.ListByPeriod(ctx, tenantID, period, []evidence.ControlID{evidence.CtrlCC6_1})
 	require.NoError(t, err)

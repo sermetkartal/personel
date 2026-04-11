@@ -34,7 +34,14 @@ CREATE TABLE IF NOT EXISTS evidence_items (
     actor                   TEXT,                            -- user or service that produced evidence
     summary_tr              TEXT NOT NULL,
     summary_en              TEXT NOT NULL,
-    payload                 JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- Payload is stored as BYTEA rather than JSONB because the signature
+    -- must verify byte-for-byte after a round trip. JSONB reorders keys,
+    -- normalises whitespace, and drops duplicates — any of those would
+    -- break canonicalize's exact-bytes assumption, producing a signature
+    -- mismatch on read-back. BYTEA preserves the exact signed bytes; we
+    -- lose JSONB path query capability, which is fine because the
+    -- evidence locker only returns payloads verbatim in pack exports.
+    payload                 BYTEA NOT NULL DEFAULT E'\\x7b7d',  -- "{}"
     referenced_audit_ids    BIGINT[] NOT NULL DEFAULT '{}',
     attachment_refs         TEXT[] NOT NULL DEFAULT '{}',
     signature_key_version   TEXT NOT NULL,

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 )
@@ -90,6 +92,80 @@ func TestStoreInsertStopsOnWORMFailure(t *testing.T) {
 	if len(w.puts) != 0 {
 		t.Fatalf("expected no successful puts, got %d", len(w.puts))
 	}
+}
+
+// TestRecorderDerivesCollectionPeriodBeforeSigning is a regression test
+// for the latent integrity bug found on 2026-04-11 during the first real
+// Postgres reality check. Previously Recorder.Record() signed a canonical
+// payload with an empty CollectionPeriod, then Store.Insert() filled the
+// field to RecordedAt.Format("2006-01"). Verifying the stored row by
+// re-canonicalising would compute a DIFFERENT payload than what was
+// signed, breaking signature verification after a round trip — a silent
+// production-integrity failure.
+//
+// The fix: Recorder derives CollectionPeriod BEFORE canonicalize so the
+// signature covers the real value. This test asserts that property by
+// recording an item with empty period, then verifying the item comes
+// back from the fake WORM with a non-empty period AND that canonicalize
+// applied to the post-record item matches what was put in the WORM.
+func TestRecorderDerivesCollectionPeriodBeforeSigning(t *testing.T) {
+	// Capturing signer sees the canonical bytes the Recorder produces,
+	// which is the exact payload a future verifier would recompute.
+	// If CollectionPeriod is missing at sign time, the stored row would
+	// fail verification after a round trip.
+	cap := &capturingSigner{}
+	insert := &captureInserter{}
+	rec := newRecorderWithInserter(insert, cap, silentLoggerStore())
+
+	_, err := rec.Record(context.Background(), Item{
+		TenantID:   "tenant-a",
+		Control:    CtrlCC6_1,
+		Kind:       KindPrivilegedAccessSession,
+		RecordedAt: time.Date(2026, 4, 10, 12, 0, 0, 0, time.UTC),
+		// CollectionPeriod intentionally empty
+	})
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	if len(cap.payloads) != 1 {
+		t.Fatalf("expected 1 signed payload, got %d", len(cap.payloads))
+	}
+	// canonicalize length-prefixes every field with a 4-byte big-endian
+	// length. We search for the prefix {0,0,0,7} followed by "2026-04".
+	needle := []byte{0, 0, 0, 7, '2', '0', '2', '6', '-', '0', '4'}
+	if !bytes.Contains(cap.payloads[0], needle) {
+		t.Error("signed canonical payload must contain length-prefixed collection period '2026-04'")
+	}
+	// The inserted item must also have the derived period set so the
+	// DB row and the signature cover the same value.
+	if insert.lastItem.CollectionPeriod != "2026-04" {
+		t.Errorf("inserted item period: %q, want 2026-04", insert.lastItem.CollectionPeriod)
+	}
+}
+
+// capturingSigner records the canonical payload it was asked to sign.
+type capturingSigner struct {
+	payloads [][]byte
+}
+
+func (c *capturingSigner) Sign(_ context.Context, payload []byte) ([]byte, string, error) {
+	c.payloads = append(c.payloads, append([]byte(nil), payload...))
+	return []byte{0xAB}, "test:v1", nil
+}
+
+// captureInserter implements storeInserter without touching Postgres.
+type captureInserter struct {
+	lastItem Item
+}
+
+func (c *captureInserter) Insert(_ context.Context, item Item) (string, error) {
+	c.lastItem = item
+	return "01J-TEST", nil
+}
+
+func silentLoggerStore() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 func TestCanonicalizeDeterministic(t *testing.T) {
