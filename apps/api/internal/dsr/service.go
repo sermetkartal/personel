@@ -10,6 +10,7 @@ import (
 	"log/slog"
 
 	"github.com/personel/api/internal/audit"
+	"github.com/personel/api/internal/evidence"
 )
 
 // Service orchestrates DSR business logic.
@@ -18,11 +19,24 @@ type Service struct {
 	recorder *audit.Recorder
 	notifier Notifier
 	log      *slog.Logger
+
+	// evidenceRecorder is optional — when wired, every successful
+	// DSR Respond (KVKK m.11 fulfilment) emits a KindComplianceAttestation
+	// evidence item mapped to controls P5.1 (consent) and P7.1 (retention
+	// limits). KVKK auditors rely on this stream to verify 30-day SLA
+	// adherence across the observation window.
+	evidenceRecorder evidence.Recorder
 }
 
 // NewService creates the DSR service.
 func NewService(store *Store, rec *audit.Recorder, notifier Notifier, log *slog.Logger) *Service {
 	return &Service{store: store, recorder: rec, notifier: notifier, log: log}
+}
+
+// SetEvidenceRecorder attaches the SOC 2 / KVKK evidence recorder. Optional;
+// if never called the service operates without evidence emission.
+func (s *Service) SetEvidenceRecorder(r evidence.Recorder) {
+	s.evidenceRecorder = r
 }
 
 // SubmitInput is the data required to create a DSR.
@@ -101,8 +115,98 @@ func (s *Service) Assign(ctx context.Context, tenantID, id, assignerID, assignee
 
 // Respond closes a DSR with a response artifact.
 func (s *Service) Respond(ctx context.Context, tenantID, id, actorID, artifactRef string) error {
-	_, _, err := s.auditAndRespond(ctx, tenantID, id, actorID, artifactRef)
-	return err
+	req, auditID, err := s.auditAndRespond(ctx, tenantID, id, actorID, artifactRef)
+	if err != nil {
+		return err
+	}
+	s.emitRespondEvidence(ctx, req, actorID, artifactRef, auditID)
+	return nil
+}
+
+// emitRespondEvidence records a KindComplianceAttestation evidence item for
+// a successfully fulfilled DSR. This is the primary KVKK m.11 / GDPR Art. 28
+// audit trail: for each data subject request, there must be a signed,
+// time-bounded record of the response within the 30-day SLA.
+//
+// Control mapping: the DSR response closes the loop on the P5.1 (choice and
+// consent) and P7.1 (use and retention) controls. We emit against P7.1
+// because the typical DSR is an erasure/retention-limit request; P5.1 is
+// cited in the payload's control_tags so a future evidence pack can filter
+// either direction.
+func (s *Service) emitRespondEvidence(
+	ctx context.Context,
+	req *Request,
+	actorID, artifactRef string,
+	respondAuditID int64,
+) {
+	if s.evidenceRecorder == nil || req == nil {
+		return
+	}
+
+	now := time.Now().UTC()
+	withinSLA := now.Before(req.SLADeadline) || now.Equal(req.SLADeadline)
+	secondsBeforeDeadline := int64(req.SLADeadline.Sub(now).Seconds())
+
+	payload, err := json.Marshal(map[string]any{
+		"dsr_id":                   req.ID,
+		"request_type":             string(req.RequestType),
+		"employee_user_id":         req.EmployeeUserID,
+		"scope":                    json.RawMessage(req.ScopeJSON),
+		"created_at":               req.CreatedAt.Format(time.RFC3339Nano),
+		"sla_deadline":             req.SLADeadline.Format(time.RFC3339Nano),
+		"closed_at":                now.Format(time.RFC3339Nano),
+		"within_sla":               withinSLA,
+		"seconds_before_deadline":  secondsBeforeDeadline,
+		"response_artifact_ref":    artifactRef,
+		"responded_by":             actorID,
+		"extended":                 req.ExtendedAt != nil,
+		"control_tags":             []string{"P5.1", "P7.1"},
+		"regulation":               "KVKK m.11 / GDPR Art. 28",
+	})
+	if err != nil {
+		s.log.ErrorContext(ctx, "dsr: evidence payload marshal failed",
+			slog.String("dsr_id", req.ID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	slaTag := "within_sla"
+	if !withinSLA {
+		slaTag = "OVERDUE"
+	}
+
+	item := evidence.Item{
+		TenantID:   req.TenantID,
+		Control:    evidence.CtrlP7_1,
+		Kind:       evidence.KindComplianceAttestation,
+		RecordedAt: now,
+		Actor:      actorID,
+		SummaryTR: fmt.Sprintf(
+			"KVKK m.11 talebi kapatıldı — DSR %s, tür %s, durum %s",
+			req.ID, string(req.RequestType), slaTag,
+		),
+		SummaryEN: fmt.Sprintf(
+			"DSR fulfilled — id=%s type=%s sla=%s",
+			req.ID, string(req.RequestType), slaTag,
+		),
+		Payload:            payload,
+		ReferencedAuditIDs: []int64{respondAuditID},
+		AttachmentRefs:     []string{artifactRef},
+	}
+
+	if _, err := s.evidenceRecorder.Record(ctx, item); err != nil {
+		// An overdue DSR that also fails its evidence write is a loud
+		// compliance incident — the KVKK 30-day clock is gone AND we
+		// cannot prove fulfilment to the auditor. Log at error level
+		// regardless of withinSLA so the monitoring pipeline pages on
+		// either condition.
+		s.log.ErrorContext(ctx, "dsr: SOC 2 / KVKK evidence emission failed",
+			slog.String("dsr_id", req.ID),
+			slog.Bool("within_sla", withinSLA),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 func (s *Service) auditAndRespond(ctx context.Context, tenantID, id, actorID, artifactRef string) (*Request, int64, error) {

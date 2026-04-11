@@ -236,6 +236,7 @@ func main() {
 	// history to audit against both artifact families.
 	var evidenceStore *evidence.Store
 	var evidenceRecorder *evidence.RecorderImpl
+	var evidencePackBuilder *evidence.PackBuilder
 	// Compile-time assertion: vault.Client must satisfy evidence.Signer.
 	// If either side's Sign signature drifts, this errors at build time
 	// rather than at first Record() call under load.
@@ -243,6 +244,7 @@ func main() {
 	if wormSink != nil {
 		evidenceStore = evidence.NewStore(pool, wormSink)
 		evidenceRecorder = evidence.NewRecorder(evidenceStore, vc, log)
+		evidencePackBuilder = evidence.NewPackBuilder(evidenceStore, vc)
 		log.Info("evidence locker ready",
 			slog.String("signer", "vault:control-plane"),
 			slog.String("worm_bucket", audit.WORMBucket),
@@ -251,9 +253,11 @@ func main() {
 		// Wire the evidence recorder into domain collectors. Each
 		// collector attaches via a setter so the constructor signature
 		// stays stable for existing tests. Add a new SetEvidenceRecorder
-		// call here for every future collector (CC7.1 change mgmt, CC9.1
-		// BCP runs, etc.).
-		lvSvc.SetEvidenceRecorder(evidenceRecorder)
+		// call here for every future collector (CC9.1 BCP runs, A1.2
+		// backups, etc.).
+		lvSvc.SetEvidenceRecorder(evidenceRecorder)     // CC6.1 privileged access
+		policySvc.SetEvidenceRecorder(evidenceRecorder) // CC8.1 change authorization
+		dsrSvc.SetEvidenceRecorder(evidenceRecorder)    // P7.1 DSR fulfilment
 	} else {
 		log.Warn("evidence locker disabled: WORM sink unavailable; domain collectors must handle nil Recorder")
 	}
@@ -287,6 +291,8 @@ func main() {
 		Silence:      silenceSvc,
 		DLPState:     dlpStateSvc,
 		Mobile:       mobileSvc,
+		Evidence:     evidenceStore,
+		EvidencePack: evidencePackBuilder,
 		Log:          log,
 	}, met)
 

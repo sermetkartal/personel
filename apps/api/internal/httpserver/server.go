@@ -20,6 +20,7 @@ import (
 	"github.com/personel/api/internal/dlpstate"
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
+	"github.com/personel/api/internal/evidence"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	"github.com/personel/api/internal/mobile"
@@ -51,6 +52,8 @@ type Services struct {
 	Silence      *silence.Service
 	DLPState     *dlpstate.Service
 	Mobile       *mobile.Service
+	Evidence     *evidence.Store
+	EvidencePack *evidence.PackBuilder
 	Log          *slog.Logger
 }
 
@@ -178,6 +181,17 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			})
 		})
 
+		// --- Evidence Packs (DPO-only SOC 2 Type II export) ---
+		// Phase 3.0 — ADR 0023. Streams a signed ZIP containing the
+		// manifest + per-item JSON + per-item Ed25519 signature. The
+		// canonical bytes are pulled from audit-worm independently.
+		if svc.EvidencePack != nil {
+			r.Route("/dpo/evidence-packs", func(r chi.Router) {
+				r.Use(auth.RequireRole(auth.RoleDPO))
+				r.Get("/", evidence.GetPackHandler(svc.EvidencePack))
+			})
+		}
+
 		// --- Destruction Reports (DPO-only download) ---
 		r.Route("/destruction-reports", func(r chi.Router) {
 			r.Use(auth.RequireRole(auth.RoleDPO, auth.RoleAdmin))
@@ -266,6 +280,16 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			// POST /v1/system/dlp-bootstrap-keys — dlp-admin only (invoked by dlp-enable.sh)
 			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
 				Post("/dlp-bootstrap-keys", dlpstate.BootstrapPEDEKsHandler(svc.DLPState))
+
+			// GET /v1/system/evidence-coverage?period=YYYY-MM — SOC 2
+			// Type II coverage matrix for the current tenant. Lists the
+			// item count for every expected TSC control plus an explicit
+			// GapControls array of zero-item controls. DPO / Auditor only.
+			// Phase 3.0 — ADR 0023.
+			if svc.Evidence != nil {
+				r.With(auth.RequireRole(auth.RoleDPO, auth.RoleAuditor)).
+					Get("/evidence-coverage", evidence.GetCoverageHandler(svc.Evidence))
+			}
 		})
 
 		// --- Mobile BFF endpoints (Phase 2.9) ---
