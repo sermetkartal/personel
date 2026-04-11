@@ -280,3 +280,124 @@ type ErrCheckpointNotFound struct {
 func (e *ErrCheckpointNotFound) Error() string {
 	return fmt.Sprintf("audit/worm: checkpoint not found for tenant %q day %q", e.TenantID, e.Day)
 }
+
+// -----------------------------------------------------------------------------
+// Evidence blob storage (Phase 3.0 — SOC 2 Type II evidence locker)
+//
+// The same WORM bucket and Compliance mode retention is reused as the
+// tamper-evident substrate for SOC 2 evidence items. See ADR 0023 for
+// rationale: evidence and audit checkpoints share one integrity boundary
+// rather than operating separate buckets. Key scheme keeps them disjoint:
+//
+//	checkpoints/{tenant}/{YYYY-MM-DD}.json   -- daily audit chain checkpoints
+//	evidence/{tenant}/{YYYY-MM}/{id}.bin     -- canonical signed evidence items
+//
+// The evidence writer (evidence.Store) depends on audit.WORMSink through the
+// EvidenceWORM interface defined in the evidence package so the two packages
+// stay loosely coupled.
+// -----------------------------------------------------------------------------
+
+// EvidenceObjectKey returns the deterministic WORM bucket key for a given
+// evidence item. Exported so the evidence package can reference it without
+// duplicating the key scheme — the scheme is the integrity contract.
+func EvidenceObjectKey(tenantID, collectionPeriod, id string) string {
+	return fmt.Sprintf("evidence/%s/%s/%s.bin", tenantID, collectionPeriod, id)
+}
+
+// PutEvidence writes signed canonical evidence bytes to the WORM bucket with
+// Compliance mode retention. Returns the object key on success.
+//
+// The retention period is wormRetentionYears (5 years) to match KVKK Article 7
+// and SOC 2 Type II observation window requirements. Once written, not even
+// the MinIO root account can delete the object before the retention expires.
+//
+// If an object with the same key already exists and is Compliance-locked,
+// returns a WORMConflictError. The caller should treat this as an idempotent
+// retry signal — the original canonical bytes were already persisted, so
+// skipping the second write is safe as long as the caller verifies the
+// existing object matches.
+func (s *WORMSink) PutEvidence(ctx context.Context, tenantID, collectionPeriod, id string, canonical []byte) (string, error) {
+	if tenantID == "" || collectionPeriod == "" || id == "" {
+		return "", fmt.Errorf("audit/worm: PutEvidence requires tenant_id, collection_period, id")
+	}
+	if len(canonical) == 0 {
+		return "", fmt.Errorf("audit/worm: PutEvidence refuses empty canonical payload")
+	}
+
+	key := EvidenceObjectKey(tenantID, collectionPeriod, id)
+	retainUntil := time.Now().UTC().AddDate(wormRetentionYears, 0, 1)
+
+	opts := minio.PutObjectOptions{
+		ContentType:     "application/octet-stream",
+		RetainUntilDate: retainUntil,
+		Mode:            minio.Compliance,
+	}
+
+	_, err := s.client.PutObject(
+		ctx,
+		WORMBucket,
+		key,
+		bytes.NewReader(canonical),
+		int64(len(canonical)),
+		opts,
+	)
+	if err != nil {
+		if minio.ToErrorResponse(err).Code == "ObjectLocked" ||
+			minio.ToErrorResponse(err).StatusCode == 409 {
+			s.logger.WarnContext(ctx, "audit/worm: evidence object already locked; skipping",
+				slog.String("key", key),
+				slog.String("tenant_id", tenantID),
+				slog.String("id", id),
+			)
+			return key, &WORMConflictError{Key: key}
+		}
+		return "", fmt.Errorf("audit/worm: PutEvidence %q: %w", key, err)
+	}
+
+	s.logger.InfoContext(ctx, "audit/worm: evidence written",
+		slog.String("key", key),
+		slog.String("tenant_id", tenantID),
+		slog.String("collection_period", collectionPeriod),
+		slog.String("id", id),
+		slog.Int("bytes", len(canonical)),
+		slog.Time("retain_until", retainUntil),
+	)
+
+	return key, nil
+}
+
+// GetEvidence retrieves the canonical signed bytes of a previously written
+// evidence item. Used by the DPO evidence pack builder and the verification
+// path that cross-checks Postgres metadata against WORM.
+//
+// Returns an ErrEvidenceNotFound if no object exists at the computed key.
+func (s *WORMSink) GetEvidence(ctx context.Context, tenantID, collectionPeriod, id string) ([]byte, error) {
+	key := EvidenceObjectKey(tenantID, collectionPeriod, id)
+
+	obj, err := s.client.GetObject(ctx, WORMBucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
+			return nil, &ErrEvidenceNotFound{Key: key}
+		}
+		return nil, fmt.Errorf("audit/worm: GetEvidence %q: %w", key, err)
+	}
+	defer obj.Close()
+
+	buf := new(bytes.Buffer)
+	if _, err := buf.ReadFrom(obj); err != nil {
+		return nil, fmt.Errorf("audit/worm: GetEvidence read %q: %w", key, err)
+	}
+	return buf.Bytes(), nil
+}
+
+// ErrEvidenceNotFound is returned by GetEvidence when no object exists at
+// the computed WORM key. A missing evidence object after a successful
+// Postgres INSERT indicates tampering and must be treated as a SOC 2 CC7.1
+// incident.
+type ErrEvidenceNotFound struct {
+	Key string
+}
+
+func (e *ErrEvidenceNotFound) Error() string {
+	return fmt.Sprintf("audit/worm: evidence object not found at key %q", e.Key)
+}

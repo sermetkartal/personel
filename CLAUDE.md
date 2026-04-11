@@ -370,6 +370,19 @@ Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay:
   - Real DSR/liveview/silence/dlp delegation in mobile.Service.GetSummary
   - Fault-tolerant: per-query failures degrade individually, not the summary
 
+**Phase 3.0 kickoff — Evidence Locker dual-write** (this commit):
+  - Migration 0025: evidence_items table with RLS + append-only (REVOKE UPDATE, DELETE)
+  - `apps/api/internal/evidence/store.go` real implementation:
+    WORM bucket PUT first → Postgres INSERT second; WORM failure short-circuits
+  - `audit.WORMSink` extended with PutEvidence + GetEvidence (shares audit-worm
+    bucket, 5-year Compliance mode retention, key `evidence/{tenant}/{period}/{id}.bin`)
+  - `evidence.EvidenceWORM` narrow interface keeps packages decoupled + testable
+  - 4 unit tests covering: nil WORM rejection, unsigned item rejection,
+    WORM-failure short-circuit (no Postgres touch), canonicalize determinism
+  - Wired into cmd/api/main.go with graceful degradation when WORM sink is
+    unavailable at startup (domain collectors see nil Recorder and must handle)
+  - Recorder still uses NoopSigner pending Phase 3.0 Vault transit wiring
+
 ### Faz 2 remaining work (future commits)
 
 - Real Phase 2 implementations (all current work is scaffolds):

@@ -34,6 +34,7 @@ import (
 	"github.com/personel/api/internal/dlpstate"
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
+	"github.com/personel/api/internal/evidence"
 	"github.com/personel/api/internal/httpserver"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
@@ -222,6 +223,24 @@ func main() {
 	}
 	auditVerifier := audit.NewVerifier(pool, vc, verifierSink, wormSink, recorder, log)
 	go runAuditVerifierJob(ctx, auditVerifier, tenantIDs, log)
+
+	// --- Evidence locker (Phase 3.0 — ADR 0023 SOC 2 Type II) ---
+	// The evidence Store requires a WORM sink; if MinIO was unavailable at
+	// startup wormSink is nil and evidence.Record() will refuse writes so
+	// we never produce auditor-facing evidence without an integrity anchor.
+	var evidenceStore *evidence.Store
+	var evidenceRecorder *evidence.RecorderImpl
+	if wormSink != nil {
+		evidenceStore = evidence.NewStore(pool, wormSink)
+		// Phase 3.0 will switch the signer to a real Vault transit call;
+		// the noop signer produces a loud placeholder signature so scaffold
+		// mode never accidentally presents fake evidence as admissible.
+		evidenceRecorder = evidence.NewRecorder(evidenceStore, evidence.NewNoopSigner(), log)
+		log.Info("evidence locker ready (noop signer until Phase 3.0 Vault transit wiring)")
+	} else {
+		log.Warn("evidence locker disabled: WORM sink unavailable; domain collectors must handle nil Recorder")
+	}
+	_ = evidenceRecorder // consumed when collectors wire in Phase 3.0
 
 	// --- 10. Mobile BFF service (Phase 2.9) ---
 	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
