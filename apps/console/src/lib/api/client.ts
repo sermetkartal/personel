@@ -153,18 +153,13 @@ export interface FetchOptions extends Omit<RequestInit, "body"> {
 
 async function getToken(serverSide: boolean): Promise<string | null> {
   if (serverSide) {
-    // Server component context: read from Next.js session route handler
-    try {
-      const res = await fetch(
-        `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/api/auth/session`,
-        { cache: "no-store" },
-      );
-      if (!res.ok) return null;
-      const data = (await res.json()) as { access_token?: string };
-      return data.access_token ?? null;
-    } catch {
-      return null;
-    }
+    // Server components should pass the session access token directly
+    // via the `token` option on each call. The historical serverSide
+    // path fetched /api/auth/session but Next.js server-side fetches
+    // do NOT forward cookies by default, so that path returned null.
+    // The cleanest fix is explicit forwarding from the caller, not
+    // implicit cookie magic.
+    return null;
   }
   return _accessToken;
 }

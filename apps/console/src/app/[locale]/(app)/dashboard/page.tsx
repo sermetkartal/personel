@@ -15,20 +15,22 @@ export async function generateMetadata() {
 }
 
 async function fetchDashboardData(accessToken: string) {
-  const apiOpts = { serverSide: true };
+  // Forward the DPO/admin access token explicitly to every API call —
+  // server-side fetch from Next.js doesn't auto-forward cookies, so
+  // the apiClient needs the token as an explicit option. See the
+  // evidence page for the same pattern.
+  const opts = { token: accessToken };
 
   const [endpoints, dsrOpen, dsrAtRisk, dsrOverdue, liveViewPending, recentAudit, dlpState] =
     await Promise.allSettled([
-      listEndpoints({ status: "active", page_size: 1 }),
-      listDSRs({ state: "open", page_size: 1 }),
-      listDSRs({ state: "at_risk", page_size: 1 }),
-      listDSRs({ state: "overdue", page_size: 1 }),
-      listLiveViewRequests({ state: "REQUESTED", page_size: 10 }),
-      listAuditRecords({ page_size: 5 }),
+      listEndpoints({ status: "active", page_size: 1 }, opts),
+      listDSRs({ state: "open", page_size: 1 }, opts),
+      listDSRs({ state: "at_risk", page_size: 1 }, opts),
+      listDSRs({ state: "overdue", page_size: 1 }, opts),
+      listLiveViewRequests({ state: "REQUESTED", page_size: 10 }, opts),
+      listAuditRecords({ page_size: 5 }, opts),
       getDLPState(),
     ]);
-
-  void accessToken; // used via server-side cookie, no direct usage needed
 
   return {
     activeEndpointsTotal: endpoints.status === "fulfilled" ? endpoints.value.pagination.total : 0,

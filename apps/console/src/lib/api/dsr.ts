@@ -27,9 +27,12 @@ export const dsrKeys = {
   detail: (id: string) => ["dsr", "detail", id] as const,
 };
 
-export async function listDSRs(params: ListDSRsParams = {}): Promise<DSRList> {
+export async function listDSRs(
+  params: ListDSRsParams = {},
+  opts: { token?: string } = {},
+): Promise<DSRList> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<DSRList>(`/v1/dsr${qs}`);
+  return apiClient.get<DSRList>(`/v1/dsr${qs}`, opts);
 }
 
 export async function getDSR(id: string): Promise<DSRRequest> {

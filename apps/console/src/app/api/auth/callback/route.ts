@@ -80,7 +80,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
           grant_type: "authorization_code",
           client_id: clientId,
           code,
-          redirect_uri: `${appUrl}/api/auth/callback`,
+          // Must match the redirect_uri sent in the /api/auth/login
+          // authorize request. Keycloak enforces exact match. The
+          // client callback page at /tr/callback is the real
+          // browser-facing redirect target.
+          redirect_uri: `${appUrl}/tr/callback`,
           code_verifier: codeVerifier,
         }),
       },

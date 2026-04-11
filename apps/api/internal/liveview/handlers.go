@@ -54,7 +54,10 @@ func ListRequestsHandler(svc *Service) http.HandlerFunc {
 			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": list})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
+			"items": list,
+			"pagination": map[string]any{"page": 1, "page_size": len(list), "total": len(list)},
+		})
 	}
 }
 
@@ -134,7 +137,10 @@ func ListSessionsHandler(svc *Service) http.HandlerFunc {
 			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": list})
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
+			"items": list,
+			"pagination": map[string]any{"page": 1, "page_size": len(list), "total": len(list)},
+		})
 	}
 }
 

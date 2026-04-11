@@ -25,9 +25,10 @@ export const auditKeys = {
 
 export async function listAuditRecords(
   params: ListAuditParams = {},
+  opts: { token?: string } = {},
 ): Promise<AuditList> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<AuditList>(`/v1/audit${qs}`);
+  return apiClient.get<AuditList>(`/v1/audit${qs}`, opts);
 }
 
 export async function getAuditChainStatus(): Promise<AuditChainStatus> {

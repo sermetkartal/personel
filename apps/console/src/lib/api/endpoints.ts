@@ -25,9 +25,10 @@ export const endpointKeys = {
 
 export async function listEndpoints(
   params: ListEndpointsParams = {},
+  opts: { token?: string } = {},
 ): Promise<EndpointList> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<EndpointList>(`/v1/endpoints${qs}`);
+  return apiClient.get<EndpointList>(`/v1/endpoints${qs}`, opts);
 }
 
 export async function getEndpoint(id: string): Promise<Endpoint> {

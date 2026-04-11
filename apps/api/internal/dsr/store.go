@@ -35,21 +35,21 @@ const (
 
 // Request is the DSR aggregate.
 type Request struct {
-	ID                 string
-	TenantID           string
-	EmployeeUserID     string
-	RequestType        RequestType
-	ScopeJSON          []byte
-	Justification      string
-	State              State
-	CreatedAt          time.Time
-	SLADeadline        time.Time // CreatedAt + 30 days
-	AssignedTo         *string
-	ResponseArtifactRef *string
-	AuditChainRef      *string
-	ExtendedAt         *time.Time
-	ExtensionReason    *string
-	ClosedAt           *time.Time
+	ID                  string      `json:"id"`
+	TenantID            string      `json:"tenant_id"`
+	EmployeeUserID      string      `json:"employee_user_id"`
+	RequestType         RequestType `json:"request_type"`
+	ScopeJSON           []byte      `json:"scope_json"`
+	Justification       string      `json:"justification"`
+	State               State       `json:"state"`
+	CreatedAt           time.Time   `json:"created_at"`
+	SLADeadline         time.Time   `json:"sla_deadline"`
+	AssignedTo          *string     `json:"assigned_to,omitempty"`
+	ResponseArtifactRef *string     `json:"response_artifact_ref,omitempty"`
+	AuditChainRef       *string     `json:"audit_chain_ref,omitempty"`
+	ExtendedAt          *time.Time  `json:"extended_at,omitempty"`
+	ExtensionReason     *string     `json:"extension_reason,omitempty"`
+	ClosedAt            *time.Time  `json:"closed_at,omitempty"`
 }
 
 // Store handles all DSR persistence.

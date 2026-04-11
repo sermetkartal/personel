@@ -1,6 +1,7 @@
 import { getTranslations } from "next-intl/server";
 import { Suspense } from "react";
 import { listEndpoints } from "@/lib/api/endpoints";
+import { getSession } from "@/lib/auth/session";
 import { EndpointsClient } from "./endpoints-client";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { EndpointStatus } from "@/lib/api/types";
@@ -22,12 +23,12 @@ export default async function EndpointsPage({
 
   const status = params.status as EndpointStatus | undefined;
   const page = params.page ? parseInt(params.page, 10) : 1;
+  const session = await getSession();
 
-  const endpoints = await listEndpoints({
-    status,
-    page,
-    page_size: 50,
-  }).catch(() => ({ items: [], pagination: { page: 1, page_size: 50, total: 0 } }));
+  const endpoints = await listEndpoints(
+    { status, page, page_size: 50 },
+    { token: session?.user.access_token },
+  ).catch(() => ({ items: [], pagination: { page: 1, page_size: 50, total: 0 } }));
 
   return (
     <div className="space-y-6 animate-fade-in">

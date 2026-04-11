@@ -17,7 +17,38 @@ func ListHandler(svc *Service) http.HandlerFunc {
 			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": list})
+
+		// Filter by status query param (active | revoked) if supplied.
+		// Phase 1: the store returns all rows; we apply the filter here
+		// to avoid a store-level schema change. Keep pagination shape
+		// consistent with other list endpoints so the console can read
+		// response.pagination.total uniformly.
+		status := r.URL.Query().Get("status")
+		filtered := list
+		if status == "active" {
+			filtered = filtered[:0]
+			for _, e := range list {
+				if e.IsActive {
+					filtered = append(filtered, e)
+				}
+			}
+		} else if status == "revoked" {
+			filtered = filtered[:0]
+			for _, e := range list {
+				if !e.IsActive {
+					filtered = append(filtered, e)
+				}
+			}
+		}
+
+		httpx.WriteJSON(w, http.StatusOK, map[string]any{
+			"items": filtered,
+			"pagination": map[string]any{
+				"page":      1,
+				"page_size": len(filtered),
+				"total":     len(filtered),
+			},
+		})
 	}
 }
 

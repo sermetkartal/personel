@@ -38,9 +38,10 @@ export const liveViewKeys = {
 
 export async function listLiveViewRequests(
   params: ListLiveViewRequestsParams = {},
+  opts: { token?: string } = {},
 ): Promise<LiveViewRequestList> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<LiveViewRequestList>(`/v1/live-view/requests${qs}`);
+  return apiClient.get<LiveViewRequestList>(`/v1/live-view/requests${qs}`, opts);
 }
 
 export async function getLiveViewRequest(id: string): Promise<LiveViewRequest> {

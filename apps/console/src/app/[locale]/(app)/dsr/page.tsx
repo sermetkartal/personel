@@ -30,15 +30,19 @@ export default async function DSRPage({
   const sp = await searchParams;
   const page = sp.page ? parseInt(sp.page, 10) : 1;
 
+  const opts = { token: session.user.access_token };
   const [openDSRs, atRiskDSRs, overdueDSRs, allDSRs] = await Promise.allSettled([
-    listDSRs({ state: "open", page_size: 1 }),
-    listDSRs({ state: "at_risk", page_size: 1 }),
-    listDSRs({ state: "overdue", page_size: 1 }),
-    listDSRs({
-      state: sp.state as "open" | "at_risk" | "overdue" | "resolved" | "rejected" | undefined,
-      page,
-      page_size: 20,
-    }),
+    listDSRs({ state: "open", page_size: 1 }, opts),
+    listDSRs({ state: "at_risk", page_size: 1 }, opts),
+    listDSRs({ state: "overdue", page_size: 1 }, opts),
+    listDSRs(
+      {
+        state: sp.state as "open" | "at_risk" | "overdue" | "resolved" | "rejected" | undefined,
+        page,
+        page_size: 20,
+      },
+      opts,
+    ),
   ]);
 
   return (

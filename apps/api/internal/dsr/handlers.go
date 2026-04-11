@@ -72,6 +72,11 @@ func ListHandler(svc *Service) http.HandlerFunc {
 		httpx.WriteJSON(w, http.StatusOK, map[string]any{
 			"items": list,
 			"stats": stats,
+			"pagination": map[string]any{
+				"page":      1,
+				"page_size": len(list),
+				"total":     len(list),
+			},
 		})
 	}
 }

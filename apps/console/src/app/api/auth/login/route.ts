@@ -43,7 +43,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   authUrl.searchParams.set("client_id", clientId);
   authUrl.searchParams.set("response_type", "code");
   authUrl.searchParams.set("scope", "openid profile email");
-  authUrl.searchParams.set("redirect_uri", `${appUrl}/api/auth/callback`);
+  // Keycloak redirects here after the user authenticates. The actual
+  // handler is the client-side page at /tr/callback which reads the
+  // code + state from the URL and POSTs them to /api/auth/callback for
+  // the server-side token exchange. Previously this pointed at the
+  // API route directly, which only accepts POST — so the browser GET
+  // redirect landed on a 405. Fixed 2026-04-12 during the first real
+  // browser login attempt.
+  authUrl.searchParams.set("redirect_uri", `${appUrl}/tr/callback`);
   authUrl.searchParams.set("code_challenge", codeChallenge);
   authUrl.searchParams.set("code_challenge_method", "S256");
   authUrl.searchParams.set("state", state);

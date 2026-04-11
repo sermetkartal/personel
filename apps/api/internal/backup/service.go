@@ -82,10 +82,15 @@ func (s *Service) RecordRun(ctx context.Context, r RunReport) (string, error) {
 		return "", fmt.Errorf("backup: finished_at must be >= started_at")
 	}
 
-	tenantForRow := r.TenantID
-	if tenantForRow == "" {
-		tenantForRow = "platform"
+	// TenantID must be a valid UUID — the audit_log.tenant_id column
+	// is UUID-typed, so the previous "platform" literal fallback
+	// failed at INSERT with SQLSTATE 22P02. The handler is responsible
+	// for injecting the caller's principal tenant; we reject here if
+	// that didn't happen.
+	if r.TenantID == "" {
+		return "", fmt.Errorf("backup: tenant_id is required (handler must inject from principal)")
 	}
+	tenantForRow := r.TenantID
 
 	auditID, err := s.recorder.Append(ctx, audit.Entry{
 		Actor:    r.SourceHost,

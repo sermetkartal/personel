@@ -43,14 +43,17 @@ export default async function AuditPage({
   // Server-side prefetch for initial render — client component takes over after hydration
   let initialData: AuditList | undefined;
   try {
-    initialData = await listAuditRecords({
-      page,
-      page_size: 50,
-      action,
-      actor_id: actorId,
-      from,
-      to,
-    });
+    initialData = await listAuditRecords(
+      {
+        page,
+        page_size: 50,
+        action,
+        actor_id: actorId,
+        from,
+        to,
+      },
+      { token: session.user.access_token },
+    );
   } catch {
     // Client will handle the error state
   }
