@@ -52,6 +52,28 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+// UpdateState writes a new state row. All fields are overwritten; pass nil
+// pointers for clear-to-null. Uses the single-row constraint on dlp_state.
+func (s *Store) UpdateState(ctx context.Context, state DLPStateValue,
+	enabledAt *time.Time, enabledBy, ceremonyFormHash, lastAuditEventID *string,
+	message string) error {
+	_, err := s.pool.Exec(ctx,
+		`UPDATE dlp_state
+		 SET state = $1,
+		     enabled_at = $2,
+		     enabled_by = $3,
+		     ceremony_form_hash = $4,
+		     last_audit_event_id = $5,
+		     message = $6
+		 WHERE id = TRUE`,
+		state, enabledAt, enabledBy, ceremonyFormHash, lastAuditEventID, message,
+	)
+	if err != nil {
+		return fmt.Errorf("dlpstate: update state: %w", err)
+	}
+	return nil
+}
+
 // GetState returns the current DLP state row.
 func (s *Store) GetState(ctx context.Context) (*StateRow, error) {
 	row := s.pool.QueryRow(ctx,

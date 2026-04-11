@@ -25,6 +25,35 @@ func GetDLPStateHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
+// TransitionHandler — POST /v1/system/dlp-transition
+//
+// Atomically updates DLP state + writes audit entry + surfaces banner for the
+// transparency portal. Called by infra/scripts/dlp-enable.sh and dlp-disable.sh
+// after the script has completed all out-of-API side effects (Vault Secret ID,
+// container start, form verification).
+//
+// Accepts actions: "enable-complete", "enable-failed", "disable-complete".
+//
+// Required role: dlp-admin
+func TransitionHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req TransitionRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			httpx.WriteError(w, r, http.StatusBadRequest,
+				httpx.ProblemTypeValidation, "Invalid Body", "err.validation")
+			return
+		}
+
+		resp, err := svc.Transition(r.Context(), req)
+		if err != nil {
+			httpx.WriteError(w, r, http.StatusBadRequest,
+				httpx.ProblemTypeValidation, "Transition Failed", "err.validation")
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, resp)
+	}
+}
+
 // BootstrapPEDEKsHandler — POST /v1/system/dlp-bootstrap-keys
 //
 // Generates fresh PE-DEKs for all enrolled endpoints that do not yet have one.

@@ -5,11 +5,39 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"time"
 
 	vaultapi "github.com/hashicorp/vault/api"
 
 	"github.com/personel/api/internal/audit"
 )
+
+// TransitionRequest is the body for POST /v1/system/dlp-transition. It is
+// called by infra/scripts/dlp-enable.sh and dlp-disable.sh after the out-of-
+// API side effects (Vault Secret ID, container start/stop, form verification)
+// have completed. The API owns the atomic state + audit + portal banner
+// transition; the scripts own the orchestration.
+type TransitionRequest struct {
+	// Action is one of: "enable-complete", "enable-failed", "disable-complete".
+	Action string `json:"action"`
+	// ActorID is the human actor (DPO) driving the ceremony.
+	ActorID string `json:"actor_id"`
+	// DPOEmail is required for enable-complete; recorded in audit for traceability.
+	DPOEmail string `json:"dpo_email,omitempty"`
+	// FormHash is the sha256 of the signed opt-in form (enable-complete only).
+	FormHash string `json:"form_hash,omitempty"`
+	// EndpointsBootstrapped is the count from the bootstrap-keys call (enable-complete only).
+	EndpointsBootstrapped int `json:"endpoints_bootstrapped,omitempty"`
+	// Reason is required for disable-complete and enable-failed.
+	Reason string `json:"reason,omitempty"`
+}
+
+// TransitionResponse is the body returned from the transition endpoint.
+type TransitionResponse struct {
+	NewState    DLPStateValue `json:"new_state"`
+	AuditID     string        `json:"audit_id"`
+	BannerState string        `json:"banner_state"` // "enabled" | "disabled"
+}
 
 // ContainerHealth is the health status of the DLP container as seen from the API.
 type ContainerHealth string
@@ -171,6 +199,105 @@ func (s *Service) GetStatus(ctx context.Context) (*DLPStatus, error) {
 		VaultSecretIDPresent: secretIDPresent,
 		LastAuditEventID:     lastAuditEventID,
 		Message:              row.Message,
+	}, nil
+}
+
+// Transition performs an atomic DLP state transition: update dlp_state row,
+// write the corresponding audit entry, and return the new state. The caller
+// is the dlp-enable.sh or dlp-disable.sh script authenticated as dlp-admin.
+//
+// This endpoint is the single source of truth for state transitions. The
+// portal banner is derived from dlp_state.state, so updating the state
+// automatically updates the banner on the next portal request.
+//
+// ADR 0013 amendment items: A1 (transition semantics), A3 (failure handling
+// via enable-failed action), A4 (disable does NOT destroy ciphertext).
+func (s *Service) Transition(ctx context.Context, req TransitionRequest) (*TransitionResponse, error) {
+	if req.ActorID == "" {
+		return nil, fmt.Errorf("dlpstate: transition: actor_id is required")
+	}
+
+	var (
+		newState    DLPStateValue
+		enabledAt   *time.Time
+		enabledBy   *string
+		formHash    *string
+		auditAction audit.Action
+		message     string
+		bannerState string
+	)
+
+	switch req.Action {
+	case "enable-complete":
+		if req.FormHash == "" || req.DPOEmail == "" {
+			return nil, fmt.Errorf("dlpstate: enable-complete requires form_hash and dpo_email")
+		}
+		now := time.Now().UTC()
+		newState = StateEnabled
+		enabledAt = &now
+		enabledBy = &req.ActorID
+		formHash = &req.FormHash
+		auditAction = audit.ActionDLPEnabled
+		message = fmt.Sprintf("DLP %s tarihinde %s tarafından aktif edildi.", now.Format("2006-01-02"), req.ActorID)
+		bannerState = "enabled"
+
+	case "disable-complete":
+		if req.Reason == "" {
+			return nil, fmt.Errorf("dlpstate: disable-complete requires reason")
+		}
+		newState = StateDisabled
+		auditAction = audit.ActionDLPDisabled
+		message = "DLP devre dışı — mevcut şifreli içerik TTL ile doğal olarak silinir (ADR 0013 A4)."
+		bannerState = "disabled"
+
+	case "enable-failed":
+		if req.Reason == "" {
+			return nil, fmt.Errorf("dlpstate: enable-failed requires reason")
+		}
+		newState = StateDisabled
+		auditAction = audit.ActionDLPEnableFailed
+		message = fmt.Sprintf("DLP aktivasyonu başarısız: %s — durum disabled'e döndürüldü.", req.Reason)
+		bannerState = "disabled"
+
+	default:
+		return nil, fmt.Errorf("dlpstate: unknown action %q", req.Action)
+	}
+
+	// Write the audit entry first so the last_audit_event_id points at an
+	// existing row.
+	auditID, err := s.recorder.Append(ctx, audit.Entry{
+		Actor:    req.ActorID,
+		TenantID: "", // DLP transitions are tenant-wide
+		Action:   auditAction,
+		Target:   "system:dlp",
+		Details: map[string]any{
+			"action":                  req.Action,
+			"dpo_email":               req.DPOEmail,
+			"form_hash":               req.FormHash,
+			"endpoints_bootstrapped":  req.EndpointsBootstrapped,
+			"reason":                  req.Reason,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("dlpstate: transition: audit append: %w", err)
+	}
+
+	auditIDStr := fmt.Sprintf("%d", auditID)
+	if err := s.store.UpdateState(ctx, newState, enabledAt, enabledBy, formHash, &auditIDStr, message); err != nil {
+		return nil, fmt.Errorf("dlpstate: transition: update state: %w", err)
+	}
+
+	s.log.InfoContext(ctx, "dlp state transitioned",
+		slog.String("action", req.Action),
+		slog.String("new_state", string(newState)),
+		slog.String("actor", req.ActorID),
+		slog.String("audit_id", auditIDStr),
+	)
+
+	return &TransitionResponse{
+		NewState:    newState,
+		AuditID:     auditIDStr,
+		BannerState: bannerState,
 	}, nil
 }
 

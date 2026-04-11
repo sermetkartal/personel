@@ -155,6 +155,26 @@ thresholds:
     blocking: false
     notes: "Semi-automated: report generation is automated, signature verification is manual."
 
+  - id: EC-DLP-18
+    criterion_number: "DLP-18"
+    description: "DLP opt-in ceremony executable end-to-end within 1 hour"
+    test: TestPhase1Exit18_DLPOptInCeremony
+    max_wall_clock_seconds: 3600
+    metric_key: dlp_ceremony_pass
+    operator: gte
+    value: 1.0
+    unit: "bool (1=pass)"
+    test_file: "test/e2e/dlp_opt_in_test.go"
+    required: true
+    blocking: true
+    notes: >
+      ADR 0013: DLP opt-in ceremony end-to-end. Validates signed form
+      verification, Vault Secret ID issuance, PE-DEK bootstrap for all
+      enrolled endpoints (A2), rollback semantics (A3), opt-out path (A4),
+      A5 policy signer invariant, audit hash chain, WORM sink cross-check,
+      and transparency portal banner. Must pass on staging before Phase 1
+      pilot sign-off.
+
 # Simulator-specific thresholds (used in load test pass/fail).
 simulator_thresholds:
   - id: SIM-1

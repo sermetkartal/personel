@@ -91,6 +91,10 @@ const (
 	ActionDLPRuleSigned    Action = "dlp.rule.signed"
 	ActionDLPRuleActivated Action = "dlp.rule.activated"
 	ActionDLPMatchViewed   Action = "dlp.match.viewed"
+	// ADR 0013 state transition audit events.
+	ActionDLPEnabled       Action = "dlp.enabled"
+	ActionDLPDisabled      Action = "dlp.disabled"
+	ActionDLPEnableFailed  Action = "dlp.enable_failed"
 )
 
 // --- DSR (KVKK m.11) ---
@@ -215,6 +219,9 @@ var AllActions = []Action{
 	ActionDLPRuleSigned,
 	ActionDLPRuleActivated,
 	ActionDLPMatchViewed,
+	ActionDLPEnabled,
+	ActionDLPDisabled,
+	ActionDLPEnableFailed,
 	ActionDSRSubmitted,
 	ActionDSRAssigned,
 	ActionDSRExtended,

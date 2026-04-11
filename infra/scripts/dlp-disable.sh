@@ -96,24 +96,19 @@ fi
 # Clean up the on-disk secret file
 sudo rm -f /run/personel/dlp-secret-id || true
 
-# ---- Step 4: write dlp.disabled audit event --------------------------------
+# ---- Step 4: atomic state transition + audit + banner (single API call) ----
 
-log "step 4/6: writing dlp.disabled audit event"
+log "step 4/6: invoking POST /v1/system/dlp-transition action=disable-complete"
 curl -sS --fail-with-body -X POST \
-  "$API_URL/v1/internal/audit/dlp-disabled" \
+  "$API_URL/v1/system/dlp-transition" \
   -H "Authorization: Bearer ${API_DLPADMIN_TOKEN:-}" \
   -H "Content-Type: application/json" \
   -d "$(jq -nc --arg actor "$ACTOR_ID" --arg reason "$REASON" \
-        '{actor:$actor, reason:$reason}')" >/dev/null
+        '{action:"disable-complete", actor_id:$actor, reason:$reason}')" >/dev/null
 
-# ---- Step 5: update transparency portal banner -----------------------------
+# ---- Step 5: banner is set atomically by step 4 (no-op placeholder) --------
 
-log "step 5/6: updating transparency portal banner to disabled"
-curl -sS --fail-with-body -X POST \
-  "$API_URL/v1/internal/portal/dlp-banner/disabled" \
-  -H "Authorization: Bearer ${API_DLPADMIN_TOKEN:-}" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg ts "$(date --iso-8601=seconds)" '{effective_at:$ts}')" >/dev/null
+log "step 5/6: transparency portal banner updated by transition handler"
 
 # ---- Step 6: validate state -----------------------------------------------
 

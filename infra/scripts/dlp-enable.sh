@@ -103,11 +103,12 @@ on_failure() {
   fi
 
   if [[ "$ROLLBACK_AUDIT_WRITTEN" = "1" ]]; then
-    log "rollback: writing dlp.enable_failed audit event"
-    curl -sS -X POST "$API_URL/v1/internal/audit/enable-failed" \
-      -H "Authorization: Bearer ${VAULT_TOKEN:-}" \
+    log "rollback: invoking POST /v1/system/dlp-transition action=enable-failed"
+    curl -sS -X POST "$API_URL/v1/system/dlp-transition" \
+      -H "Authorization: Bearer ${API_DLPADMIN_TOKEN:-}" \
       -H "Content-Type: application/json" \
-      -d "{\"actor\":\"$ACTOR_ID\",\"reason\":\"ceremony_rollback_exit_$rc\"}" \
+      -d "$(jq -nc --arg actor "$ACTOR_ID" --arg reason "ceremony_rollback_exit_$rc" \
+            '{action:"enable-failed", actor_id:$actor, reason:$reason}')" \
       >/dev/null 2>&1 || true
   fi
 
@@ -210,36 +211,36 @@ FAILED="$(echo "$BOOTSTRAP_RESP" | jq -r '.failed')"
 log "  bootstrap: total=$TOTAL bootstrapped=$BOOTSTRAPPED failed=$FAILED"
 (( FAILED > 0 )) && { err "bootstrap had $FAILED failures — see API logs"; exit 8; }
 
-# ---- Step 7: write dlp.enabled audit event ---------------------------------
+# ---- Step 7: atomic state transition + audit + banner (single API call) ----
 
-log "step 7/9: writing dlp.enabled audit event"
+# The API owns state consistency: writing the dlp.enabled audit entry,
+# updating the dlp_state table, and surfacing the transparency portal banner
+# all happen in one handler call. See apps/api/internal/dlpstate/service.go
+# Transition() for the implementation.
+
+log "step 7/9: invoking POST /v1/system/dlp-transition action=enable-complete"
 curl -sS --fail-with-body -X POST \
-  "$API_URL/v1/internal/audit/dlp-enabled" \
+  "$API_URL/v1/system/dlp-transition" \
   -H "Authorization: Bearer ${API_DLPADMIN_TOKEN:-}" \
   -H "Content-Type: application/json" \
   -d "$(jq -nc \
+        --arg action "enable-complete" \
         --arg actor "$ACTOR_ID" \
         --arg dpo_email "$DPO_EMAIL" \
         --arg form_hash "$FORM_HASH" \
-        --arg total "$TOTAL" \
         --arg bootstrapped "$BOOTSTRAPPED" \
         '{
-          actor:$actor,
+          action:$action,
+          actor_id:$actor,
           dpo_email:$dpo_email,
           form_hash:$form_hash,
-          endpoints_total:($total|tonumber),
           endpoints_bootstrapped:($bootstrapped|tonumber)
          }')" >/dev/null
 ROLLBACK_AUDIT_WRITTEN="1"
 
-# ---- Step 8: transparency portal banner -------------------------------------
+# ---- Step 8: banner is set atomically by step 7 (no-op placeholder) --------
 
-log "step 8/9: surfacing enabled banner in transparency portal"
-curl -sS --fail-with-body -X POST \
-  "$API_URL/v1/internal/portal/dlp-banner/enabled" \
-  -H "Authorization: Bearer ${API_DLPADMIN_TOKEN:-}" \
-  -H "Content-Type: application/json" \
-  -d "$(jq -nc --arg ts "$(date --iso-8601=seconds)" '{effective_at:$ts}')" >/dev/null
+log "step 8/9: transparency portal banner updated by transition handler"
 
 # ---- Step 9: validate state ------------------------------------------------
 

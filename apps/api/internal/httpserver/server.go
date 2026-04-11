@@ -264,6 +264,13 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			// POST /v1/system/dlp-bootstrap-keys — dlp-admin only (invoked by dlp-enable.sh)
 			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
 				Post("/dlp-bootstrap-keys", dlpstate.BootstrapPEDEKsHandler(svc.DLPState))
+
+			// POST /v1/system/dlp-transition — atomic state transition; writes
+			// audit entry, updates dlp_state, derives banner state (ADR 0013).
+			// Called by dlp-enable.sh and dlp-disable.sh after out-of-API side
+			// effects (Vault Secret ID, container start/stop) have completed.
+			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
+				Post("/dlp-transition", dlpstate.TransitionHandler(svc.DLPState))
 		})
 	})
 
