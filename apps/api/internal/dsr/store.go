@@ -95,9 +95,17 @@ func (s *Store) Get(ctx context.Context, id, tenantID string) (*Request, error) 
 
 // List returns DSRs filtered by state.
 func (s *Store) List(ctx context.Context, tenantID string, states []State) ([]*Request, error) {
-	stateStrings := make([]string, len(states))
-	for i, s := range states {
-		stateStrings[i] = string(s)
+	// states == nil ⇒ caller wants every state. Pass nil (not an empty
+	// slice) so the SQL "$2::text[] IS NULL" branch matches; an empty
+	// slice would make state = ANY(ARRAY[]) which returns zero rows.
+	// Caught by the DSR integration test on 2026-04-11 — the nil case
+	// was silently returning no results.
+	var stateStrings []string
+	if states != nil {
+		stateStrings = make([]string, len(states))
+		for i, s := range states {
+			stateStrings[i] = string(s)
+		}
 	}
 
 	rows, err := s.pool.Query(ctx,

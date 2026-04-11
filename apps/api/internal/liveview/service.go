@@ -221,7 +221,18 @@ func (s *Service) Approve(ctx context.Context, p *auth.Principal, sessionID, not
 		return nil, fmt.Errorf("liveview: publish start command: %w", err)
 	}
 
+	// Populate the in-memory session so the returned object matches
+	// what was just written to the DB. Previously ApproverID and
+	// ApprovalNotes were written to the DB by SetState but NOT mirrored
+	// here, so callers saw a stale Session with ApproverID=nil right
+	// after a successful Approve. Caught by the integration test on
+	// 2026-04-11.
+	approverID := p.UserID
+	approvalNotes := notes
 	sess.State = newState
+	sess.ApproverID = &approverID
+	sess.ApprovalNotes = &approvalNotes
+	sess.ApprovedAt = &now
 	sess.LiveKitRoom = &room
 	sess.LiveKitRoomStr = room
 	sess.AdminToken = adminToken

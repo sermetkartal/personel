@@ -87,9 +87,17 @@ BEGIN
     -- Canonical encoding: id_be64 || ts_nanos_be64 || len(actor)_be32 || actor ||
     --                     len(tenant_id)_be32 || tenant_id || len(action)_be32 || action ||
     --                     len(target)_be32 || target || len(details_canon)_be32 || details_canon || prev_hash
+    --
+    -- IMPORTANT: ts is microsecond-precision × 1000 to match the Go side
+    -- (internal/audit/canonical.go Hash()). Previously this was
+    -- EXTRACT(EPOCH)::bigint * 1e9 which truncated to SECOND precision
+    -- because ::bigint truncates the float, making Postgres-computed
+    -- hashes disagree with Go-computed hashes — every row whose ts had
+    -- sub-second precision would fail HashChain verification. Fixed
+    -- after running the audit integration test on 2026-04-11.
     v_canon :=
         int8send(v_new_id) ||
-        int8send(EXTRACT(EPOCH FROM v_ts)::bigint * 1000000000) ||
+        int8send((EXTRACT(EPOCH FROM v_ts) * 1000000)::bigint * 1000) ||
         int4send(length(p_actor::bytea)) || p_actor::bytea ||
         int4send(length(p_tenant_id::text::bytea)) || p_tenant_id::text::bytea ||
         int4send(length(p_action::bytea)) || p_action::bytea ||

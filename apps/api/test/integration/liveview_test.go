@@ -57,7 +57,7 @@ func seedEndpoint(t *testing.T, pool *pgxpool.Pool, tenantID, hostname string) s
 	ctx := context.Background()
 	var id string
 	err := pool.QueryRow(ctx,
-		`INSERT INTO endpoints(tenant_id, hostname, status) VALUES($1, $2, 'active') RETURNING id`,
+		`INSERT INTO endpoints(tenant_id, hostname, is_active) VALUES($1, $2, true) RETURNING id`,
 		tenantID, hostname,
 	).Scan(&id)
 	require.NoError(t, err)
