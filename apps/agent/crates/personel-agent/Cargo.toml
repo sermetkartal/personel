@@ -22,7 +22,8 @@ personel-policy      = { path = "../personel-policy" }
 personel-crypto      = { path = "../personel-crypto" }
 personel-updater     = { path = "../personel-updater" }
 personel-livestream  = { path = "../personel-livestream" }
-personel-os          = { path = "../personel-os" }
+# Phase 2.2 facade: cross-platform service lifecycle + input query dispatch.
+personel-platform    = { path = "../personel-platform" }
 
 tokio           = { workspace = true }
 anyhow          = { workspace = true }
@@ -33,3 +34,8 @@ serde           = { workspace = true }
 serde_json      = { workspace = true }
 toml            = { workspace = true }
 
+# Windows-only: personel-os is still the direct dep for Windows service,
+# DPAPI, and ETW modules. The facade covers cross-platform functions; the
+# Windows-specific enrollment + service modules are #[cfg]-gated in source.
+[target.'cfg(target_os = "windows")'.dependencies]
+personel-os     = { path = "../personel-os" }

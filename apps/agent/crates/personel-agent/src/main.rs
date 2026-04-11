@@ -58,7 +58,7 @@ fn main() -> Result<()> {
     let rt = runtime::build_runtime().context("build tokio runtime")?;
 
     // Determine run mode.
-    let is_service = !force_console && !debug && personel_os::service::is_service_context();
+    let is_service = !force_console && !debug && personel_platform::service::is_service_context();
 
     if is_service {
         // Windows service mode: the SCM owns the lifecycle.

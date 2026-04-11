@@ -15,6 +15,7 @@ members = [
     "crates/personel-os",
     "crates/personel-os-macos",
     "crates/personel-os-linux",
+    "crates/personel-platform",
     "crates/personel-tests",
 ]
 

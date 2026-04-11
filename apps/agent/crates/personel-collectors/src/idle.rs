@@ -112,7 +112,7 @@ async fn run_idle_loop(
     loop {
         tokio::select! {
             _ = ticker.tick() => {
-                match personel_os::input::last_input_idle_ms() {
+                match personel_platform::input::last_input_idle_ms() {
                     Ok(idle_ms) => {
                         state.healthy.store(true, Ordering::Relaxed);
 
@@ -165,6 +165,10 @@ async fn run_idle_loop(
 // ──────────────────────────────────────────────────────────────────────────────
 
 fn make_meta(ctx: &CollectorCtx, now_nanos: i64, seq: u64, kind: EventKind) -> EventMeta {
+    // Phase 2.0/3 reserved enrichment fields (category, category_confidence,
+    // sensitive_flagged, hris_department, hris_manager_user_id, ocr_language)
+    // are populated server-side by the Phase 2 enricher. Agents leave them
+    // at their prost-default values via `..Default::default()` spread.
     EventMeta {
         event_id: Some(personel_proto::v1::EventId {
             value: EventId::new_v7().to_bytes().to_vec(),
@@ -183,6 +187,7 @@ fn make_meta(ctx: &CollectorCtx, now_nanos: i64, seq: u64, kind: EventKind) -> E
         seq,
         pii: kind.pii_class() as i32,
         retention: 0,
+        ..Default::default()
     }
 }
 

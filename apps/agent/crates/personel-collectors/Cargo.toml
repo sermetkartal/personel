@@ -5,12 +5,13 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-personel-core   = { path = "../personel-core" }
-personel-proto  = { path = "../personel-proto" }
-personel-policy = { path = "../personel-policy" }
-personel-crypto = { path = "../personel-crypto" }
-personel-queue  = { path = "../personel-queue" }
-personel-os     = { path = "../personel-os" }
+personel-core     = { path = "../personel-core" }
+personel-proto    = { path = "../personel-proto" }
+personel-policy   = { path = "../personel-policy" }
+personel-crypto   = { path = "../personel-crypto" }
+personel-queue    = { path = "../personel-queue" }
+# Phase 2.2 facade: cross-platform OS access via compile-time dispatch.
+personel-platform = { path = "../personel-platform" }
 
 tokio        = { workspace = true }
 async-trait  = { workspace = true }
@@ -22,3 +23,9 @@ prost-types  = { workspace = true }
 bytes        = { workspace = true }
 futures      = { workspace = true }
 zeroize      = { workspace = true }
+
+# Windows-only dep: collectors that still call Windows-specific personel-os
+# modules (ETW, WFP, DXGI) not yet lifted into the facade. Those modules
+# are gated with #[cfg(target_os = "windows")] at the source level.
+[target.'cfg(target_os = "windows")'.dependencies]
+personel-os  = { path = "../personel-os" }

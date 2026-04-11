@@ -64,7 +64,7 @@ impl Collector for WindowTitleCollector {
             loop {
                 tokio::select! {
                     _ = ticker.tick() => {
-                        match personel_os::input::foreground_window_info() {
+                        match personel_platform::input::foreground_window_info() {
                             Ok(info) => {
                                 healthy.store(true, Ordering::Relaxed);
                                 if info.title != last_title || info.pid != last_pid {

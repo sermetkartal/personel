@@ -1,0 +1,28 @@
+[package]
+name    = "personel-platform"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+# personel-platform — compile-time platform selector facade.
+#
+# Depending on target_os, this crate re-exports the appropriate backend:
+#   - windows → personel-os
+#   - macos   → personel-os-macos
+#   - linux   → personel-os-linux
+#
+# Consumers (personel-collectors, personel-agent) depend on this crate
+# instead of the Windows-specific personel-os so the workspace compiles on
+# all three target OSes. Phase 2.2 work.
+
+[dependencies]
+personel-core = { path = "../personel-core" }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+personel-os = { path = "../personel-os" }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+personel-os-macos = { path = "../personel-os-macos" }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+personel-os-linux = { path = "../personel-os-linux" }
