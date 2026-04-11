@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Personel brand — light mode */
+    /* Primary: deep navy-slate */
+    --background: 210 20% 98%;
+    --foreground: 220 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 10%;
+
+    /* Primary: deep slate-blue — #1e3a5f */
+    --primary: 215 54% 25%;
+    --primary-foreground: 210 40% 98%;
+
+    /* Secondary: cool light gray */
+    --secondary: 210 20% 94%;
+    --secondary-foreground: 220 30% 20%;
+
+    --muted: 210 20% 94%;
+    --muted-foreground: 220 15% 46%;
+
+    /* Accent: warm amber #f59e0b */
+    --accent: 38 92% 50%;
+    --accent-foreground: 220 30% 10%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 214 22% 90%;
+    --input: 214 22% 90%;
+    --ring: 215 54% 25%;
+
+    --radius: 0.5rem;
+
+    /* Sidebar — darker navy for admin context */
+    --sidebar-background: 215 54% 18%;
+    --sidebar-foreground: 210 40% 90%;
+    --sidebar-primary: 38 92% 50%;
+    --sidebar-primary-foreground: 220 30% 10%;
+    --sidebar-accent: 215 54% 25%;
+    --sidebar-accent-foreground: 210 40% 95%;
+    --sidebar-border: 215 54% 22%;
+    --sidebar-ring: 38 92% 50%;
+  }
+
+  .dark {
+    /* Dark mode — deep navy backgrounds */
+    --background: 220 30% 8%;
+    --foreground: 210 40% 95%;
+
+    --card: 220 30% 11%;
+    --card-foreground: 210 40% 95%;
+
+    --popover: 220 30% 11%;
+    --popover-foreground: 210 40% 95%;
+
+    --primary: 215 80% 60%;
+    --primary-foreground: 220 30% 8%;
+
+    --secondary: 220 30% 16%;
+    --secondary-foreground: 210 40% 90%;
+
+    --muted: 220 30% 16%;
+    --muted-foreground: 220 15% 60%;
+
+    --accent: 38 92% 55%;
+    --accent-foreground: 220 30% 8%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 220 30% 18%;
+    --input: 220 30% 18%;
+    --ring: 215 80% 60%;
+
+    --sidebar-background: 220 30% 6%;
+    --sidebar-foreground: 210 40% 85%;
+    --sidebar-primary: 38 92% 55%;
+    --sidebar-primary-foreground: 220 30% 8%;
+    --sidebar-accent: 220 30% 11%;
+    --sidebar-accent-foreground: 210 40% 90%;
+    --sidebar-border: 220 30% 13%;
+    --sidebar-ring: 38 92% 55%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+    /* Turkish characters: ensure correct rendering */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Turkish-correct hyphenation */
+  p, li {
+    hyphens: auto;
+    hyphenate-character: "-";
+    lang: tr;
+  }
+
+  /* Focus-visible for keyboard navigation */
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@layer utilities {
+  /* Scrollbar styling for audit timeline */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 3px;
+  }
+
+  /* Hash monospace display for audit records */
+  .font-hash {
+    font-family: var(--font-jetbrains-mono), "Consolas", "Monaco", monospace;
+    font-size: 0.75rem;
+    letter-spacing: 0.02em;
+  }
+
+  /* DLP status indicator pulse */
+  .dlp-pulse {
+    animation: pulse-slow 2s ease-in-out infinite;
+  }
+}

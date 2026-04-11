@@ -1,0 +1,54 @@
+{
+  "title": "Personel — Capacity and Resource Usage",
+  "uid": "personel-capacity",
+  "tags": ["personel", "capacity", "infrastructure"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": { "from": "now-24h", "to": "now" },
+  "panels": [
+    {
+      "id": 1, "title": "Host CPU Usage", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\"}[1m])) * 100)", "legendFormat": "CPU %" }]
+    },
+    {
+      "id": 2, "title": "Host Memory Usage", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "(1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100", "legendFormat": "RAM %" }]
+    },
+    {
+      "id": 3, "title": "Disk Usage (/)", "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 0, "y": 8 },
+      "targets": [{ "expr": "(1 - node_filesystem_avail_bytes{mountpoint=\"/\"} / node_filesystem_size_bytes{mountpoint=\"/\"}) * 100", "legendFormat": "Used %" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":70},{"color":"orange","value":80},{"color":"red","value":90}] }, "max": 100 } }
+    },
+    {
+      "id": 4, "title": "ClickHouse Disk", "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 6, "y": 8 },
+      "targets": [{ "expr": "(1 - clickhouse_disks_free_bytes{disk=\"default\"} / clickhouse_disks_size_bytes{disk=\"default\"}) * 100", "legendFormat": "Used %" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":60},{"color":"orange","value":75},{"color":"red","value":85}] }, "max": 100 } }
+    },
+    {
+      "id": 5, "title": "NATS JetStream Storage", "type": "gauge",
+      "gridPos": { "h": 6, "w": 6, "x": 12, "y": 8 },
+      "targets": [{ "expr": "(nats_jetstream_storage_bytes_used / nats_jetstream_storage_bytes_max) * 100", "legendFormat": "Used %" }],
+      "fieldConfig": { "defaults": { "unit": "percent", "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":70},{"color":"red","value":85}] }, "max": 100 } }
+    },
+    {
+      "id": 6, "title": "Container Memory Usage", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 14 },
+      "targets": [{ "expr": "container_memory_usage_bytes{name=~\"personel-.*\"}", "legendFormat": "{{name}}" }],
+      "fieldConfig": { "defaults": { "unit": "bytes" } }
+    },
+    {
+      "id": 7, "title": "Ingest Rate (events/s)", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "targets": [{ "expr": "sum(rate(personel_gateway_events_ingested_total[1m]))", "legendFormat": "events/s" }]
+    },
+    {
+      "id": 8, "title": "ClickHouse Insert Queue", "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "targets": [{ "expr": "clickhouse_background_distributed_files_to_insert", "legendFormat": "Pending inserts" }]
+    }
+  ]
+}

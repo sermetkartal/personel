@@ -1,0 +1,884 @@
+{
+  "common": {
+    "appName": "Personel",
+    "appTagline": "Kurumsal Çalışan Aktivite İzleme",
+    "loading": "Yükleniyor...",
+    "saving": "Kaydediliyor...",
+    "save": "Kaydet",
+    "cancel": "İptal",
+    "confirm": "Onayla",
+    "delete": "Sil",
+    "edit": "Düzenle",
+    "view": "Görüntüle",
+    "download": "İndir",
+    "export": "Dışa Aktar",
+    "search": "Ara",
+    "filter": "Filtrele",
+    "clear": "Temizle",
+    "apply": "Uygula",
+    "close": "Kapat",
+    "back": "Geri",
+    "next": "İleri",
+    "submit": "Gönder",
+    "refresh": "Yenile",
+    "retry": "Tekrar Dene",
+    "yes": "Evet",
+    "no": "Hayır",
+    "unknown": "Bilinmiyor",
+    "notAvailable": "Mevcut değil",
+    "all": "Tümü",
+    "none": "Hiçbiri",
+    "active": "Aktif",
+    "inactive": "Pasif",
+    "enabled": "Etkin",
+    "disabled": "Devre dışı",
+    "status": "Durum",
+    "actions": "İşlemler",
+    "details": "Detaylar",
+    "createdAt": "Oluşturulma Tarihi",
+    "updatedAt": "Güncellenme Tarihi",
+    "pagination": {
+      "showing": "{from}-{to} arası, toplam {total} kayıt",
+      "previous": "Önceki",
+      "next": "Sonraki",
+      "pageOf": "{current} / {total} sayfa"
+    },
+    "table": {
+      "noResults": "Kayıt bulunamadı.",
+      "noResultsFiltered": "Filtreye uyan kayıt bulunamadı."
+    },
+    "datePicker": {
+      "selectDate": "Tarih seçin",
+      "from": "Başlangıç",
+      "to": "Bitiş"
+    },
+    "roles": {
+      "admin": "Yönetici",
+      "manager": "Müdür",
+      "hr": "İnsan Kaynakları",
+      "dpo": "Veri Koruma Görevlisi",
+      "investigator": "Araştırmacı",
+      "auditor": "Denetçi",
+      "employee": "Çalışan"
+    },
+    "kvkk": "KVKK",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı"
+  },
+
+  "auth": {
+    "login": {
+      "title": "Yönetici Konsolu",
+      "heading": "Personel Yönetici Konsolu",
+      "subheading": "Kurumsal çalışan aktivite izleme platformu",
+      "subtitle": "Kurumsal çalışan aktivite izleme platformu",
+      "ssoNote": "Kurumsal kimlik sağlayıcınız (Keycloak) üzerinden güvenli giriş yapın.",
+      "cta": "Kurumsal Hesapla Giriş Yap",
+      "loginButton": "Keycloak ile Giriş Yap",
+      "loginDescription": "Kurumsal kimlik sağlayıcınız ile güvenli giriş yapın.",
+      "redirecting": "Yönlendiriliyor...",
+      "welcome": "Hoş Geldiniz",
+      "kvkkNotice": "Bu sistem KVKK (6698 sayılı Kanun) kapsamında çalışmaktadır. Giriş yaparak sistem politikalarını kabul etmiş sayılırsınız."
+    },
+    "callback": {
+      "processing": "Kimlik doğrulanıyor...",
+      "loading": "Oturum oluşturuluyor...",
+      "error": "Kimlik doğrulama hatası",
+      "errorTitle": "Giriş Başarısız",
+      "authError": "Kimlik sağlayıcıdan hata: {error}",
+      "missingParams": "Eksik parametreler. Lütfen tekrar giriş yapın.",
+      "exchangeFailed": "Token değişimi başarısız. Lütfen tekrar deneyin.",
+      "networkError": "Sunucuya bağlanılamadı. Ağ bağlantınızı kontrol edin.",
+      "tryAgain": "Tekrar Giriş Yap"
+    },
+    "logout": {
+      "button": "Çıkış Yap",
+      "confirming": "Çıkış yapılıyor..."
+    },
+    "session": {
+      "expired": "Oturumunuz sona erdi. Lütfen tekrar giriş yapın.",
+      "invalid": "Geçersiz oturum. Lütfen tekrar giriş yapın."
+    },
+    "errors": {
+      "loginFailed": "Giriş başarısız. Lütfen tekrar deneyin.",
+      "unauthorized": "Bu kaynağa erişim yetkiniz yok.",
+      "forbidden": "Bu işlemi gerçekleştirme yetkiniz yok."
+    }
+  },
+
+  "nav": {
+    "dashboard": "Gösterge Paneli",
+    "endpoints": "Uç Noktalar",
+    "employees": "Çalışanlar",
+    "reports": "Raporlar",
+    "liveView": "Canlı İzleme",
+    "dsr": "Veri Talepleri (m.11)",
+    "legalHold": "Hukuki Saklama",
+    "destructionReports": "İmha Raporları",
+    "audit": "Denetim İzi",
+    "policies": "Politikalar",
+    "settings": "Ayarlar",
+    "silence": "Sessizlik Yönetimi",
+    "profile": "Profilim",
+    "settingsMenu": {
+      "dlp": "DLP Ayarları",
+      "tenants": "Kiracılar",
+      "users": "Kullanıcılar",
+      "integrations": "Entegrasyonlar",
+      "profile": "Profil"
+    }
+  },
+
+  "dashboard": {
+    "title": "Gösterge Paneli",
+    "subtitle": "Sistem durumu ve önemli metrikler",
+    "cards": {
+      "activeEndpoints": "Aktif Uç Noktalar",
+      "activeEndpointsDesc": "Son 5 dakikada sinyal alan",
+      "silentEndpoints": "Sessiz Uç Noktalar",
+      "silentEndpointsDesc": "Beklenen süreyi aşan boşluklar",
+      "pendingDsrs": "Bekleyen Veri Talepleri",
+      "pendingDsrsDesc": "Yanıt bekleyen m.11 talepleri",
+      "pendingLiveViewApprovals": "Onay Bekleyen Canlı İzleme",
+      "pendingLiveViewApprovalsDesc": "İK onayı bekleyen talepler",
+      "overduedsrs": "Süre Aşımı DSR",
+      "overduedsrsDesc": "30 günlük SLA süresi geçmiş",
+      "atRiskDsrs": "Riskli DSR",
+      "atRiskDsrsDesc": "20+ gün geçmiş, acil"
+    },
+    "dlpBanner": {
+      "disabled": {
+        "title": "DLP Hizmeti Devre Dışı",
+        "description": "Klavye içeriği şifrelenerek saklanmaktadır ancak henüz hiçbir DLP deseni eşleştirilmemektedir. DLP'yi etkinleştirmek için zorunlu tören prosedürünü izleyin.",
+        "action": "DLP Ayarlarına Git"
+      },
+      "active": {
+        "title": "DLP Aktif",
+        "description": "Klavye içeriği DLP motoru tarafından işlenmektedir.",
+        "action": "DLP Durumunu Görüntüle"
+      }
+    },
+    "recentAudit": {
+      "title": "Son Denetim Olayları",
+      "viewAll": "Tümünü Görüntüle"
+    },
+    "quickActions": {
+      "title": "Hızlı İşlemler",
+      "newLiveViewRequest": "Canlı İzleme Talebi",
+      "viewPendingDsrs": "Bekleyen Talepleri Görüntüle",
+      "auditLog": "Denetim İzini Görüntüle"
+    }
+  },
+
+  "endpoints": {
+    "title": "Uç Noktalar",
+    "subtitle": "Kayıtlı ajan uç noktalarını yönetin",
+    "enroll": "Yeni Kayıt",
+    "enrollTitle": "Yeni Uç Nokta Kaydet",
+    "backToList": "Uç Nokta Listesine Dön",
+    "detail": {
+      "title": "Uç Nokta Detayı",
+      "hostname": "Bilgisayar Adı",
+      "osVersion": "İşletim Sistemi",
+      "agentVersion": "Ajan Versiyonu",
+      "status": "Durum",
+      "lastSeen": "Son Görülme",
+      "enrolledAt": "Kayıt Tarihi",
+      "policy": "Atanmış Politika",
+      "tabs": {
+        "overview": "Genel Bakış",
+        "timeline": "Zaman Çizelgesi",
+        "screenshots": "Ekran Görüntüleri",
+        "sessions": "Oturumlar"
+      }
+    },
+    "status": {
+      "active": "Aktif",
+      "revoked": "İptal Edildi",
+      "offline": "Çevrimdışı"
+    },
+    "actions": {
+      "revoke": "Token İptal Et",
+      "delete": "Uç Noktayı Sil",
+      "requestLiveView": "Canlı İzleme Talep Et",
+      "revokeConfirm": "Bu uç noktanın token'ını iptal etmek istediğinizden emin misiniz? Ajan bir daha bağlanamayacak.",
+      "deleteConfirm": "Bu uç noktayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+    },
+    "filters": {
+      "allStatuses": "Tüm Durumlar",
+      "searchPlaceholder": "Bilgisayar adına göre ara..."
+    },
+    "enrollment": {
+      "hostname": "Bilgisayar Adı",
+      "hostnameHint": "Windows bilgisayarın ağ adı",
+      "osVersion": "İşletim Sistemi Versiyonu",
+      "policy": "Politika Ata (isteğe bağlı)",
+      "tokenIssued": "Kayıt Token'ı Oluşturuldu",
+      "tokenWarning": "Bu token yalnızca bir kez gösterilir. Güvenli bir şekilde kopyalayın.",
+      "secretId": "Gizli Kimlik",
+      "roleId": "Rol Kimliği",
+      "vaultAddr": "Vault Adresi",
+      "expiresAt": "Son Kullanma"
+    }
+  },
+
+  "employees": {
+    "title": "Çalışanlar",
+    "subtitle": "Çalışan kayıtlarını görüntüleyin",
+    "detail": {
+      "title": "Çalışan Detayı",
+      "endpoints": "Bağlı Uç Noktalar",
+      "dsrHistory": "Veri Talep Geçmişi",
+      "liveViewHistory": "Canlı İzleme Geçmişi"
+    }
+  },
+
+  "reports": {
+    "title": "Raporlar",
+    "subtitle": "ClickHouse tabanlı aktivite analitiği",
+    "dateRange": "Tarih Aralığı",
+    "endpoint": "Uç Nokta",
+    "allEndpoints": "Tüm Uç Noktalar",
+    "productivity": {
+      "title": "Verimlilik Zaman Çizelgesi",
+      "description": "Saatlik aktif/boşta zaman dağılımı",
+      "activeTime": "Aktif Süre",
+      "idleTime": "Boşta Süre"
+    },
+    "topApps": {
+      "title": "En Çok Kullanılan Uygulamalar",
+      "description": "Aktif kullanım süresine göre uygulama sıralaması",
+      "appName": "Uygulama",
+      "duration": "Süre",
+      "percentage": "Yüzde"
+    },
+    "idleActive": {
+      "title": "Boşta / Aktif Analizi",
+      "description": "Dönem bazlı boşta ve aktif zaman karşılaştırması"
+    },
+    "blockingEvents": {
+      "title": "Engelleme Olayları",
+      "description": "Politika engelleme ve DLP olay geçmişi",
+      "eventType": "Olay Türü",
+      "count": "Sayı",
+      "lastOccurrence": "Son Oluşma"
+    },
+    "appBlocks": {
+      "title": "Uygulama Engelleme Olayları",
+      "description": "Politika tarafından engellenen uygulamalar ve olay sayıları"
+    }
+  },
+
+  "liveView": {
+    "title": "Canlı İzleme",
+    "subtitle": "Gerçek zamanlı ekran izleme oturumları",
+    "newRequest": "Yeni Talep",
+    "approvalQueue": "Onay Kuyruğu",
+    "activeSessions": "Aktif Oturumlar",
+    "noActiveSessions": "Aktif canlı izleme oturumu bulunmamaktadır.",
+    "myRequests": "Taleplerim",
+    "minutes": "dakika",
+    "timeCap": "Süre sınırı",
+    "watch": "İzle",
+    "sessions": {
+      "active": "Aktif Oturumlar",
+      "recent": "Son Oturumlar",
+      "pending": "Onay Bekleyenler"
+    },
+    "request": {
+      "title": "Canlı İzleme Talebi",
+      "subtitle": "İK onayı gereklidir. Onay farklı bir kullanıcıdan gelmelidir.",
+      "kvkkNoticeTitle": "KVKK Uyarısı",
+      "kvkkNoticeBody": "Canlı izleme yalnızca meşru amaçlarla ve orantılılık ilkesi çerçevesinde kullanılabilir. Her oturum denetim izine kaydedilir.",
+      "dualControlNote": "Bu talep İK rolündeki farklı bir kullanıcı tarafından onaylanmalıdır (ikili kontrol). Kendi talebinizi onaylayamazsınız.",
+      "endpointLabel": "Hedef Uç Nokta",
+      "endpointPlaceholder": "Uç nokta seçin",
+      "noEndpoints": "Aktif uç nokta bulunamadı",
+      "reasonLabel": "Neden Kodu",
+      "reasonPlaceholder": "Neden seçin",
+      "durationLabel": "Oturum Süresi",
+      "durationCustom": "Özel süre",
+      "durationNote": "Orantılılık gereği maksimum 60 dakika.",
+      "minutes": "dakika",
+      "submit": "Talep Gönder",
+      "submitting": "Gönderiliyor...",
+      "cancel": "İptal",
+      "successToast": "Canlı izleme talebi gönderildi. İK onayı bekleniyor.",
+      "endpoint": "Uç Nokta",
+      "selectEndpoint": "Uç nokta seçin",
+      "reasonCode": "Neden Kodu",
+      "reasonCodeHint": "Bilet no., olay no. veya soruşturma referansı. Serbest metin kabul edilmez.",
+      "duration": "Süre (dakika)",
+      "durationHint": "Varsayılan: 15 dk, Maksimum: 60 dk",
+      "waitingApproval": "İK onayı bekleniyor...",
+      "approvalNotice": "Bu talep İK rolündeki farklı bir kullanıcı tarafından onaylanmalıdır.",
+      "submitted": "Talep gönderildi. Onay bildirimi bekleyin."
+    },
+    "viewer": {
+      "titlePrefix": "Canlı İzleme:",
+      "title": "Canlı İzleme Oturumu",
+      "sessionId": "Oturum ID",
+      "auditNoticeTitle": "Denetim İzi",
+      "auditNoticeBody": "Bu oturum boyunca gerçekleştirdiğiniz tüm eylemler denetim izine kaydedilmektedir.",
+      "notActiveTitle": "Oturum Aktif Değil",
+      "notActiveBody": "Bu oturum şu anda izlenemiyor. Durum: {state}",
+      "endedAt": "Bitiş zamanı",
+      "timeRemaining": "Kalan süre",
+      "sessionEnded": "Oturum sona erdi",
+      "timeWarning": "Son 2 dakika! Oturum kısa süre içinde otomatik kapanacak.",
+      "terminate": "Zorla Kapat",
+      "terminateTitle": "Oturumu Zorla Kapat",
+      "terminateDesc": "Bu oturumu kapatmak için bir gerekçe giriniz. Bu eylem geri alınamaz ve denetim izine kaydedilir.",
+      "terminateReasonLabel": "Kapatma Gerekçesi",
+      "terminateReasonPlaceholder": "Kapatma gerekçesini giriniz",
+      "confirmTerminate": "Evet, Kapat",
+      "terminating": "Kapatılıyor...",
+      "terminatedToast": "Oturum başarıyla kapatıldı.",
+      "cancel": "İptal",
+      "connecting": "Bağlanıyor...",
+      "disconnected": "Bağlantı kesildi. Yönlendiriliyor...",
+      "screenLabel": "Uç nokta ekranı",
+      "status": {
+        "connecting": "Bağlanıyor",
+        "connected": "Bağlı",
+        "disconnected": "Bağlantı Kesildi",
+        "reconnecting": "Yeniden Bağlanıyor"
+      }
+    },
+    "approval": {
+      "title": "Canlı İzleme Onay Kuyruğu",
+      "subtitle": "İK onayı bekleyen talepler",
+      "approve": "Onayla",
+      "deny": "Reddet",
+      "selfApprovalBlocked": "Kendi talebinizi onaylayamazsınız.",
+      "selfApprovalTooltip": "İkili kontrol: Talep sahibi ile onaylayan farklı kullanıcılar olmalıdır.",
+      "requester": "Talep Eden",
+      "targetEndpoint": "Hedef Uç Nokta",
+      "reasonCode": "Neden Kodu",
+      "requestedAt": "Talep Tarihi",
+      "duration": "İstenen Süre",
+      "approveConfirm": "Bu canlı izleme oturumunu onaylıyor musunuz?",
+      "denyConfirm": "Bu talebi reddetmek istediğinizden emin misiniz?",
+      "denyReason": "Red gerekçesi",
+      "noRequests": "Onay bekleyen talep yok."
+    },
+    "session": {
+      "viewing": "İzleniyor",
+      "endSession": "Oturumu Sonlandır",
+      "terminateSession": "Oturumu Zorla Kapat",
+      "terminateReason": "Kapatma gerekçesi",
+      "sessionEnded": "Oturum sonlandırıldı.",
+      "connecting": "Bağlanıyor...",
+      "disconnected": "Bağlantı kesildi",
+      "liveIndicator": "CANLI",
+      "timeCap": "Kalan: {remaining}",
+      "endConfirm": "Bu canlı izleme oturumunu sonlandırmak istediğinizden emin misiniz?"
+    },
+    "states": {
+      "REQUESTED": "Talep Edildi",
+      "APPROVED": "Onaylandı",
+      "ACTIVE": "Aktif",
+      "ENDED": "Sonlandırıldı",
+      "DENIED": "Reddedildi",
+      "EXPIRED": "Süresi Doldu",
+      "FAILED": "Başarısız",
+      "TERMINATED_BY_HR": "İK Tarafından Kapatıldı",
+      "TERMINATED_BY_DPO": "VKG Tarafından Kapatıldı"
+    }
+  },
+
+  "dsr": {
+    "title": "Veri Talepleri (KVKK m.11)",
+    "subtitle": "Kişisel veri başvurularını yönetin",
+    "dashboard": {
+      "open": "Açık",
+      "atRisk": "Riskli",
+      "overdue": "Süre Aşımı",
+      "resolved": "Çözümlendi",
+      "rejected": "Reddedildi",
+      "medianResponse": "Medyan Yanıt Süresi (90 gün)",
+      "days": "{count} gün"
+    },
+    "types": {
+      "access": "Bilgi Talebi",
+      "rectify": "Düzeltme",
+      "erase": "Silme",
+      "object": "İtiraz",
+      "restrict": "Kısıtlama",
+      "portability": "Taşınabilirlik"
+    },
+    "states": {
+      "open": "Açık",
+      "at_risk": "Riskli (20+ gün)",
+      "overdue": "Süre Aşımı (30+ gün)",
+      "resolved": "Çözümlendi",
+      "rejected": "Reddedildi"
+    },
+    "backToList": "Talep Listesine Dön",
+    "detail": {
+      "title": "Talep Detayı",
+      "slaTitle": "SLA Durumu",
+      "infoTitle": "Talep Bilgileri",
+      "actionsTitle": "İşlemler",
+      "employee": "Çalışan",
+      "requestType": "Talep Türü",
+      "scope": "Kapsam",
+      "justification": "Gerekçe",
+      "submittedAt": "Başvuru Tarihi",
+      "deadline": "Son Tarih",
+      "slaDeadline": "SLA Son Tarihi",
+      "assignedTo": "Atanan Kişi",
+      "artifactRef": "Yanıt Belgesi Referansı",
+      "responseArtifact": "Yanıt Belgesi",
+      "daysRemaining": "{days} gün kaldı",
+      "daysOverdue": "{days} gün geçti (SLA İhlali)"
+    },
+    "actions": {
+      "assign": "Ata",
+      "respond": "Yanıtla",
+      "extend": "Süre Uzat",
+      "reject": "Reddet",
+      "erase": "Veriyi Sil",
+      "exportData": "Veriyi Dışa Aktar",
+      "noActions": "Bu durumdaki talepler için işlem yapılamaz: {state}",
+      "respondTitle": "Talebi Yanıtla",
+      "respondDesc": "Yanıt belgesinin referansını girerek talebi kapatın.",
+      "rejectTitle": "Talebi Reddet",
+      "rejectDesc": "Reddetme gerekçesini belirtin.",
+      "rejectReasonLabel": "Red Gerekçesi",
+      "rejectReasonPlaceholder": "Red gerekçesini giriniz",
+      "rejectSuccess": "Talep reddedildi.",
+      "rejecting": "Reddediliyor...",
+      "confirmReject": "Evet, Reddet",
+      "extendTitle": "SLA Süresini Uzat",
+      "extendDesc": "KVKK gereği uzatma gerekçesi girilmesi zorunludur.",
+      "extendJustLabel": "Uzatma Gerekçesi",
+      "extendJustPlaceholder": "Uzatma gerekçesini giriniz",
+      "extendSuccess": "SLA süresi uzatıldı.",
+      "extending": "Uzatılıyor...",
+      "confirmExtend": "Uzatmayı Onayla",
+      "cancel": "İptal"
+    },
+    "response": {
+      "successToast": "Yanıt kaydedildi. Talep kapatıldı.",
+      "artifactNote": "Yanıt artefaktı ham kişisel veri içermemelidir. Yalnızca MinIO nesne yolu veya şifreli belge referansı girilmelidir.",
+      "artifactLabel": "Yanıt Belgesi Referansı",
+      "artifactPlaceholder": "örn. dsr-responses/2024/uuid.pdf",
+      "artifactHint": "MinIO bucket/key yolu veya güvenli indirme referansı.",
+      "notesLabel": "Notlar (isteğe bağlı)",
+      "notesPlaceholder": "İşlemle ilgili notlar",
+      "submit": "Yanıtı Kaydet",
+      "submitting": "Kaydediliyor..."
+    },
+    "slaTimeline": {
+      "submitted": "Başvuru",
+      "atRisk": "Risk (Gün 20)",
+      "critical": "Kritik (Gün 28)",
+      "deadline": "Son Tarih (Gün 30)",
+      "daysElapsed": "{count} gün geçti",
+      "daysRemaining": "{count} gün kaldı",
+      "breach": "SLA ihlali! {count} gün geçti"
+    },
+    "extend": {
+      "title": "SLA Süresini Uzat",
+      "justification": "Uzatma gerekçesi (KVKK gereği zorunlu)",
+      "maxExtension": "Maksimum 30 gün uzatma yapılabilir.",
+      "confirm": "Uzatmayı Onayla"
+    },
+    "respond": {
+      "title": "Talebe Yanıt Ver",
+      "artifactRef": "Yanıt Belgesi Referansı",
+      "artifactRefHint": "MinIO nesne yolu veya belge referansı",
+      "notes": "Notlar",
+      "confirm": "Yanıtı Kaydet"
+    },
+    "new": {
+      "title": "Yeni Veri Talebi",
+      "subtitle": "KVKK m.11 kapsamında veri sahibi hakkı kullanımı",
+      "kvkkTitle": "KVKK m.11 Hakları",
+      "kvkkBody": "Veri sahipleri; bilgi edinme, düzeltme, silme, işlemeye itiraz, kısıtlama ve taşınabilirlik haklarını kullanabilir. Her talep 30 gün içinde yanıtlanır.",
+      "typeLabel": "Talep Türü",
+      "typePlaceholder": "Talep türü seçin",
+      "slaNote": "Talep gönderilince 30 günlük SLA süresi başlar.",
+      "submit": "Talep Gönder",
+      "submitting": "Gönderiliyor...",
+      "cancel": "İptal",
+      "successToast": "Veri talebi oluşturuldu.",
+      "adminInitiated": "Yönetici Başlatmalı",
+      "adminInitiatedHint": "Bu form nadiren kullanılır. Genellikle çalışanlar Şeffaflık Portalı üzerinden başvurur."
+    }
+  },
+
+  "legalHold": {
+    "title": "Hukuki Saklama",
+    "subtitle": "Yalnızca VKG tarafından kullanılabilir",
+    "newHold": "Yeni Saklama",
+    "dpoOnly": "Bu işlem yalnızca Veri Koruma Görevlisi (VKG) rolüne açıktır.",
+    "new": {
+      "title": "Yeni Hukuki Saklama"
+    },
+    "list": {
+      "active": "Aktif Saklama",
+      "released": "Kaldırılan Saklama",
+      "daysRemaining": "{count} gün kaldı",
+      "affectedRows": "Etkilenen Kayıt: ~{count}"
+    },
+    "place": {
+      "title": "Hukuki Saklama Koy",
+      "reasonCode": "Neden Kodu",
+      "ticketId": "Bilet / Dava Referansı",
+      "justification": "Gerekçe",
+      "scope": "Kapsam",
+      "endpoint": "Uç Nokta",
+      "user": "Kullanıcı",
+      "dateRange": "Tarih Aralığı",
+      "eventTypes": "Olay Türleri",
+      "maxDuration": "Maksimum Süre (gün)",
+      "maxDurationHint": "Maksimum 730 gün (2 yıl)",
+      "submit": "Saklamayı Başlat"
+    },
+    "release": {
+      "title": "Hukuki Saklamayı Kaldır",
+      "justification": "Kaldırma gerekçesi (zorunlu)",
+      "confirm": "Saklamayı Kaldır",
+      "warning": "Saklama kaldırıldıktan sonra kayıtların TTL'i yeniden hesaplanacak ve zamanı geçmiş olanlar silinecektir."
+    }
+  },
+
+  "destructionReports": {
+    "title": "İmha Raporları",
+    "subtitle": "6 aylık periyodik veri imha raporları (KVKK Yönetmelik gereği)",
+    "autoGenerated": "Raporlar her yıl 1 Ocak ve 1 Temmuz tarihlerinde otomatik oluşturulur.",
+    "generateManual": "Manuel Oluştur",
+    "list": {
+      "period": "Dönem",
+      "generatedAt": "Oluşturulma Tarihi",
+      "signatureStatus": "İmza Durumu",
+      "signatureValid": "Geçerli",
+      "signatureInvalid": "Geçersiz",
+      "download": "PDF İndir"
+    },
+    "detail": {
+      "title": "İmha Raporu Detayı",
+      "summary": "Özet",
+      "deletedRows": "Silinen Kayıt",
+      "legalHoldEvents": "Hukuki Saklama Olayları",
+      "dsrDeletions": "DSR Kaynaklı Silmeler",
+      "keyDestructions": "Anahtar İmhaları",
+      "outstandingHolds": "Devam Eden Saklama"
+    }
+  },
+
+  "audit": {
+    "title": "Denetim İzi",
+    "subtitle": "Hash-zincirli değiştirilemez denetim kaydı",
+    "totalRecords": "kayıt",
+    "page": "Sayfa",
+    "pageOf": "Sayfa {page}/{total}",
+    "prevPage": "Önceki",
+    "nextPage": "Sonraki",
+    "noRecords": "Denetim kaydı bulunamadı",
+    "noRecordsHint": "Filtreleri temizlemeyi veya tarih aralığını genişletmeyi deneyin.",
+    "errorLoadingRecords": "Kayıtlar yüklenemedi",
+    "retry": "Tekrar Dene",
+    "recordsLabel": "Denetim kayıtları",
+    "pagination": "Sayfalama",
+    "filterLabel": "Denetim filtresi",
+    "filterAction": "Eylem türü",
+    "filterActor": "Aktör UUID",
+    "filterFrom": "Başlangıç tarihi",
+    "filterTo": "Bitiş tarihi",
+    "clearFilters": "Filtreleri Temizle",
+    "refresh": "Yenile",
+    "verifyLink": "Zincir Doğrula",
+    "backToLog": "Kayıt Listesine Dön",
+    "verify": {
+      "title": "Zincir Doğrulama",
+      "subtitle": "Hash zinciri bütünlük kontrolü",
+      "algorithmTitle": "Algoritma Hakkında",
+      "algorithmBody": "Her kayıt önceki kaydın hash'ini içerir. Bu, herhangi bir kaydın sonradan değiştirilemeyeceğini kriptografik olarak garanti eder.",
+      "retentionNote": "KVKK m.7 ve ilgili mevzuat gereği kayıtlar 5 yıl süre ile saklanır.",
+      "status": {
+        "valid": "Zincir Geçerli",
+        "broken": "Zincir İhlali Tespit Edildi!",
+        "pending": "Doğrulanıyor..."
+      },
+      "lastVerified": "Son Doğrulama",
+      "chainHead": "Zincir Başı (Hash)",
+      "totalRecords": "Toplam Kayıt"
+    },
+    "chain": {
+      "verifying": "Zincir doğrulanıyor...",
+      "errorTitle": "Doğrulama Hatası",
+      "errorBody": "Zincir durumu alınamadı. Lütfen yeniden deneyin.",
+      "validCompact": "Zincir geçerli",
+      "records": "kayıt",
+      "brokenAt": "Kopma noktası: Seq",
+      "validTitle": "Hash Zinciri Geçerli",
+      "validBody": "Tüm kayıtlar kriptografik olarak doğrulandı. Herhangi bir değişiklik tespit edilmedi.",
+      "brokenTitle": "Zincir İhlali Tespit Edildi",
+      "brokenBody": "Hash zincirinde kopukluk bulundu. Bu, bir veya daha fazla kaydın değiştirilmiş olabileceğini gösterir.",
+      "totalRecords": "Toplam Kayıt",
+      "lastVerified": "Son Doğrulama",
+      "chainHead": "Zincir Başı",
+      "integrityLabel": "Bütünlük",
+      "integrityOK": "Geçerli",
+      "integrityFAIL": "İhlal"
+    },
+    "event": {
+      "action": "Eylem",
+      "actor": "Aktör",
+      "subject": "Hedef",
+      "timestamp": "Zaman",
+      "hash": "Hash",
+      "prevHash": "Önceki Hash"
+    },
+    "filters": {
+      "action": "Eylem Filtresi",
+      "actor": "Aktör",
+      "dateRange": "Tarih Aralığı",
+      "allActions": "Tüm Eylemler"
+    },
+    "actions": {
+      "adminLoginSuccess": "Yönetici Girişi (Başarılı)",
+      "adminLoginFailed": "Yönetici Girişi (Başarısız)",
+      "userCreated": "Kullanıcı Oluşturuldu",
+      "userRoleChanged": "Kullanıcı Rolü Değiştirildi",
+      "userDisabled": "Kullanıcı Devre Dışı Bırakıldı",
+      "policyCreated": "Politika Oluşturuldu",
+      "policyUpdated": "Politika Güncellendi",
+      "policyPushed": "Politika Gönderildi",
+      "endpointEnrolled": "Uç Nokta Kaydedildi",
+      "endpointRevoked": "Uç Nokta İptal Edildi",
+      "screenshotViewed": "Ekran Görüntüsü Görüntülendi",
+      "liveViewRequested": "Canlı İzleme Talep Edildi",
+      "liveViewApproved": "Canlı İzleme Onaylandı",
+      "liveViewDenied": "Canlı İzleme Reddedildi",
+      "liveViewStarted": "Canlı İzleme Başladı",
+      "liveViewStopped": "Canlı İzleme Durduruldu",
+      "dsrSubmitted": "DSR Başvurusu Yapıldı",
+      "dsrAssigned": "DSR Atandı",
+      "dsrResponded": "DSR Yanıtlandı",
+      "dsrErased": "DSR Silme Gerçekleştirildi",
+      "legalHoldPlaced": "Hukuki Saklama Başlatıldı",
+      "legalHoldReleased": "Hukuki Saklama Kaldırıldı",
+      "retentionDestructionReportGenerated": "İmha Raporu Oluşturuldu",
+      "agentSilenceAcknowledged": "Ajan Sessizliği Onaylandı"
+    }
+  },
+
+  "policies": {
+    "title": "Politikalar",
+    "subtitle": "Ajan izleme politikalarını yönetin",
+    "create": "Politika Oluştur",
+    "push": "Uç Noktalara Gönder",
+    "detail": {
+      "title": "Politika Detayı",
+      "name": "Ad",
+      "description": "Açıklama",
+      "version": "Versiyon",
+      "rules": "Kurallar",
+      "assignedEndpoints": "Atanmış Uç Noktalar"
+    },
+    "rules": {
+      "screenshot": "Ekran Görüntüsü",
+      "screenshotEnabled": "Etkin",
+      "screenshotInterval": "Aralık (saniye)",
+      "appBlockList": "Uygulama Engel Listesi",
+      "appAllowList": "İzin Verilen Uygulamalar",
+      "sensitivityGuard": "Hassasiyet Koruyucusu (KVKK m.6)"
+    },
+    "sensitivityGuard": {
+      "title": "Hassasiyet Koruyucusu",
+      "subtitle": "KVKK m.6 hassas veri işleme önlemleri",
+      "windowTitleRegex": "Pencere Başlığı Regex Desenleri",
+      "windowTitleRegexHint": "Hassas içerik işareti için pencere başlığı kalıpları (sağlık, sendika, ibadet vb.)",
+      "sensitiveHostGlobs": "Hassas URL/Host Desenleri",
+      "sensitiveHostGlobsHint": "Sağlık portalları gibi hassas sitelere erişim maskesi",
+      "excludeApps": "Hariç Tutulan Uygulamalar",
+      "excludeAppsHint": "Ekran görüntüsü alınmayacak uygulama adları",
+      "autoFlag": "m.6 DLP Eşleşmesinde Otomatik İşaretle",
+      "addPattern": "Desen Ekle",
+      "regexError": "Geçersiz regex deseni",
+      "regexValid": "Geçerli regex deseni"
+    },
+    "push": {
+      "title": "Politikayı Gönder",
+      "selectEndpoints": "Hedef Uç Noktaları Seçin",
+      "all": "Tüm Aktif Uç Noktalar",
+      "specific": "Belirli Uç Noktalar",
+      "confirm": "Gönder",
+      "success": "Politika gönderim kuyruğuna alındı.",
+      "pushDescription": "Bu politika seçilen uç noktalara NATS üzerinden imzalı olarak gönderilecektir."
+    }
+  },
+
+  "dlp": {
+    "title": "DLP Ayarları",
+    "subtitle": "Veri Kaybı Önleme hizmet durumu ve tören prosedürü",
+    "statusBadge": {
+      "active": "DLP: Aktif",
+      "inactive": "DLP: Kapalı"
+    },
+    "state": {
+      "title": "DLP Hizmet Durumu",
+      "disabled": {
+        "heading": "DLP Hizmeti Kapalı (Varsayılan)",
+        "body": "Bu, güvenli varsayılandır. Klavye içeriği şifrelenerek saklanmaktadır ancak hiçbir süreç şifre çözme anahtarını tutmamaktadır. Yani teknik olarak 'klavye körü' bir sistemdir.",
+        "legalClaim": "Bu yapılandırmada: 'Bu sistemdeki hiçbir süreç, hiçbir zaman klavye çözme anahtarını tutmamıştır.' — Vault denetim günlüklerinden kanıtlanabilir."
+      },
+      "active": {
+        "heading": "DLP Hizmeti Aktif",
+        "body": "Klavye içeriği, DLP motoru tarafından desen eşleştirmesi için işlenmektedir. Şeffaflık Portalı'nda tüm çalışanlara bildirim gösterilmektedir.",
+        "enabledAt": "Etkinleştirme Tarihi",
+        "enabledBy": "Etkinleştiren"
+      }
+    },
+    "ceremony": {
+      "title": "DLP Etkinleştirme Töreni",
+      "subtitle": "DLP hizmetini etkinleştirmek için aşağıdaki adımlar ZORUNLUDUR. Konsol bu süreci bypass edemez.",
+      "warning": "Bu konsol üzerinden DLP etkinleştirme düğmesi bulunmamaktadır. Bu tasarım gereğidir (ADR 0013).",
+      "steps": {
+        "1": {
+          "title": "1. DPIA Güncellemesi",
+          "body": "DPO, aktif DLP işlemeyi kapsayacak şekilde kurumun DPIA belgesini güncellemelidir. Hukuk müşaviri tarafından imzalanmalıdır."
+        },
+        "2": {
+          "title": "2. Yazılı Onay Formu",
+          "body": "VKG + BT Güvenlik Müdürü + Hukuk Müşaviri şablonu imzalamalıdır. Form: docs/compliance/dlp-opt-in-form.md"
+        },
+        "3": {
+          "title": "3. Operatör Betiği",
+          "body": "vault-admin rolüne sahip bir Personel operatörü aşağıdaki betiği çalıştırmalıdır:",
+          "command": "infra/scripts/dlp-enable.sh"
+        },
+        "4": {
+          "title": "4. Şeffaflık Bildirimi",
+          "body": "Betik başarıyla tamamlandıktan sonra Şeffaflık Portalı tüm çalışanlara DLP etkinleştirme bildirimi gösterecektir."
+        },
+        "5": {
+          "title": "5. Denetim Kontrol Noktası",
+          "body": "Etkinleştirme olayı hash-zincirli denetim günlüğüne yazılacak ve günlük imzalı kontrol noktasına dahil edilecektir."
+        }
+      },
+      "signoffTemplate": "İmza Formu Şablonunu Görüntüle",
+      "disableTitle": "DLP'yi Devre Dışı Bırakma",
+      "disableBody": "DLP'yi devre dışı bırakmak için: infra/scripts/dlp-disable.sh — Bu işlem Secret ID'yi iptal eder, hizmeti durdurur ve denetim kaydı oluşturur."
+    }
+  },
+
+  "settings": {
+    "title": "Ayarlar",
+    "tabs": {
+      "dlp": "DLP",
+      "tenants": "Kiracılar",
+      "users": "Kullanıcılar",
+      "integrations": "Entegrasyonlar",
+      "profile": "Profil"
+    },
+    "tenants": {
+      "title": "Kiracı Ayarları",
+      "liveViewHistoryRestricted": "Çalışanların Canlı İzleme Geçmişi Görünürlüğünü Kısıtla",
+      "liveViewHistoryRestrictedHint": "Kapatıldığında VKG yazılı gerekçe sağlamalı ve denetim kaydı oluşturulmalıdır.",
+      "maxScreenshotRetention": "Maksimum Ekran Görüntüsü Saklama Süresi (gün)"
+    },
+    "users": {
+      "title": "Kullanıcı Yönetimi",
+      "createUser": "Kullanıcı Ekle",
+      "username": "Kullanıcı Adı",
+      "email": "E-posta",
+      "role": "Rol",
+      "disabled": "Devre Dışı"
+    },
+    "integrations": {
+      "title": "Entegrasyonlar",
+      "keycloak": "Keycloak OIDC",
+      "livekit": "LiveKit SFU",
+      "vault": "HashiCorp Vault",
+      "status": "Bağlantı Durumu"
+    },
+    "profile": {
+      "title": "Profilim",
+      "subtitle": "Hesap bilgilerinizi görüntüleyin",
+      "username": "Kullanıcı Adı",
+      "email": "E-posta",
+      "role": "Rol",
+      "tenant": "Kiracı",
+      "userId": "Kullanıcı ID",
+      "keycloakNote": "Hesap bilgilerinizi değiştirmek için Keycloak portalına başvurunuz.",
+      "changePassword": "Parola Değiştir"
+    },
+    "newHold": "Yeni Saklama"
+  },
+
+  "silence": {
+    "title": "Sessizlik Yönetimi",
+    "subtitle": "Ajan sinyal boşluklarını izleyin ve onaylayın",
+    "description": "Uç noktaların beklenen sinyal aralığını aşan boşluklarını (Flow 7) görüntüleyin ve gerekçe kodlarıyla onaylayın.",
+    "gap": {
+      "started": "Boşluk Başlangıcı",
+      "ended": "Boşluk Bitişi",
+      "duration": "Süre",
+      "acknowledged": "Onaylandı",
+      "notAcknowledged": "Onaylanmadı",
+      "reason": "Gerekçe"
+    },
+    "acknowledge": {
+      "title": "Sessizlik Boşluğunu Onayla",
+      "reason": "Gerekçe kodu",
+      "reasonHint": "Örn: bakım, tatil, cihaz arızası",
+      "confirm": "Onayla"
+    }
+  },
+
+  "screenshots": {
+    "title": "Ekran Görüntüleri",
+    "restrictedRole": "Yalnızca Araştırmacı ve VKG rolleri erişebilir.",
+    "reasonCodeRequired": "Erişim için neden kodu girilmelidir.",
+    "reasonCode": "Neden Kodu",
+    "reasonCodeHint": "Soruşturma referansı veya dava numarası",
+    "viewImage": "Görüntüyü Yükle",
+    "auditNotice": "Her görüntü erişimi denetim kaydına yazılmaktadır.",
+    "capturedAt": "Alınma Zamanı",
+    "endpoint": "Uç Nokta",
+    "sessionId": "Oturum"
+  },
+
+  "unauthorized": {
+    "title": "Erişim Reddedildi",
+    "heading": "Erişim Reddedildi",
+    "body": "Bu sayfayı görüntülemek için gerekli role sahip değilsiniz. Sistem yöneticinize başvurun.",
+    "subtitle": "Bu sayfayı görüntülemek için yetkiniz yok.",
+    "requiredRole": "Gerekli Rol: {role}",
+    "yourRole": "Mevcut Rolünüz: {role}",
+    "contactAdmin": "Erişim için sistem yöneticinize başvurun.",
+    "backToDashboard": "Panele Dön",
+    "backHome": "Ana Sayfaya Dön"
+  },
+
+  "errors": {
+    "generic": "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.",
+    "network": "Sunucuya bağlanılamıyor. Ağ bağlantınızı kontrol edin.",
+    "unauthorized": "Bu işlemi gerçekleştirme yetkiniz yok.",
+    "forbidden": "Bu kaynağa erişim reddedildi.",
+    "notFound": "Aranan kaynak bulunamadı.",
+    "conflict": "Bu kaynak zaten mevcut veya çakışma var.",
+    "validation": "İstek doğrulanamadı. Lütfen girişlerinizi kontrol edin.",
+    "serverError": "Sunucu hatası. Lütfen sistem yöneticinize bildirin.",
+    "timeout": "İstek zaman aşımına uğradı. Lütfen tekrar deneyin.",
+    "auditFailed": "Denetim kaydı oluşturulamadı. İşlem iptal edildi.",
+    "sessionExpired": "Oturumunuz sona erdi.",
+    "liveKitError": "LiveKit bağlantısı kurulamadı.",
+    "boundary": {
+      "title": "Bir şeyler ters gitti",
+      "description": "Sayfa yüklenirken hata oluştu.",
+      "reset": "Sayfayı Yenile"
+    }
+  },
+
+  "notFound": {
+    "title": "Sayfa Bulunamadı",
+    "description": "Aradığınız sayfa mevcut değil veya taşınmış olabilir.",
+    "backHome": "Ana Sayfaya Dön"
+  }
+}

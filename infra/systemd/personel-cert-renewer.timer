@@ -1,0 +1,17 @@
+# =============================================================================
+# Personel Platform — Short-Lived Cert Renewal Timer
+# Runs every 6 hours to check and renew Vault-issued server certs.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Certificate Renewal Timer
+PartOf=personel.target
+
+[Timer]
+OnCalendar=*-*-* 00,06,12,18:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=personel-cert-renewer.service
+
+[Install]
+WantedBy=personel.target

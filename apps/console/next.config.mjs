@@ -1,0 +1,71 @@
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin("./src/lib/i18n/config.ts");
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: "standalone",
+
+  experimental: {
+    // Reality check 2026-04-11: typedRoutes disabled (rejects template-literal
+    // URLs in router.replace). instrumentationHook deprecated (Next 15 has
+    // instrumentation.js by default). Tech debt: revisit typed route helpers.
+    typedRoutes: false,
+  },
+
+  images: {
+    formats: ["image/avif", "image/webp"],
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: process.env.MINIO_HOSTNAME ?? "minio.personel.local",
+        pathname: "/**",
+      },
+    ],
+    minimumCacheTTL: 60,
+  },
+
+  headers: async () => [
+    {
+      source: "/(.*)",
+      headers: [
+        { key: "X-Frame-Options", value: "DENY" },
+        { key: "X-Content-Type-Options", value: "nosniff" },
+        { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        {
+          key: "Permissions-Policy",
+          value: "camera=(), microphone=(), geolocation=()",
+        },
+        {
+          key: "Content-Security-Policy",
+          value: [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+            "style-src 'self' 'unsafe-inline'",
+            `connect-src 'self' ${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""} ${process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? ""} ${process.env.NEXT_PUBLIC_LIVEKIT_URL ?? ""}`,
+            "img-src 'self' data: blob: https:",
+            "frame-ancestors 'none'",
+          ]
+            .filter(Boolean)
+            .join("; "),
+        },
+      ],
+    },
+  ],
+
+  logging: {
+    fetches: {
+      fullUrl: process.env.NODE_ENV === "development",
+    },
+  },
+
+  eslint: {
+    ignoreDuringBuilds: false,
+  },
+
+  typescript: {
+    ignoreBuildErrors: false,
+  },
+};
+
+export default withNextIntl(nextConfig);

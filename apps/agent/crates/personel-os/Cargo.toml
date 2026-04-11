@@ -1,0 +1,22 @@
+[package]
+name    = "personel-os"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+# personel-os is the ONLY crate in the workspace that may use unsafe code.
+# All Win32 FFI is wrapped here into safe APIs exported to the rest of the
+# workspace.
+
+[dependencies]
+personel-core = { path = "../personel-core" }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+# tokio + zeroize used by both Windows and stub modules for cross-platform
+# type parity (stub module has to provide compile-time-matching signatures).
+tokio         = { workspace = true }
+zeroize       = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows         = { workspace = true }
+windows-service = { workspace = true }

@@ -1,0 +1,462 @@
+{
+  "nav": {
+    "home": "Ana Sayfa",
+    "aydinlatma": "Aydınlatma Metni",
+    "verilerim": "Verilerim",
+    "nelerIzlenmiyor": "Neler İzlenmiyor?",
+    "canliIzleme": "Canlı İzleme",
+    "oturumGecmisi": "Oturum Geçmişim",
+    "haklar": "KVKK Haklarım",
+    "yeniBasvuru": "Yeni Başvuru",
+    "basvurularim": "Başvurularım",
+    "dlpDurumu": "Klavye Gizliliği",
+    "iletisim": "İletişim",
+    "profil": "Profilim",
+    "cikis": "Çıkış Yap"
+  },
+  "common": {
+    "loading": "Yükleniyor...",
+    "error": "Bir sorun oluştu",
+    "errorDetail": "Bu bilgilere şu an ulaşılamıyor. Lütfen daha sonra tekrar deneyin veya BT destek birimiyle iletişime geçin.",
+    "retry": "Tekrar Dene",
+    "back": "Geri",
+    "close": "Kapat",
+    "save": "Kaydet",
+    "submit": "Gönder",
+    "cancel": "Vazgeç",
+    "learnMore": "Daha fazla bilgi",
+    "lastUpdated": "Son güncelleme",
+    "days": "gün",
+    "years": "yıl",
+    "contactDpo": "KVK İrtibat Kişisine ulaşın",
+    "kvkk": "KVKK",
+    "legalBasis": "Hukuki dayanak"
+  },
+  "home": {
+    "welcome": "Hoşgeldiniz",
+    "subtitle": "Bu portal, şirketinizin iş bilgisayarınızda hangi verileri topladığını, bu verilerin neden toplandığını ve KVKK kapsamındaki haklarınızı açıklamak için tasarlanmıştır.",
+    "summaryTitle": "Veri Özetiniz",
+    "quickLinks": "Sık Kullanılanlar",
+    "viewMyData": "Verilerimi Gör",
+    "viewMyDataDesc": "Hangi kategorilerde veri toplandığını ve saklama sürelerini görün.",
+    "myRights": "Haklarım",
+    "myRightsDesc": "Erişim, düzeltme, silme ve itiraz haklarınızı kullanın.",
+    "myApplications": "Başvurularım",
+    "myApplicationsDesc": "Açık KVKK başvurularınızın durumunu takip edin.",
+    "openDsrCount": "{count} açık başvuru",
+    "noDsr": "Açık başvurunuz yok",
+    "dlpStatusLabel": "Klavye gizlilik durumu",
+    "portalPurpose": "Bu portal ne için?",
+    "portalPurposeText": "6698 sayılı Kişisel Verilerin Korunması Kanunu (KVKK) m.10, veri sorumlusunun sizi bilgilendirmesini zorunlu kılmaktadır. m.11 ise size bu veriler üzerinde çeşitli haklar tanımaktadır. Bu portal, her iki yükümlülüğü yerine getirmek için tasarlanmıştır.",
+    "yourDataIsYours": "Verileriniz size aittir",
+    "yourDataIsYoursText": "Bu portaldaki her sayfa, sizin hakkınızda tutulan bilgileri size gösterir. Hiçbir yönetici veya sistem sizi kendi şeffaflık sayfanızda göremez."
+  },
+  "aydinlatma": {
+    "title": "Aydınlatma Metni",
+    "subtitle": "6698 sayılı KVKK m.10 kapsamında çalışan bilgilendirme metni",
+    "plainSidebarTitle": "Sade Türkçe Açıklama",
+    "plainSidebarHint": "Bu bölümdeki açıklamalar, hukuki metnin yanındaki her maddeyi sade bir dille açıklamaktadır.",
+    "dataController": "Veri Sorumlusu",
+    "dataControllerPlain": "Verilerinizi toplayan ve saklayan kuruluş şirketinizdir. Personel yazılım firması değildir — yazılım firmasi verilerinizi görmez.",
+    "dataCategories": "İşlenen Kişisel Veri Kategorileri",
+    "dataCategoriesPlain": "İş bilgisayarınızda çalışan Personel ajanı, aşağıda listelenen kategorilerde veri toplar. Her kategori için saklama süresi ve hukuki dayanağı belirtilmiştir.",
+    "purposes": "Kişisel Verilerin İşlenme Amaçları",
+    "purposesPlain": "Verileriniz; BT güvenliği, şirket varlıklarının korunması ve iş sözleşmesinin denetimi için kullanılır. Otomatik performans değerlendirmesi veya profil oluşturma amacıyla kullanılmaz.",
+    "legalBasis": "Hukuki Dayanak",
+    "legalBasisPlain": "Veri işlemenin hukuki dayanağı 'meşru menfaat' (m.5/2-f) ve 'sözleşmenin ifası' (m.5/2-c) maddeleridir. Bu, 'rızanıza gerek kalmadan' işlendiği anlamına gelir — çünkü iş yerinde güvenlik için bu veriler toplanması zorunludur.",
+    "dataTransfer": "Kişisel Verilerin Aktarımı",
+    "dataTransferPlain": "Verileriniz yurt içinde veya yurt dışında üçüncü kişilere aktarılmamaktadır. Tüm veriler şirketinizin kendi sunucularında kalır.",
+    "retentionPeriods": "Saklama Süreleri",
+    "retentionPeriodsPlain": "Her veri türünün saklanma süresi sınırlıdır. Süre dolduğunda veriler otomatik olarak silinir.",
+    "liveView": "Canlı Ekran İzleme",
+    "liveViewPlain": "Canlı ekran izleme özelliği mevcuttur, ancak kullanılabilmesi için bir yöneticinin talebi ve ayrı bir İnsan Kaynakları yetkilisinin onayı gerekir. Her oturum kayıt altına alınır ve bu portalde görebilirsiniz.",
+    "keystrokePrivacy": "Klavye İçeriğinin Kriptografik Olarak Korunması",
+    "keystrokePrivacyPlain": "Klavye tuş vuruşlarınız kaydedilmektedir, ancak hiçbir yönetici bu içeriği okuyamaz. İçerik yalnızca izole bir bilgisayar programı tarafından, belirli kurallara uyan hassas veri var mı diye otomatik olarak taranır. Ham içerik hiçbir insana gösterilmez.",
+    "yourRights": "KVKK m.11 Kapsamındaki Haklarınız",
+    "yourRightsPlain": "Bu portaldan her zaman başvuru yapabilirsiniz. Başvurularınıza 30 gün içinde yanıt verilmek zorundadır.",
+    "acknowledgement": "Bilgi Teyidi",
+    "acknowledgementPlain": "Bu metnin varlığı, kurulum anında sizi bilgilendirmek için tasarlanmıştır. Bu portalde her zaman güncel metne erişebilirsiniz.",
+    "downloadPdf": "PDF olarak indir",
+    "lastVersion": "Versiyon 1.0 — Nisan 2026"
+  },
+  "verilerim": {
+    "title": "Verilerim",
+    "subtitle": "İş bilgisayarınızda toplanan veri kategorileri ve saklama süreleri",
+    "summaryThisMonth": "Bu ay toplanan veri özeti",
+    "categoriesTitle": "Veri Kategorileri",
+    "categoriesSubtitle": "Her kategori için toplama amacı ve saklama süresi aşağıda belirtilmiştir.",
+    "retentionNote": "Saklama süresi dolduğunda veri otomatik olarak ve kalıcı olarak silinir.",
+    "requestThisData": "Bu veriyi talep et",
+    "requestDataDeletion": "Silme talebi aç (KVKK m.11)",
+    "collectedSince": "Toplanmaya başlandığı tarih",
+    "noDataYet": "Bu kategoride henüz veri toplanmamış.",
+    "categories": {
+      "identity": {
+        "name": "Kimlik ve Oturum Verileri",
+        "description": "Kullanıcı adınız, Windows oturum kimliğiniz ve cihaz kimliğiniz. Bilgisayarınıza giriş-çıkış zamanlarınız."
+      },
+      "process": {
+        "name": "Uygulama ve Süreç Kullanımı",
+        "description": "Çalıştırdığınız uygulamalar, ön planda açık olan pencereler ve başlıkları, kullanım süreleri."
+      },
+      "screenshot": {
+        "name": "Ekran Görüntüleri",
+        "description": "Belirli aralıklarla ve özel olaylarda alınan ekran görüntüleri. Hassas uygulamalar ekran görüntüsü kapsamı dışındadır."
+      },
+      "file": {
+        "name": "Dosya Sistemi Olayları",
+        "description": "İş bilgisayarınızdaki dosya oluşturma, okuma, yazma, silme ve kopyalama olayları. Dosya adı ve boyutu kaydedilir; içerik kaydedilmez."
+      },
+      "clipboard": {
+        "name": "Pano (Clipboard) Verileri",
+        "description": "Pano kullanım meta verisi kaydedilir. İçerik yalnızca şifrelenmiş biçimde saklanır ve yalnızca otomatik DLP sistemi tarafından okunabilir."
+      },
+      "keystroke": {
+        "name": "Klavye Verileri",
+        "description": "Tuş vuruş sayısı gibi istatistiksel veriler kaydedilir. Klavye içeriği şifrelenmiş biçimde saklanır; hiçbir yönetici bu içeriği okuyamaz."
+      },
+      "print": {
+        "name": "Yazıcı İşleri",
+        "description": "Yazıcıya gönderilen iş meta verisi: belge adı, sayfa sayısı, yazıcı kimliği. Belge içeriği kaydedilmez."
+      },
+      "usb": {
+        "name": "USB ve Harici Aygıtlar",
+        "description": "USB takma ve çıkarma olayları, aygıt kimliği. BT güvenliği kapsamında takip edilir."
+      },
+      "network": {
+        "name": "Ağ Etkinliği",
+        "description": "Ağ akış özetleri, DNS sorguları ve bağlanılan alan adları (SNI). Web sayfası içerikleri kaydedilmez."
+      },
+      "liveView": {
+        "name": "Canlı İzleme Denetim Kayıtları",
+        "description": "Canlı izleme oturumları: kim talep etti (rol olarak), kim onayladı (rol olarak), gerekçe kategorisi, süre. Bu kayıtlar 5 yıl saklanır ve değiştirilemez."
+      },
+      "policy": {
+        "name": "Politika ve Denetim Verileri",
+        "description": "Engellenen uygulama veya URL olayları, ajan sağlık kayıtları."
+      }
+    }
+  },
+  "nelerIzlenmiyor": {
+    "title": "Neler İzlenmiyor?",
+    "subtitle": "Şeffaflık yalnızca nelerin izlendiğini söylemekle olmaz — nelerin izlenmediğini de açıkça belirtmek gerekir.",
+    "intro": "Bu sayfada, Personel platformunun kesinlikle kayıt altına almadığı, görmediği veya erişemediği konuları bulacaksınız. Bu liste, gerçekçi sınırları anlatmak için hazırlanmıştır.",
+    "items": {
+      "personalPhone": {
+        "title": "Telefonunuzdaki uygulamalar ve etkinlikler",
+        "description": "Personel, kişisel telefonunuzdaki hiçbir uygulamayı, mesajı, fotoğrafı veya konumu takip etmez. Şirket telefonu kullansanız bile, cihazın telefon işlevi bu sistemin kapsamı dışındadır."
+      },
+      "homeComputer": {
+        "title": "Ev bilgisayarınız",
+        "description": "Personel ajanı yalnızca şirketin size tahsis ettiği iş bilgisayarına kurulur. Ev bilgisayarınız, kişisel laptopunuz veya tabletiniz bu sistemin hiçbir bileşeniyle bağlantılı değildir."
+      },
+      "personalBrowserSessions": {
+        "title": "İş bilgisayarınızdaki kişisel tarayıcı oturumları",
+        "description": "İş bilgisayarınızda iş hesabınıza bağlı olmayan kişisel bir tarayıcı profili (örneğin kişisel Google hesabınıza bağlı Chrome profili) kullanıyorsanız, bu oturumdaki web gezintileriniz Personel tarafından içerik düzeyinde kayıt altına alınmaz. Pencere başlığı görünür olabilir; içerik okunmaz."
+      },
+      "breakTimes": {
+        "title": "Mola süreleriniz ve kısa dikkat dağılmaları",
+        "description": "Personel, boşta kalma sürelerini teknik olarak kaydeder; ancak bu veriler performans değerlendirmesine girmiyor. Kaç dakika mola verdiğiniz, ne zaman tuvalete gittiğiniz veya kısa anlık dağılmalarınız bireysel performans skoru oluşturmak için kullanılmamaktadır."
+      },
+      "personalAccounts": {
+        "title": "Kişisel e-posta ve sosyal medya içerikleri",
+        "description": "Gmail, Hotmail, sosyal medya hesaplarındaki mesajların ve içeriklerin ham metni kaydedilmez. Ağ akış meta verisi (hangi sunucuya bağlandınız) kayıt altına alınabilir; ancak bu iletişimlerin içeriği okunamaz."
+      },
+      "outsideWorkHours": {
+        "title": "İş saatleri dışındaki etkinlikler (kişisel cihazda)",
+        "description": "İş bilgisayarını mesai dışında kapatırsanız ajan toplamayı durdurur. Kişisel cihazlarınızdaki mesai dışı etkinlikleriniz bu sistemin kapsamı dışındadır."
+      },
+      "keyboardContentDefault": {
+        "title": "Klavye içeriğinizin okunması (varsayılan durum)",
+        "description": "Klavye tuş vuruşlarınız kaydedilmektedir — ancak bu içerik şifrelenmiş biçimde saklanır ve hiçbir yönetici, BT çalışanı veya İK personeli bu içeriği okuyamaz. DLP özelliği varsayılan olarak kapalıdır; etkinleştirilse bile yalnızca izole bir otomatik sistem belirli desenlere bakar, ham içerik hiçbir kişiye gösterilmez."
+      },
+      "privateHealthInfo": {
+        "title": "Özel nitelikli kişisel verileriniz (sağlık, din, sendika)",
+        "description": "Sistem, özel nitelikli kişisel verilerinizi toplama amacı gütmemektedir. Sağlık uygulamaları ve belirli hassas siteler ekran görüntüsü dışında tutulur. Bu tür verilerin kazara kaydedilmesi durumunda, en kısa saklama süresine tabi tutulur ve bu veriler için yükseltilmiş erişim kontrolü uygulanır."
+      },
+      "performanceScore": {
+        "title": "Otomatik performans skoru veya kıyaslama",
+        "description": "Bu sistem, sizi meslektaşlarınızla kıyaslamaz. Bireysel performans skoru üretmez. Toplanan veriler, insan kaynakları değerlendirme süreçlerinde otomatik bir karar mekanizmasının girdisi olarak kullanılmamaktadır."
+      },
+      "biometrics": {
+        "title": "Biyometrik veriler",
+        "description": "Yüz tanıma, parmak izi, ses kaydı veya herhangi bir biyometrik veri bu sistem tarafından toplanmamaktadır."
+      }
+    },
+    "footer": "Bu liste, platformun teknik mimarisine ve KVKK uyum belgelerine dayanmaktadır. Şüphe duyduğunuz bir konuda KVK İrtibat Kişisine başvurabilirsiniz."
+  },
+  "canliIzleme": {
+    "title": "Canlı Ekran İzleme",
+    "subtitle": "Bu özellik nedir, nasıl çalışır ve haklarınız nelerdir?",
+    "whatIsIt": "Canlı izleme nedir?",
+    "whatIsItText": "Personel platformu, belirli soruşturma gerekçeleriyle yetkili bir yöneticinin sizin ekranınızı gerçek zamanlı olarak izlemesine olanak tanır. Bu, sıradan bir izleme rutini değildir; yalnızca özel bir soruşturma sürecinde, katı koşullar altında kullanılabilir.",
+    "howApproval": "İzleme nasıl başlatılır?",
+    "howApprovalText": "Canlı izleme başlatılabilmesi için iki ayrı kişinin onayı şarttır:",
+    "step1": "Bir yönetici, belgelenmiş bir gerekçeyle (olay kimliği veya soruşturma kimliği) talepte bulunur.",
+    "step2": "Ayrı bir İnsan Kaynakları yetkilisi bu talebi onaylar. Talep eden kişi onay veremez.",
+    "step3": "Sistem bu iki onay gerçekleşmeden teknik olarak başlatılamaz — bu bir politika kuralı değil, kriptografik bir güvencedir.",
+    "guarantees": "Güvenceler",
+    "guarantee1": "Her oturum en fazla 15 dakika sürebilir. Uzatma için yeni onay gerekir.",
+    "guarantee2": "DPO veya İK yetkilisi her an oturumu sonlandırabilir.",
+    "guarantee3": "Her oturum, değiştirilemez bir denetim kaydına yazılır. Bu kayıtlar 5 yıl saklanır.",
+    "guarantee4": "Oturum sırasında ekranınızda herhangi bir gösterge bulunmaz. Bu özelliğin varlığından bu metin aracılığıyla önceden bilgilendirilmektesiniz.",
+    "yourRightsDuring": "İzleme sırasındaki haklarınız",
+    "yourRightsDuringText": "İzleme sırasında ekranınızda bir gösterge bulunmasa da, bu portal üzerinden geçmiş izleme oturumlarınızı her zaman görebilirsiniz. KVKK m.11 kapsamında itiraz hakkınız saklıdır.",
+    "viewHistory": "Oturum geçmişimi gör",
+    "visibility": "Görünürlük politikası",
+    "visibilityText": "Oturum geçmişi varsayılan olarak size açıktır. Yalnızca şirketinizin Veri Koruma Görevlisi (DPO), yazılı gerekçe ve denetim kaydı oluşturarak bu görünürlüğü kısıtlayabilir. Böyle bir değişiklik olursa size portal üzerinden bildirim gönderilir."
+  },
+  "oturumGecmisi": {
+    "title": "Canlı İzleme Oturum Geçmişim",
+    "subtitle": "Aşağıdaki liste, sizin ekranınızın izlendiği geçmiş oturumları göstermektedir.",
+    "noSessions": "Kayıtlı canlı izleme oturumunuz bulunmuyor.",
+    "noSessionsDetail": "Burası boşsa, ekranınız şimdiye kadar canlı izlemeye konu olmamış demektir.",
+    "restricted": "Bu bilgiye şu an erişilemiyor",
+    "restrictedDetail": "Şirketinizin Veri Koruma Görevlisi bu görünürlüğü geçici olarak kısıtlamıştır. Bu bir kısıtlama varsa size ayrıca bildirim yapılmış olmalıdır. Daha fazla bilgi için KVK İrtibat Kişisine başvurabilirsiniz.",
+    "sessionId": "Oturum Kimliği",
+    "date": "Tarih",
+    "duration": "Süre",
+    "requesterRole": "Talep Eden Rol",
+    "approverRole": "Onaylayan Rol",
+    "reasonCategory": "Gerekçe Kategorisi",
+    "state": "Durum",
+    "seconds": "{n} saniye",
+    "roles": {
+      "yonetici": "Yönetici",
+      "mudur": "Müdür",
+      "ik": "İnsan Kaynakları"
+    },
+    "reasonCategories": {
+      "performans_degerlendirme": "Performans değerlendirme",
+      "guvenlik_incelemesi": "Güvenlik incelemesi",
+      "is_sureci_denetimi": "İş süreci denetimi",
+      "diger": "Diğer"
+    },
+    "states": {
+      "ENDED": "Tamamlandı",
+      "TERMINATED_BY_HR": "İK tarafından sonlandırıldı",
+      "TERMINATED_BY_DPO": "DPO tarafından sonlandırıldı",
+      "EXPIRED": "Süre doldu"
+    },
+    "privacyNote": "Not: Talep eden ve onaylayan kişilerin kimlikleri (adı, soyadı, kullanıcı adı) gösterilmez — yalnızca rolleri gösterilir. Bu, KVKK şeffaflık ilkesi ile kişisel veri minimizasyonu arasındaki dengedir."
+  },
+  "haklar": {
+    "title": "KVKK m.11 Haklarınız",
+    "subtitle": "6698 sayılı Kişisel Verilerin Korunması Kanunu size aşağıdaki hakları tanımaktadır.",
+    "intro": "Bu haklardan herhangi birini kullanmak için 'Bu hakkı kullan' butonuna tıklayın. Başvurunuz otomatik olarak şirketinizin Veri Koruma Görevlisine (DPO) iletilir ve 30 gün içinde yanıtlanır.",
+    "useThisRight": "Bu hakkı kullan",
+    "rights": {
+      "access": {
+        "title": "Bilgi Talep Etme Hakkı",
+        "legalRef": "m.11/1-a, m.11/1-b",
+        "description": "Hakkınızda kişisel veri işlenip işlenmediğini öğrenme ve işlenmişse bu konuda bilgi talep etme hakkınız vardır.",
+        "plain": "Şirketinizin sizin hakkınızda ne bildiğini öğrenmek istiyorsanız bu hakkı kullanın. Hangi kategorilerde veri tutulduğunu, kim tarafından işlendiğini ve nerede saklandığını sorabilirsiniz."
+      },
+      "purpose": {
+        "title": "İşlenme Amacını Öğrenme Hakkı",
+        "legalRef": "m.11/1-c",
+        "description": "Kişisel verilerinizin hangi amaçla işlendiğini ve amacına uygun kullanılıp kullanılmadığını öğrenme hakkınız vardır.",
+        "plain": "Toplanan verilerin gerçekten sadece söylenen amaçlar için kullanılıp kullanılmadığını sorabilirsiniz."
+      },
+      "transfer": {
+        "title": "Aktarım Bilgisi Alma Hakkı",
+        "legalRef": "m.11/1-ç",
+        "description": "Kişisel verilerinizin yurt içinde veya yurt dışında aktarıldığı üçüncü kişileri öğrenme hakkınız vardır.",
+        "plain": "Verilerinizin başka kurum veya kişilerle paylaşılıp paylaşılmadığını sorabilirsiniz. (On-prem kurulumda veriler aktarılmamaktadır.)"
+      },
+      "rectify": {
+        "title": "Düzeltme Hakkı",
+        "legalRef": "m.11/1-d",
+        "description": "Eksik veya yanlış işlenmiş kişisel verilerinizin düzeltilmesini talep etme hakkınız vardır.",
+        "plain": "Hakkınızda yanlış bir bilgi tutulduğunu düşünüyorsanız düzeltilmesini isteyebilirsiniz."
+      },
+      "erase": {
+        "title": "Silme veya Yok Etme Hakkı",
+        "legalRef": "m.11/1-e",
+        "description": "KVKK m.7'deki şartlar çerçevesinde kişisel verilerinizin silinmesini veya yok edilmesini talep etme hakkınız vardır.",
+        "plain": "Verilerinizin silinmesini talep edebilirsiniz. DPO, meşru menfaat dengesi ile yasal saklama yükümlülüklerini değerlendirerek yanıt verir."
+      },
+      "notify": {
+        "title": "Üçüncü Kişilere Bildirim Hakkı",
+        "legalRef": "m.11/1-f",
+        "description": "Düzeltme veya silme işlemlerinin, verilerinizin aktarıldığı üçüncü kişilere bildirilmesini talep etme hakkınız vardır.",
+        "plain": "Verileriniz başkalarıyla paylaşıldıysa ve düzeltme/silme yapıldıysa, bu değişikliğin ilgili taraflara bildirilmesini isteyebilirsiniz."
+      },
+      "object": {
+        "title": "Otomatik Karara İtiraz Hakkı",
+        "legalRef": "m.11/1-g",
+        "description": "Kişisel verilerinizin münhasıran otomatik sistemler tarafından analiz edilmesi suretiyle aleyhinize bir sonuç ortaya çıkmasına itiraz etme hakkınız vardır.",
+        "plain": "Sistem hakkınızda otomatik bir karar verdiyse ve bundan olumsuz etkilendiyseniz itiraz edebilirsiniz."
+      },
+      "compensation": {
+        "title": "Tazminat Talep Hakkı",
+        "legalRef": "m.11/1-ğ",
+        "description": "KVKK'ya aykırı veri işleme nedeniyle zarara uğramanız hâlinde tazminat talep etme hakkınız vardır.",
+        "plain": "Verilerinizin hukuka aykırı işlenmesi nedeniyle bir zarar gördüyseniz tazminat talep edebilirsiniz."
+      }
+    },
+    "responseTime": "30 gün içinde yanıt alırsınız",
+    "kvkkBoard": "Başvurunuz sonucundan memnun değilseniz, Kişisel Verileri Koruma Kurulu'na (kvkk.gov.tr) şikayette bulunabilirsiniz."
+  },
+  "yeniBasvuru": {
+    "title": "Yeni KVKK Başvurusu",
+    "subtitle": "Aşağıdaki formu doldurun. Başvurunuz otomatik olarak şirketinizin Veri Koruma Görevlisine (DPO) iletilir.",
+    "requestType": "Başvuru Türü",
+    "requestTypePlaceholder": "Başvuru türünü seçin",
+    "scope": "Kapsam (opsiyonel)",
+    "scopePlaceholder": "Örneğin: Son 3 aydaki ekran görüntüleri, veya belirli bir tarih aralığı",
+    "justification": "Açıklama (opsiyonel)",
+    "justificationPlaceholder": "Başvurunuzu destekleyen ek bilgi ekleyebilirsiniz",
+    "submitButton": "Başvuruyu Gönder",
+    "successTitle": "Başvurunuz alındı",
+    "successText": "Başvurunuz {id} numarasıyla kaydedildi. 30 gün içinde yanıt alacaksınız. Durumunu 'Başvurularım' sayfasından takip edebilirsiniz.",
+    "goToMyApplications": "Başvurularıma git",
+    "slaNote": "KVKK m.13 uyarınca başvurunuza en geç 30 gün içinde yanıt verilir.",
+    "types": {
+      "access": "Erişim — Hakkımdaki verileri görmek istiyorum",
+      "rectify": "Düzeltme — Yanlış bir veri var, düzeltilmesini istiyorum",
+      "erase": "Silme — Verilerimin silinmesini istiyorum",
+      "object": "İtiraz — Otomatik bir karara itiraz ediyorum",
+      "restrict": "Kısıtlama — Veri işlemenin kısıtlanmasını istiyorum",
+      "portability": "Taşınabilirlik — Verilerimin kopyasını istiyorum"
+    },
+    "validation": {
+      "requestTypeRequired": "Lütfen bir başvuru türü seçin"
+    }
+  },
+  "basvurularim": {
+    "title": "Başvurularım",
+    "subtitle": "KVKK m.11 kapsamında açtığınız başvuruların listesi",
+    "noApplications": "Henüz başvurunuz yok",
+    "noApplicationsDetail": "KVKK haklarınızı kullanmak için 'Yeni Başvuru' sayfasını ziyaret edin.",
+    "newApplication": "Yeni Başvuru Aç",
+    "ticketId": "Başvuru No",
+    "type": "Tür",
+    "status": "Durum",
+    "created": "Oluşturulma",
+    "slaDeadline": "SLA Tarihi",
+    "daysRemaining": "{n} gün kaldı",
+    "overdue": "Süre geçti",
+    "viewDetail": "Detayları gör",
+    "states": {
+      "open": "Açık",
+      "at_risk": "Risk altında",
+      "overdue": "Süresi geçti",
+      "closed": "Kapatıldı",
+      "rejected": "Reddedildi"
+    },
+    "slaTimeline": {
+      "title": "SLA Süreci",
+      "submitted": "Başvuru alındı",
+      "atRisk": "Risk eşiği (20. gün)",
+      "deadline": "Yasal süre sonu (30. gün)",
+      "closed": "Kapatıldı"
+    }
+  },
+  "basvuruDetay": {
+    "title": "Başvuru Detayı",
+    "requestType": "Başvuru Türü",
+    "scope": "Kapsam",
+    "justification": "Açıklama",
+    "response": "DPO Yanıtı",
+    "noResponse": "Henüz yanıt bekleniyor.",
+    "timeline": "Süreç Zaman Çizelgesi",
+    "downloadResponse": "Yanıtı indir (PDF)"
+  },
+  "dlpDurumu": {
+    "title": "Klavye Gizlilik Durumu",
+    "subtitle": "Klavye tuş vuruşlarınız nasıl korunuyor?",
+    "stateLabel": "Mevcut durum",
+    "stateOff": "Kapalı — DLP Servisi Aktif Değil",
+    "stateOn": "Aktif — DLP Servisi Çalışıyor",
+    "offTitle": "Klavye içeriğiniz kaydediliyor, ancak okunmuyor",
+    "offExplanation": "Klavye tuş vuruşlarınız iş bilgisayarınızda şifrelenmiş biçimde saklanmaktadır. Şu an için bu şifreli içeriği çözecek herhangi bir sistem ya da kişi yoktur. Cümleyi daha sade ifade etmek gerekirse: veri bir kasada, anahtarı kullanılmıyor.",
+    "offTechnical": "Teknik güvence: Şifre çözme anahtarına erişebilen servis (DLP) varsayılan olarak çalışmamaktadır. Bu bir ayar değil; sistemin temel mimarisidir.",
+    "offActivation": "Bu durum nasıl değişebilir?",
+    "offActivationText": "Şirketinizin DLP özelliğini etkinleştirmesi için şu adımlar gereklidir: (1) Veri Koruma Etki Değerlendirmesi (DPIA) güncellenmesi, (2) DPO + BT Güvenlik Direktörü + Hukuk Müşaviri imzalı onay, (3) teknik aktivasyon. Bu süreç kaydedilir ve denetlenebilir.",
+    "onTitle": "DLP aktif: klavye içeriğiniz otomatik olarak taranıyor",
+    "onExplanation": "Şirketiniz DLP özelliğini resmi onay süreciyle etkinleştirmiştir. Bu tarihten itibaren klavye tuş vuruşlarınız şifrelenmiş biçimde depolandıktan sonra izole bir otomatik sistem tarafından belirli desenlere (örneğin kredi kartı numarası, TCKN gibi hassas veri desenleri) karşı taranmaktadır.",
+    "onActivatedOn": "Aktivasyon tarihi",
+    "onCeremonyRef": "Onay referansı",
+    "onHamIcerik": "Ham klavye içeriğiniz hiçbir yönetici, BT çalışanı veya İK personeli tarafından okunmamaktadır. Yalnızca eşleşme bulunursa bir uyarı meta verisi üretilir; bu meta veri ham içerik içermez.",
+    "whatIsEncrypted": "Hangi veri şifreli?",
+    "whatIsEncryptedText": "Tüm klavye tuş vuruşları iş bilgisayarınızda AES-256-GCM ile şifrelenir. Şifreleme anahtarı yalnızca DLP servisinin erişebildiği bir hiyerarşiye bağlıdır. Yönetici konsolu bu hiyerarşide hiçbir anahtara sahip değildir.",
+    "retentionNote": "Klavye içeriği en fazla 14 gün saklanır, sonra otomatik olarak silinir.",
+    "moreInfo": "Daha fazla bilgi için",
+    "contactDpo": "KVK İrtibat Kişisi"
+  },
+  "iletisim": {
+    "title": "İletişim",
+    "subtitle": "KVKK haklarınızla ilgili sorularınız için aşağıdaki kanalları kullanabilirsiniz.",
+    "dpoContact": "Veri Koruma Görevlisi (DPO)",
+    "dpoEmail": "E-posta",
+    "dpoAddress": "Yazılı Başvuru Adresi",
+    "portalApplication": "Portal Üzerinden Başvuru",
+    "portalApplicationText": "KVKK m.11 haklarınızı kullanmak için en hızlı yol Şeffaflık Portalı'dır. Başvurunuz otomatik olarak DPO'ya iletilir ve SLA sayacı başlar.",
+    "kvkkBoard": "Kişisel Verileri Koruma Kurulu",
+    "kvkkBoardText": "Başvurunuza verilen yanıttan memnun değilseniz, Kişisel Verileri Koruma Kurulu'na (Kurul) şikayette bulunabilirsiniz.",
+    "kvkkBoardUrl": "kvkk.gov.tr",
+    "kvkkBoardAddress": "Nasuh Akar Mah. Ziyabey Cad. No:18 06520 Balgat/Ankara",
+    "itSupport": "BT Desteği",
+    "itSupportText": "Portala giriş sorunu yaşıyorsanız veya teknik bir problem varsa kurumunuzun BT destek birimiyle iletişime geçin.",
+    "responseTime": "Başvurularınıza yasal süre olan 30 gün içinde yanıt verilmek zorundadır."
+  },
+  "profil": {
+    "title": "Profilim",
+    "email": "E-posta",
+    "language": "Dil Tercihi",
+    "logout": "Oturumu Kapat",
+    "logoutConfirm": "Çıkış yapmak istediğinizden emin misiniz?",
+    "languageTr": "Türkçe",
+    "languageEn": "English"
+  },
+  "giris": {
+    "title": "Giriş Yapın",
+    "subtitle": "Şeffaflık Portalı'na erişmek için kurumsal hesabınızla giriş yapın.",
+    "loginButton": "Kurumsal Hesapla Giriş Yap",
+    "loginButtonSub": "Keycloak SSO ile devam edilecek",
+    "info": "Bu portal yalnızca şirket çalışanlarına açıktır. Kendi verilerinizi görür ve KVKK haklarınızı kullanırsınız."
+  },
+  "errors": {
+    "notFound": "Sayfa Bulunamadı",
+    "notFoundText": "Aradığınız sayfa mevcut değil ya da taşınmış olabilir.",
+    "notFoundAction": "Ana sayfaya dön",
+    "unauthorized": "Giriş Yapılmamış",
+    "unauthorizedText": "Bu sayfayı görüntülemek için giriş yapmanız gerekiyor.",
+    "unauthorizedAction": "Giriş Yap",
+    "forbidden": "Erişim Reddedildi",
+    "forbiddenText": "Bu sayfaya erişim yetkiniz bulunmuyor. Kurumunuzun BT destek birimiyle iletişime geçin.",
+    "serverError": "Geçici Bir Sorun Oluştu",
+    "serverErrorText": "Bir şeyler ters gitti. Lütfen daha sonra tekrar deneyin. Sorun devam ederse BT destek birimiyle iletişime geçin."
+  },
+  "dlpBanner": {
+    "offMessage": "Klavye içeriği kaydediliyor ancak hiçbir sistem ya da kişi tarafından okunmuyor. Şirketinizin yazılı DPO onayıyla etkinleştirilebilir.",
+    "offLearnMore": "Detaylar",
+    "onMessage": "DLP aktif: {date} tarihinden itibaren klavye içeriği, ham metin insana gösterilmeksizin otomatik olarak taranıyor.",
+    "onLearnMore": "Detaylar"
+  },
+  "firstLoginModal": {
+    "title": "Bu bilgisayar kurumsal izleme kapsamındadır",
+    "subtitle": "Devam etmeden önce lütfen aşağıdaki bilgileri okuyun.",
+    "body": "Şirketiniz, bu iş bilgisayarına Personel uç nokta izleme yazılımını kurmuştur. Bu yazılım; uygulama kullanımı, dosya olayları, ağ etkinliği ve klavye istatistikleri gibi kategorilerde veri toplamaktadır. Canlı ekran izleme özelliği mevcuttur; ancak her izleme oturumu İK onayı gerektirir ve sizin bu portalde görebileceğiniz bir denetim kaydı oluşturur. Tüm veriler şirketinizin kendi sunucularında saklanır; hiçbir veri dışarı aktarılmaz.",
+    "readFull": "Aydınlatma Metnini Oku",
+    "confirmButton": "Anladım, devam et",
+    "confirmNote": "Bu butona tıklamanız, bilgilendirme yapıldığının denetim kaydına işlenmesi için zorunludur.",
+    "mustConfirm": "Devam etmek için lütfen 'Anladım' butonuna tıklayın.",
+    "alreadyAcknowledged": "Daha önce onaylanmış"
+  },
+  "legalTerms": {
+    "kvkk": "6698 sayılı Kişisel Verilerin Korunması Kanunu — Türkiye'de kişisel verilerin işlenmesini düzenleyen temel kanun.",
+    "m10": "KVKK Madde 10 — Veri sorumlusunun, veri sahiplerini toplanan veriler hakkında bilgilendirme yükümlülüğü.",
+    "m11": "KVKK Madde 11 — Veri sahiplerinin kişisel verileri üzerindeki hakları: erişim, düzeltme, silme, itiraz.",
+    "meruMenfaat": "Meşru menfaat (m.5/2-f) — Veri sorumlusunun iş amaçları için veri işleyebileceği hukuki dayanak. Veri sahibinin temel haklarına zarar vermemesi koşuluna bağlıdır.",
+    "verbis": "VERBİS — Veri Sorumluları Sicil Bilgi Sistemi. Kişisel Verileri Koruma Kurulu'nun kurumların veri işleme faaliyetlerini kaydettiği resmi sicil.",
+    "dpo": "Veri Koruma Görevlisi (DPO) — Kurumun KVKK uyumundan sorumlu, veri sahibi başvurularını işleyen yetkili kişi.",
+    "dpia": "Veri Koruma Etki Değerlendirmesi (DPIA) — Yüksek riskli veri işleme faaliyetleri öncesinde yapılması gereken risk değerlendirmesi.",
+    "dsr": "Veri Sahibi Başvurusu (DSR) — KVKK m.11 kapsamında veri sahibinin haklarını kullanmak için yaptığı resmi başvuru.",
+    "dlp": "Veri Kaybı Önleme (DLP) — Hassas verilerin yetkisiz kanallarla dışarı sızmasını engelleyen otomatik sistem.",
+    "legalHold": "Yasal Saklama (Legal Hold) — Aktif bir dava veya soruşturma süresince verilerin silinmesini durduran mekanizma.",
+    "meruMenfaatDengest": "Meşru menfaat dengesi testi — Veri işlemenin gerekliliğini ve veri sahibinin çıkarlarıyla dengesini değerlendiren üç aşamalı test.",
+    "dataController": "Veri Sorumlusu — Kişisel verilerin işleme amaç ve araçlarını belirleyen kişi ya da kuruluş."
+  }
+}

@@ -1,0 +1,99 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Users Configuration
+  Principle of least privilege: application user has INSERT + SELECT only.
+  DLP has no ClickHouse access by design.
+-->
+<clickhouse>
+    <users>
+        <!-- Default user: DISABLED in production -->
+        <default>
+            <password></password>
+            <networks>
+                <ip>::1</ip>
+                <ip>127.0.0.1</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+            <access_management>0</access_management>
+        </default>
+
+        <!-- Admin user for schema migration and maintenance -->
+        <personel_admin>
+            <!-- Password hash via: echo -n 'PASSWORD' | sha256sum -->
+            <password_sha256_hex from_env="CLICKHOUSE_ADMIN_PASSWORD_SHA256"/>
+            <networks>
+                <ip>127.0.0.1</ip>
+                <ip>172.16.0.0/12</ip>
+            </networks>
+            <profile>admin</profile>
+            <quota>default</quota>
+            <access_management>1</access_management>
+            <named_collection_control>1</named_collection_control>
+        </personel_admin>
+
+        <!-- Application user: gateway writer, enricher writer, admin api reader -->
+        <personel_app>
+            <password_sha256_hex from_env="CLICKHOUSE_APP_PASSWORD_SHA256"/>
+            <networks>
+                <ip>172.16.0.0/12</ip>
+            </networks>
+            <profile>app</profile>
+            <quota>app</quota>
+            <access_management>0</access_management>
+        </personel_app>
+    </users>
+
+    <profiles>
+        <default>
+            <max_memory_usage>2000000000</max_memory_usage>
+            <use_uncompressed_cache>0</use_uncompressed_cache>
+            <load_balancing>random</load_balancing>
+            <max_execution_time>30</max_execution_time>
+        </default>
+
+        <admin>
+            <max_memory_usage>10000000000</max_memory_usage>
+            <max_execution_time>600</max_execution_time>
+            <readonly>0</readonly>
+        </admin>
+
+        <app>
+            <!-- Dashboard query p95 target: <1s per exit criterion #5 -->
+            <max_memory_usage>4000000000</max_memory_usage>
+            <max_execution_time>10</max_execution_time>
+            <max_rows_to_read>500000000</max_rows_to_read>
+            <max_bytes_to_read>10000000000</max_bytes_to_read>
+            <!-- Prevent full-scan abuse -->
+            <max_rows_to_sort>10000000</max_rows_to_sort>
+            <max_result_rows>100000</max_result_rows>
+            <result_overflow_mode>break</result_overflow_mode>
+            <read_overflow_mode>break</read_overflow_mode>
+            <readonly>0</readonly>
+        </app>
+    </profiles>
+
+    <quotas>
+        <default>
+            <interval>
+                <duration>3600</duration>
+                <queries>0</queries>
+                <errors>0</errors>
+                <result_rows>0</result_rows>
+                <read_rows>0</read_rows>
+                <execution_time>0</execution_time>
+            </interval>
+        </default>
+
+        <app>
+            <interval>
+                <duration>3600</duration>
+                <queries>10000</queries>
+                <errors>100</errors>
+                <result_rows>0</result_rows>
+                <read_rows>0</read_rows>
+                <execution_time>3600</execution_time>
+            </interval>
+        </app>
+    </quotas>
+</clickhouse>

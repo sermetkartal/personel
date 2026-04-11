@@ -1,0 +1,33 @@
+# =============================================================================
+# Personel Platform — Certificate Renewal Service
+# Checks Vault-issued server certs for upcoming expiry and renews them.
+# Server certs: 90d validity, renew at T-14d.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Certificate Renewal
+After=personel-compose.service
+Requires=docker.service
+PartOf=personel.target
+
+[Service]
+Type=oneshot
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra
+EnvironmentFile=/opt/personel/infra/compose/.env
+
+# vault-agent is the primary cert renewal mechanism.
+# This service is a fallback that checks expiry and signals services.
+ExecStart=/opt/personel/infra/scripts/rotate-secrets.sh --certs-only
+
+TimeoutStartSec=300
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-cert-renewer
+
+[Install]
+WantedBy=personel.target

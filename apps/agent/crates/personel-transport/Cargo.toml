@@ -1,0 +1,25 @@
+[package]
+name    = "personel-transport"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+personel-core  = { path = "../personel-core" }
+personel-proto = { path = "../personel-proto" }
+personel-queue = { path = "../personel-queue" }
+
+tokio         = { workspace = true }
+tonic         = { workspace = true }
+tower         = { workspace = true }
+rustls        = { workspace = true }
+rustls-pki-types = { workspace = true }
+webpki-roots  = { workspace = true }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+bytes         = { workspace = true }
+prost         = { workspace = true }
+futures       = { workspace = true }
+rand          = { workspace = true }
+flate2        = { workspace = true }
+sha2          = { workspace = true }

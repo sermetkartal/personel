@@ -1,0 +1,142 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Configuration
+  Phase 1: Single-node, MergeTree (NOT ReplicatedMergeTree).
+  macros.xml provides shard/replica identifiers for the Phase-1-exit migration
+  to ReplicatedMergeTree + ClickHouse Keeper per clickhouse-scaling-plan.md.
+-->
+<clickhouse>
+    <logger>
+        <level>information</level>
+        <log>/var/log/clickhouse-server/clickhouse-server.log</log>
+        <errorlog>/var/log/clickhouse-server/clickhouse-server.err.log</errorlog>
+        <size>100M</size>
+        <count>5</count>
+        <console>1</console>
+    </logger>
+
+    <http_port>8123</http_port>
+    <tcp_port>9000</tcp_port>
+    <!-- Interserver port for Phase-1-exit replication -->
+    <interserver_http_port>9009</interserver_http_port>
+
+    <listen_host>0.0.0.0</listen_host>
+    <listen_reuse_port>1</listen_reuse_port>
+
+    <!-- TLS for native protocol -->
+    <tcp_port_secure>9440</tcp_port_secure>
+    <openSSL>
+        <server>
+            <certificateFile>/etc/personel/tls/clickhouse.crt</certificateFile>
+            <privateKeyFile>/etc/personel/tls/clickhouse.key</privateKeyFile>
+            <caConfig>/etc/personel/tls/tenant_ca.crt</caConfig>
+            <requireTLSv1_3>true</requireTLSv1_3>
+            <prefer_server_ciphers>true</prefer_server_ciphers>
+        </server>
+    </openSSL>
+
+    <!-- Data paths -->
+    <path>/var/lib/clickhouse/</path>
+    <tmp_path>/var/lib/clickhouse/tmp/</tmp_path>
+    <user_files_path>/var/lib/clickhouse/user_files/</user_files_path>
+    <access_control_path>/var/lib/clickhouse/access/</access_control_path>
+    <format_schema_path>/var/lib/clickhouse/format_schemas/</format_schema_path>
+
+    <!-- Memory limits — sized for 16GB ClickHouse allocation -->
+    <max_server_memory_usage>14000000000</max_server_memory_usage>
+    <max_server_memory_usage_to_ram_ratio>0.87</max_server_memory_usage_to_ram_ratio>
+    <total_memory_profiler_step>4194304</total_memory_profiler_step>
+
+    <!-- Query limits -->
+    <max_concurrent_queries>100</max_concurrent_queries>
+    <max_connections>2048</max_connections>
+
+    <!-- Merge settings for Phase 1 ingest throughput -->
+    <merge_tree>
+        <!-- Parts limit before inserts slow down -->
+        <parts_to_delay_insert>300</parts_to_delay_insert>
+        <parts_to_throw_insert>600</parts_to_throw_insert>
+        <!-- Monitoring alarm threshold: >1000 parts = alert -->
+        <max_parts_in_total>100000</max_parts_in_total>
+        <!-- TTL rechecks -->
+        <merge_with_ttl_timeout>86400</merge_with_ttl_timeout>
+        <!-- Replicated table settings (Phase-1-exit) -->
+        <replicated_deduplication_window>100</replicated_deduplication_window>
+        <replicated_deduplication_window_seconds>604800</replicated_deduplication_window_seconds>
+    </merge_tree>
+
+    <!-- Prometheus metrics endpoint -->
+    <prometheus>
+        <endpoint>/metrics</endpoint>
+        <port>9363</port>
+        <metrics>true</metrics>
+        <events>true</events>
+        <asynchronous_metrics>true</asynchronous_metrics>
+        <status_info>true</status_info>
+    </prometheus>
+
+    <!-- ZooKeeper/Keeper — NOT configured for Phase 1 single-node.
+         Uncomment and configure in Phase-1-exit replication setup.
+    <zookeeper>
+        <node>
+            <host>ch-01.personel.internal</host>
+            <port>2181</port>
+        </node>
+        <node>
+            <host>ch-02.personel.internal</host>
+            <port>2181</port>
+        </node>
+        <node>
+            <host>ch-03.personel.internal</host>
+            <port>2181</port>
+        </node>
+    </zookeeper>
+    -->
+
+    <!-- Remote servers — Phase-1-exit cluster definition.
+         NOT active for single-node. Referenced by macros.xml for migration prep.
+    <remote_servers>
+        <personel_cluster>
+            <shard>
+                <replica>
+                    <host>ch-01.personel.internal</host>
+                    <port>9000</port>
+                    <user>personel_app</user>
+                    <password>VAULT_SECRET</password>
+                </replica>
+                <replica>
+                    <host>ch-02.personel.internal</host>
+                    <port>9000</port>
+                    <user>personel_app</user>
+                    <password>VAULT_SECRET</password>
+                </replica>
+            </shard>
+        </personel_cluster>
+    </remote_servers>
+    -->
+
+    <!-- Query log and other system tables -->
+    <query_log>
+        <database>system</database>
+        <table>query_log</table>
+        <partition_by>toYYYYMM(event_date)</partition_by>
+        <ttl>event_date + INTERVAL 30 DAY</ttl>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+    </query_log>
+
+    <metric_log>
+        <database>system</database>
+        <table>metric_log</table>
+        <flush_interval_milliseconds>7500</flush_interval_milliseconds>
+        <collect_interval_milliseconds>1000</collect_interval_milliseconds>
+        <ttl>event_date + INTERVAL 7 DAY</ttl>
+    </metric_log>
+
+    <!-- Disable unnecessary features for production -->
+    <disable_internal_dns_cache>1</disable_internal_dns_cache>
+    <mark_cache_size>5368709120</mark_cache_size>
+    <uncompressed_cache_size>8589934592</uncompressed_cache_size>
+
+    <!-- Include user-specific config -->
+    <include_from>/etc/clickhouse-server/config.d/*.xml</include_from>
+</clickhouse>

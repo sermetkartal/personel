@@ -1,0 +1,389 @@
+# =============================================================================
+# Personel Platform — Prometheus Alert Rules
+# Covers: heartbeat flow 7, DSR SLA, Vault audit, backup, capacity.
+# =============================================================================
+
+groups:
+
+  # ---------------------------------------------------------------------------
+  # AGENT HEARTBEAT ALERTS (Flow 7 per event-taxonomy.md)
+  # ---------------------------------------------------------------------------
+  - name: agent.heartbeat
+    interval: 60s
+    rules:
+
+      - alert: AgentHeartbeatSuspicious
+        expr: |
+          (
+            time() - max by (endpoint_id, tenant_id) (
+              personel_agent_last_heartbeat_ts
+            )
+          ) > 300
+          AND
+          (
+            time() - max by (endpoint_id, tenant_id) (
+              personel_agent_last_heartbeat_ts
+            )
+          ) <= 3600
+        for: 5m
+        labels:
+          severity: warning
+          category: agent_health
+        annotations:
+          summary: "Agent heartbeat suspicious — no heartbeat for 5-60 min"
+          description: |
+            Endpoint {{ $labels.endpoint_id }} (tenant {{ $labels.tenant_id }})
+            has not sent a heartbeat for {{ $value | humanizeDuration }}.
+            This may indicate the agent is offline or the connection is interrupted.
+          runbook: "https://{{ $labels.installation }}/runbooks/troubleshooting.md#agent-heartbeat"
+
+      - alert: AgentHeartbeatOffline
+        expr: |
+          (
+            time() - max by (endpoint_id, tenant_id) (
+              personel_agent_last_heartbeat_ts
+            )
+          ) > 3600
+        for: 10m
+        labels:
+          severity: critical
+          category: agent_health
+        annotations:
+          summary: "Agent offline — no heartbeat for >1 hour"
+          description: |
+            Endpoint {{ $labels.endpoint_id }} (tenant {{ $labels.tenant_id }})
+            has been offline for {{ $value | humanizeDuration }}.
+            Check if the agent was intentionally disabled or the endpoint is off.
+
+      - alert: AgentHeartbeatDisabled
+        expr: |
+          personel_agent_status{status="disabled"} == 1
+        for: 1m
+        labels:
+          severity: info
+          category: agent_health
+        annotations:
+          summary: "Agent status is DISABLED"
+          description: |
+            Endpoint {{ $labels.endpoint_id }} has been administratively disabled.
+            If this is unexpected, check the admin audit log for who made this change.
+
+  # ---------------------------------------------------------------------------
+  # KVKK m.11 DSR SLA ALERTS
+  # ---------------------------------------------------------------------------
+  - name: kvkk.dsr
+    interval: 3600s
+    rules:
+
+      - alert: DSRSlaAtRisk
+        expr: |
+          personel_dsr_requests_by_state{state="at_risk"} > 0
+        for: 0m
+        labels:
+          severity: warning
+          category: kvkk_compliance
+        annotations:
+          summary: "DSR request approaching SLA deadline (day 20)"
+          description: |
+            {{ $value }} DSR request(s) have entered at-risk state (day 20+).
+            DPO must respond before day 30 per KVKK m.11.
+            Dashboard: /console/dpo/dsr
+          runbook: "runbooks/incident-response.md#dsr-sla"
+
+      - alert: DSRSlaOverdue
+        expr: |
+          personel_dsr_requests_by_state{state="overdue"} > 0
+        for: 0m
+        labels:
+          severity: critical
+          category: kvkk_compliance
+        annotations:
+          summary: "DSR SLA BREACH — response overdue (day 30+)"
+          description: |
+            {{ $value }} DSR request(s) are OVERDUE. KVKK m.11 SLA has been
+            breached. Immediate DPO action required. Risk of regulatory finding.
+            Dashboard: /console/dpo/dsr
+          runbook: "runbooks/incident-response.md#dsr-sla-breach"
+
+  # ---------------------------------------------------------------------------
+  # VAULT AUDIT DEVICE ALERTS
+  # ---------------------------------------------------------------------------
+  - name: vault.audit
+    rules:
+
+      - alert: VaultAuditDeviceOffline
+        expr: |
+          vault_audit_log_request_failure > 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Vault audit device is failing — audit trail interrupted"
+          description: |
+            Vault cannot write to its audit device. This means Vault operations
+            are NOT being logged. Vault will block operations if audit device
+            fails for >1 minute (depending on configuration).
+            Per vault-setup.md, this is a P0 condition.
+          runbook: "runbooks/incident-response.md#vault-audit-failure"
+
+      - alert: VaultSealed
+        expr: |
+          vault_core_unsealed == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Vault is sealed — 3-of-5 Shamir shares required"
+          description: |
+            Vault is sealed. All cert issuance and key operations are blocked.
+            Three Shamir share custodians must unseal immediately.
+            Run: scripts/vault-unseal.sh
+          runbook: "runbooks/troubleshooting.md#vault-sealed"
+
+      - alert: VaultTMKUnexpectedDerive
+        expr: |
+          rate(vault_transit_derive_duration_count{key_name=~"tenant/.*/tmk"}[5m])
+          > ignoring(key_name) group_left()
+          (personel_dlp_batch_rate * 2 + 5)
+        for: 5m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Unexpected TMK derive rate — possible key misuse"
+          description: |
+            The transit/derive rate on the TMK key exceeds expected DLP batch rate.
+            This could indicate unauthorized access to the TMK derive capability.
+            Escalate to security immediately per dlp-service-isolation.md §8.2.
+
+  # ---------------------------------------------------------------------------
+  # AUDIT CHAIN VERIFIER
+  # ---------------------------------------------------------------------------
+  - name: audit.chain
+    rules:
+
+      - alert: AuditChainVerifierFailure
+        expr: |
+          personel_audit_chain_last_verification_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Audit chain integrity verification FAILED"
+          description: |
+            The nightly audit chain verifier detected a hash mismatch or missing
+            checkpoint. This may indicate tampering with the audit log.
+            Escalate immediately. Do not delete any files.
+            Run: scripts/verify-audit-chain.sh
+          runbook: "runbooks/incident-response.md#audit-chain-tamper"
+
+      - alert: AuditChainVerifierStale
+        expr: |
+          (time() - personel_audit_chain_last_verification_ts) > 172800
+        for: 1h
+        labels:
+          severity: warning
+          category: security
+        annotations:
+          summary: "Audit chain verifier has not run in >48 hours"
+          description: |
+            The audit chain verifier timer may have failed. Check systemd unit:
+            systemctl status personel-audit-verifier.timer
+
+  # ---------------------------------------------------------------------------
+  # BACKUP ALERTS
+  # ---------------------------------------------------------------------------
+  - name: backup
+    rules:
+
+      - alert: BackupJobFailed
+        expr: |
+          personel_backup_last_success_ts == 0
+          OR
+          (time() - personel_backup_last_success_ts) > 90000
+        for: 30m
+        labels:
+          severity: critical
+          category: operations
+        annotations:
+          summary: "Backup job has not completed successfully in >25 hours"
+          description: |
+            The nightly backup job failed or did not run. Data recovery window
+            is increasing. Check journalctl -u personel-backup.service
+          runbook: "runbooks/backup-restore.md#backup-failure"
+
+      - alert: BackupEncryptionKeyMissing
+        expr: |
+          personel_backup_encryption_configured == 0
+        for: 1m
+        labels:
+          severity: critical
+          category: security
+        annotations:
+          summary: "Backup encryption is not configured"
+          description: |
+            Backups are running without encryption. This violates the KVKK m.12
+            security obligation. Configure BACKUP_GPG_PASSPHRASE or BACKUP_AGE_RECIPIENT.
+
+  # ---------------------------------------------------------------------------
+  # DISK CAPACITY ALERTS
+  # ---------------------------------------------------------------------------
+  - name: capacity
+    rules:
+
+      - alert: DiskUsageHigh
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            / node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.20
+        for: 10m
+        labels:
+          severity: warning
+          category: capacity
+        annotations:
+          summary: "Disk usage >80% on host"
+          description: |
+            Available disk: {{ $value | humanizePercentage }} free.
+            Consider running clickhouse-backup, reviewing retention settings, or
+            expanding storage.
+          runbook: "runbooks/troubleshooting.md#disk-full"
+
+      - alert: DiskUsageCritical
+        expr: |
+          (
+            node_filesystem_avail_bytes{mountpoint="/"}
+            / node_filesystem_size_bytes{mountpoint="/"}
+          ) < 0.10
+        for: 5m
+        labels:
+          severity: critical
+          category: capacity
+        annotations:
+          summary: "Disk usage >90% — services may fail soon"
+          description: |
+            Only {{ $value | humanizePercentage }} disk remaining. Immediate action
+            required to prevent ingest failures.
+
+      - alert: ClickHouseDiskUsageHigh
+        expr: |
+          (
+            clickhouse_disks_free_bytes{disk="default"}
+            / clickhouse_disks_size_bytes{disk="default"}
+          ) < 0.40
+        for: 15m
+        labels:
+          severity: warning
+          category: capacity
+        annotations:
+          summary: "ClickHouse disk usage >60% — per clickhouse-scaling-plan.md alarm"
+          description: |
+            ClickHouse disk free: {{ $value | humanizePercentage }}.
+            Review retention TTLs and run manual merge if needed.
+
+  # ---------------------------------------------------------------------------
+  # CLICKHOUSE MERGE LAG
+  # ---------------------------------------------------------------------------
+  - name: clickhouse
+    rules:
+
+      - alert: ClickHouseMergeLag
+        expr: |
+          clickhouse_background_merges_mutations_concurrency > 0
+          AND
+          clickhouse_background_pool_task{status="active"} / ignoring(status)
+          clickhouse_background_pool_task > 0.8
+        for: 30m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "ClickHouse merge backlog is building up"
+          description: |
+            ClickHouse background merge workers are at >80% utilization.
+            This may cause insert delays per clickhouse-scaling-plan.md alarms.
+
+      - alert: ClickHouseInsertQueueDeep
+        expr: |
+          clickhouse_background_distributed_files_to_insert > 1000
+        for: 10m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "ClickHouse insert queue depth >1000"
+          description: |
+            Insert queue depth: {{ $value }}. This indicates slow merges or
+            slow consumers. Dashboard query latency may be affected.
+
+  # ---------------------------------------------------------------------------
+  # NATS JETSTREAM CAPACITY
+  # ---------------------------------------------------------------------------
+  - name: nats
+    rules:
+
+      - alert: NATSJetStreamStorageFull
+        expr: |
+          (
+            nats_jetstream_storage_bytes_used / nats_jetstream_storage_bytes_max
+          ) > 0.85
+        for: 10m
+        labels:
+          severity: critical
+          category: capacity
+        annotations:
+          summary: "NATS JetStream storage >85% full"
+          description: |
+            JetStream file store is {{ $value | humanizePercentage }} full.
+            Events may be dropped when the stream hits its limit.
+            Reduce retention or expand storage.
+
+      - alert: NATSConsumerLag
+        expr: |
+          nats_consumer_num_pending{stream="EVENTS"} > 500000
+        for: 15m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "NATS event consumer is lagging behind producers"
+          description: |
+            Consumer {{ $labels.consumer }} on stream EVENTS has {{ $value }} pending messages.
+            Check if the enricher or DLP service is running.
+
+  # ---------------------------------------------------------------------------
+  # SERVICE AVAILABILITY (exit criterion #8: ≥99.5% uptime)
+  # ---------------------------------------------------------------------------
+  - name: service.availability
+    rules:
+
+      - alert: ServiceDown
+        expr: |
+          up{job=~"gateway|api|dlp|enricher|postgres|clickhouse|nats|vault|keycloak"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          category: availability
+        annotations:
+          summary: "Service {{ $labels.job }} is DOWN"
+          description: |
+            Service {{ $labels.job }} has been unreachable for 2+ minutes.
+            Check: docker compose ps && docker compose logs {{ $labels.job }}
+          runbook: "runbooks/troubleshooting.md#service-down"
+
+      - alert: DLPServiceDown
+        expr: |
+          up{job="dlp"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          category: availability
+        annotations:
+          summary: "DLP service is DOWN — pattern matching suspended"
+          description: |
+            DLP service unavailability means keystroke blobs are accumulating
+            in NATS and MinIO unmatched. SLO: 99%, budget 7.2h/month.
+            Encrypted blobs are safe; matching will resume on restart.

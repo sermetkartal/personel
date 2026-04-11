@@ -1,0 +1,37 @@
+{
+  "name": "10k-chaos-mix",
+  "description": "10K agents running at steady state while chaos drills execute: gateway kill mid-test, NATS partition, MinIO fill. Validates agent offline buffering (48h queue) and server recovery.",
+  "agent_count": 10000,
+  "ramp_duration_sec": 300,
+  "steady_duration_sec": 3600,
+  "ramp_down_sec": 120,
+  "gateway_addr": "",
+  "tenant_id": "chaos-test-10k-0000-0000-000000000001",
+  "seed": 2024,
+  "chaos_events": [
+    {
+      "at_offset_sec": 300,
+      "type": "kill_gateway",
+      "duration_sec": 30,
+      "expected": "agents buffer events in SQLite queue; reconnect on restart"
+    },
+    {
+      "at_offset_sec": 900,
+      "type": "partition_nats",
+      "duration_sec": 60,
+      "expected": "gateway buffers in memory; replays on reconnect; no event loss"
+    },
+    {
+      "at_offset_sec": 1800,
+      "type": "fill_minio_80pct",
+      "expected": "screenshots fail gracefully; keystroke blobs also fail; events with blob_ref errors are flagged but not dropped"
+    }
+  ],
+  "phase1_criteria": ["EC-6", "EC-7", "EC-8"],
+  "notes": {
+    "purpose": "Validate resilience under infrastructure failures",
+    "agent_offline_buffer": "48h SQLite queue must absorb events during gateway kill",
+    "event_loss_target": "< 0.01% even accounting for chaos events",
+    "recovery_time_target": "gateway restart < 30s; all agents reconnect < 5 min"
+  }
+}

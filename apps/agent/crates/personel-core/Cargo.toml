@@ -1,0 +1,24 @@
+[package]
+name    = "personel-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+thiserror  = { workspace = true }
+serde      = { workspace = true }
+uuid       = { workspace = true }
+tracing    = { workspace = true }
+zeroize    = { workspace = true }
+prost      = { workspace = true }
+prost-types = { workspace = true }
+time       = { workspace = true }
+bytes      = { workspace = true }
+# Optional: when the `rusqlite` feature is on, personel-core adds
+# `From<rusqlite::Error> for AgentError`. This lets personel-queue use `?`
+# directly. We keep it gated so the core crate stays SQLite-free by default.
+rusqlite   = { workspace = true, optional = true }
+
+[features]
+default = []
+rusqlite = ["dep:rusqlite"]

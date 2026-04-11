@@ -1,0 +1,43 @@
+# enricher.yaml — example configuration for the Personel Event Enricher.
+# Override with PERSONEL_ENRICHER_<SECTION>_<KEY> environment variables.
+
+nats:
+  urls:
+    - "nats://nats.internal:4222"
+  connect_timeout: "10s"
+  max_reconnect: -1
+  publish_timeout: "5s"
+
+clickhouse:
+  addrs:
+    - "clickhouse.internal:9000"
+  database: "personel"
+  username: "personel_enricher"
+  password: ""                       # injected via PERSONEL_ENRICHER_CLICKHOUSE_PASSWORD
+  # async_insert: false means the enricher waits for ClickHouse to confirm each batch.
+  # Set to true when ingest rate exceeds ~500k events/sec to enable the async insert buffer.
+  async_insert: false
+
+minio:
+  endpoint: "minio.internal:9000"
+  access_key: ""                     # injected via env
+  secret_key: ""                     # injected via env
+  use_ssl: false
+  region: "us-east-1"
+
+postgres:
+  dsn: "postgres://personel_enricher:changeme@postgres.internal:5432/personel?sslmode=verify-full"
+  max_conns: 10
+  min_conns: 1
+  conn_timeout: "10s"
+  query_timeout: "5s"
+
+observability:
+  otlp_endpoint: "otelcollector.internal:4317"
+  prometheus_addr: "0.0.0.0:9091"
+  log_level: "info"
+  service_name: "personel-enricher"
+
+batch:
+  max_size: 10000          # rows per ClickHouse insert batch
+  flush_interval: "2s"     # max time before incomplete batch is sent

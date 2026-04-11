@@ -1,0 +1,21 @@
+{
+  "name": "10k-agent-ramp",
+  "description": "Scale cliff stress test: ramp to 10K agents over 5 minutes, hold for 30 minutes. Validates gateway concurrency budget and NATS backpressure under realistic sustained load. This is the primary test for the 10K scale target.",
+  "agent_count": 10000,
+  "ramp_duration_sec": 300,
+  "steady_duration_sec": 1800,
+  "ramp_down_sec": 120,
+  "gateway_addr": "",
+  "tenant_id": "load-test-10k-0000-0000-000000000001",
+  "seed": 1337,
+  "phase1_criteria": ["EC-6", "EC-7", "EC-8"],
+  "notes": {
+    "purpose": "Stress test before scale cliff at 10K endpoints",
+    "gateway_connections": "10K concurrent bidi gRPC streams",
+    "expected_event_rate_per_sec": "~150K events/sec (15 events/agent/sec)",
+    "nats_throughput": "~150K msgs/sec into JetStream",
+    "clickhouse_ingest": "~150K rows/sec (batch writer)",
+    "memory_budget": "10K agents x ~1KB gRPC stream state = ~10MB gateway overhead",
+    "failure_mode": "If gateway OOMs or NATS backpressure causes drops > 0.01%, test fails"
+  }
+}

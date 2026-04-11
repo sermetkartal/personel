@@ -1,0 +1,108 @@
+{
+  "title": "Personel — KVKK Compliance",
+  "uid": "personel-kvkk-compliance",
+  "tags": ["personel", "kvkk", "compliance"],
+  "timezone": "browser",
+  "refresh": "5m",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Open DSR Requests",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "targets": [{
+        "expr": "personel_dsr_requests_by_state{state=\"open\"}",
+        "legendFormat": "Open"
+      }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":1}] } } }
+    },
+    {
+      "id": 2,
+      "title": "At-Risk DSR (Day 20+)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "targets": [{
+        "expr": "personel_dsr_requests_by_state{state=\"at_risk\"}",
+        "legendFormat": "At Risk"
+      }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{"color":"green","value":0},{"color":"orange","value":1}] } } }
+    },
+    {
+      "id": 3,
+      "title": "Overdue DSR (Day 30+) — BREACH",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "targets": [{
+        "expr": "personel_dsr_requests_by_state{state=\"overdue\"}",
+        "legendFormat": "Overdue"
+      }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{"color":"green","value":0},{"color":"red","value":1}] } } }
+    },
+    {
+      "id": 4,
+      "title": "Active Legal Holds",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "targets": [{
+        "expr": "personel_legal_holds_active",
+        "legendFormat": "Active Holds"
+      }]
+    },
+    {
+      "id": 5,
+      "title": "Vault Audit Device Status",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "targets": [{
+        "expr": "vault_audit_log_request_failure",
+        "legendFormat": "Audit Failures"
+      }],
+      "fieldConfig": { "defaults": { "thresholds": { "steps": [{"color":"green","value":0},{"color":"red","value":1}] } } }
+    },
+    {
+      "id": 6,
+      "title": "Audit Chain Last Verified",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "targets": [{
+        "expr": "time() - personel_audit_chain_last_verification_ts",
+        "legendFormat": "Seconds since verify"
+      }],
+      "fieldConfig": { "defaults": { "unit": "s", "thresholds": { "steps": [{"color":"green","value":0},{"color":"yellow","value":86400},{"color":"red","value":172800}] } } }
+    },
+    {
+      "id": 7,
+      "title": "DSR Requests Over Time",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 4 },
+      "targets": [
+        { "expr": "personel_dsr_requests_by_state{state=\"open\"}", "legendFormat": "Open" },
+        { "expr": "personel_dsr_requests_by_state{state=\"at_risk\"}", "legendFormat": "At Risk" },
+        { "expr": "personel_dsr_requests_by_state{state=\"overdue\"}", "legendFormat": "Overdue" },
+        { "expr": "personel_dsr_requests_by_state{state=\"closed\"}", "legendFormat": "Closed" }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "TMK Derive Rate (DLP Activity)",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 0, "y": 12 },
+      "targets": [{
+        "expr": "rate(vault_transit_derive_duration_count{key_name=~\"tenant/.*/tmk\"}[5m])",
+        "legendFormat": "TMK derives/s"
+      }],
+      "description": "Should correlate with DLP batch processing rate. Spikes without DLP activity = alert."
+    },
+    {
+      "id": 9,
+      "title": "DLP Match Rate by Rule",
+      "type": "timeseries",
+      "gridPos": { "h": 6, "w": 12, "x": 12, "y": 12 },
+      "targets": [{
+        "expr": "rate(personel_dlp_matches_total[5m])",
+        "legendFormat": "{{rule_id}}"
+      }]
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+[package]
+name    = "personel-crypto"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+personel-core = { path = "../personel-core" }
+personel-os   = { path = "../personel-os" }
+
+aes-gcm       = { workspace = true }
+x25519-dalek  = { workspace = true }
+hkdf          = { workspace = true }
+sha2          = { workspace = true }
+rand          = { workspace = true }
+zeroize       = { workspace = true }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+bytes         = { workspace = true }
+serde         = { workspace = true }
+

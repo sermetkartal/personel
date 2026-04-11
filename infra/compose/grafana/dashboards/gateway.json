@@ -1,0 +1,27 @@
+{
+  "title": "Personel — Ingest Gateway",
+  "uid": "personel-gateway",
+  "tags": ["personel", "gateway"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    { "id": 1, "title": "Active mTLS Connections", "type": "stat", "gridPos": {"h":4,"w":6,"x":0,"y":0},
+      "targets": [{"expr":"personel_gateway_active_connections","legendFormat":"Connections"}] },
+    { "id": 2, "title": "Events Ingested/s", "type": "stat", "gridPos": {"h":4,"w":6,"x":6,"y":0},
+      "targets": [{"expr":"sum(rate(personel_gateway_events_ingested_total[1m]))","legendFormat":"Events/s"}] },
+    { "id": 3, "title": "Event Validation Errors/s", "type": "stat", "gridPos": {"h":4,"w":6,"x":12,"y":0},
+      "targets": [{"expr":"sum(rate(personel_gateway_validation_errors_total[1m]))","legendFormat":"Errors/s"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":0},{"color":"red","value":1}]}}} },
+    { "id": 4, "title": "mTLS Handshake Latency (p95)", "type": "stat", "gridPos": {"h":4,"w":6,"x":18,"y":0},
+      "targets": [{"expr":"histogram_quantile(0.95, rate(personel_gateway_tls_handshake_duration_bucket[5m]))","legendFormat":"p95 ms"}],
+      "fieldConfig": {"defaults": {"unit":"s"}} },
+    { "id": 5, "title": "Events Ingested Over Time", "type": "timeseries", "gridPos": {"h":8,"w":24,"x":0,"y":4},
+      "targets": [{"expr":"sum by (event_type) (rate(personel_gateway_events_ingested_total[1m]))","legendFormat":"{{event_type}}"}] },
+    { "id": 6, "title": "Revoked Cert Rejections", "type": "timeseries", "gridPos": {"h":6,"w":12,"x":0,"y":12},
+      "targets": [{"expr":"rate(personel_gateway_cert_denied_total[5m])","legendFormat":"Denied/s"}],
+      "description": "Spike here = endpoint with revoked cert is trying to connect." },
+    { "id": 7, "title": "NATS Publish Errors", "type": "timeseries", "gridPos": {"h":6,"w":12,"x":12,"y":12},
+      "targets": [{"expr":"rate(personel_gateway_nats_publish_errors_total[1m])","legendFormat":"NATS errors/s"}] }
+  ]
+}

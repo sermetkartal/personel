@@ -1,0 +1,647 @@
+# CLAUDE.md — Personel Platform
+
+> **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
+>
+> Versiyon: 1.0 — Faz 1 Reality Check sonrası (2026-04-11)
+
+---
+
+## 1. Personel Nedir?
+
+**Personel**, kurumsal müşteriler için tasarlanmış, on-prem çalışan bir **User Activity Monitoring (UAM) ve performans takip platformudur**. Türkiye pazarına özel (KVKK-native), on-prem-first, KVKK uyumlu bir ürün olarak konumlandırılmıştır. Teramind, ActivTrak, Veriato, Insightful ve Safetica gibi uluslararası rakiplerle doğrudan yarışır.
+
+### Temel Değer Önerisi
+
+1. **KVKK-native uyum**: VERBİS export, otomatik saklama matrisi, Şeffaflık Portalı, hash-zincirli audit — hiçbir rakip bunu mimari seviyesinde yapmıyor
+2. **Kriptografik çalışan gizliliği**: Klavye içeriği yakalanır ama yöneticiler tarafından **kriptografik olarak** okunamaz. Sadece izole DLP motoru, önceden tanımlı kurallarla eşleşme aramak için çözebilir. Bu mimariyi ADR 0013 **varsayılan olarak KAPALI** yaptı — opt-in ceremony gerekiyor.
+3. **HR-gated canlı izleme**: İkili onay kapısı (requester ≠ approver), zaman sınırı, hash-zincirli audit
+4. **Düşük endpoint ayak izi**: Rust agent, hedef <%2 CPU, <150MB RAM
+5. **On-prem modern stack**: Docker Compose + systemd, 500 endpoint için 2 saatlik kurulum hedefi
+6. **Türkçe-first UI**: Hem admin console hem şeffaflık portalı Türkçe; İngilizce fallback
+
+### Ne DEĞİL
+
+- SaaS ürünü değil (Faz 3+ için planlanıyor, şu an değil)
+- macOS/Linux endpoint agent değil (Faz 2)
+- Açık kaynak değil (ticari ürün)
+- Bir "güvenlik" aracı tek başına değil — compliance + güvenlik + productivity analytics bir arada
+
+---
+
+## 2. Mimari Özeti
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ ENDPOINT (Windows)                                               │
+│ Rust agent → collectors → encrypted SQLite queue → gRPC bidi     │
+└────────────────┬─────────────────────────────────────────────────┘
+                 │ mTLS + gRPC bidi stream + key-version handshake
+                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ GATEWAY (Go)                                                     │
+│ • mTLS auth + cert pinning                                       │
+│ • Rate limit + backpressure                                      │
+│ • Key-version handshake (Hello.pe_dek_version/tmk_version)       │
+│ • NATS JetStream publisher                                       │
+│ • Heartbeat monitor (Flow 7: employee-initiated disable)         │
+│ • Live view router                                               │
+└────────────────┬─────────────────────────────────────────────────┘
+                 │ NATS subjects: events.raw.*, events.sensitive.*,
+                 │                live_view.control.*, agent.health.*
+                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ ENRICHER (Go, same repo as gateway)                              │
+│ • NATS JetStream consumer                                        │
+│ • Sensitivity guard (ADR 0013 + KVKK m.6)                        │
+│ • Tenant/endpoint metadata enrichment                            │
+│ • Route to ClickHouse (events) + MinIO (blobs)                   │
+└────────────────┬─────────────────────────────────────────────────┘
+                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ STORAGE TIER                                                     │
+│ • PostgreSQL — tenants, users, endpoints, policies, DSR, audit   │
+│ • ClickHouse — time-series events (1B+/day target)               │
+│ • MinIO — screenshots, video, encrypted keystroke blobs          │
+│ • OpenSearch — full-text audit search                            │
+│ • Vault — PKI + tenant master keys + control-plane signing key   │
+│ • Keycloak — OIDC/SAML auth for console & portal                 │
+└────────────────┬─────────────────────────────────────────────────┘
+                 ▼
+┌──────────────────────────────────────────────────────────────────┐
+│ ADMIN API (Go, chi + OpenAPI 3.1)                                │
+│ • OIDC auth + RBAC (7 roles)                                     │
+│ • DSR (KVKK m.11) workflow with 30-day SLA                       │
+│ • Legal hold (DPO-only)                                          │
+│ • 6-month destruction report generator (signed PDF)              │
+│ • HR-gated live view state machine                               │
+│ • Policy CRUD + signing with control-plane key                   │
+│ • Hash-chained audit log (every mutation)                        │
+│ • Reports via ClickHouse                                         │
+│ • Screenshot presigned URL issuer                                │
+│ • Transparency portal backend endpoints                          │
+└──────┬────────────────────────────┬──────────────────────────────┘
+       ▼                            ▼
+┌─────────────────┐        ┌─────────────────────────┐
+│ ADMIN CONSOLE   │        │ TRANSPARENCY PORTAL     │
+│ (Next.js 15)    │        │ (Next.js 15)            │
+│ Admin/HR/DPO/   │        │ Employee self-service   │
+│ Manager/        │        │ KVKK m.10/m.11          │
+│ Investigator    │        │ TR-first trust UX       │
+└─────────────────┘        └─────────────────────────┘
+```
+
+### Detaylı diyagramlar
+
+- **C4 Context**: `docs/architecture/c4-context.md`
+- **C4 Container**: `docs/architecture/c4-container.md`
+- **Bounded Contexts (DDD)**: `docs/architecture/bounded-contexts.md`
+- **Event Taxonomy (36 event types)**: `docs/architecture/event-taxonomy.md`
+- **Key Hierarchy (kriptografik)**: `docs/architecture/key-hierarchy.md`
+- **Live View Protocol**: `docs/architecture/live-view-protocol.md`
+- **mTLS PKI**: `docs/architecture/mtls-pki.md`
+- **Data Retention Matrix**: `docs/architecture/data-retention-matrix.md`
+
+---
+
+## 3. Repository Layout
+
+```
+personel/
+├── CLAUDE.md                       ← bu dosya
+├── README.md                       ← TR product description + EN dev quickstart
+│
+├── docs/                           (47 doküman)
+│   ├── README.md                   ← docs index
+│   ├── architecture/               (12) — C4, bounded contexts, retention, PKI, key hierarchy
+│   ├── compliance/                 (8)  — KVKK framework, aydınlatma, açık rıza, DPIA, VERBİS, risk register
+│   ├── security/                   (10) — threat model, anti-tamper + 7 runbook + security decisions
+│   ├── product/                    (1)  — competitive analysis (Teramind vs)
+│   └── adr/                        (13) — Architecture Decision Records
+│
+├── proto/personel/v1/              (5) — gRPC proto contracts: common, agent, events, policy, live_view
+│
+├── apps/
+│   ├── agent/                      ← Rust Windows agent (13-crate Cargo workspace, 70 files)
+│   │   ├── Cargo.toml              ← workspace deps
+│   │   ├── rust-toolchain.toml     ← MSRV 1.88 (bumped from 1.75 in reality check)
+│   │   └── crates/
+│   │       ├── personel-core       ← types, errors, IDs, clock
+│   │       ├── personel-crypto     ← AES-GCM envelope, X25519 enrollment, DPAPI keystore
+│   │       ├── personel-queue      ← SQLCipher offline buffer
+│   │       ├── personel-policy     ← policy engine with Ed25519 verification
+│   │       ├── personel-collectors ← Collector trait + 12 collector modules
+│   │       ├── personel-transport  ← tonic gRPC client + rustls
+│   │       ├── personel-proto      ← tonic-build generated stubs
+│   │       ├── personel-os         ← Windows (ETW, GDI, DPAPI) + stub for dev
+│   │       ├── personel-updater    ← dual-signed update verification
+│   │       ├── personel-livestream ← LiveKit WebRTC (stub)
+│   │       ├── personel-agent      ← main Windows service binary
+│   │       ├── personel-watchdog   ← sibling watchdog process
+│   │       └── personel-tests      ← workspace smoke tests
+│   │
+│   ├── gateway/                    ← Go gRPC ingest gateway + enricher (51 files)
+│   │   ├── cmd/gateway/            ← main ingest binary
+│   │   ├── cmd/enricher/           ← NATS→ClickHouse/MinIO pipeline
+│   │   ├── internal/grpcserver/    ← bidi stream server, auth, rate limit
+│   │   ├── internal/nats/          ← JetStream publisher/consumer
+│   │   ├── internal/heartbeat/     ← Flow 7 employee-disable classifier
+│   │   ├── internal/liveview/      ← live view command router
+│   │   └── pkg/proto/              ← generated stubs (go.mod submodule)
+│   │
+│   ├── api/                        ← Go chi admin API (90 files, 57-op OpenAPI)
+│   │   ├── cmd/api/                ← main binary
+│   │   ├── api/openapi.yaml        ← contract, consumed by console
+│   │   ├── internal/httpserver/    ← chi router + middleware (audit, RBAC, OIDC)
+│   │   ├── internal/httpx/         ← RFC7807 + request-id (broken out in reality check to fix cycle)
+│   │   ├── internal/audit/         ← hash-chain recorder + verifier + 55 canonical actions
+│   │   ├── internal/dsr/           ← KVKK m.11 workflow + 30-day SLA
+│   │   ├── internal/legalhold/     ← DPO-only handlers
+│   │   ├── internal/destruction/   ← 6-month signed PDF reports
+│   │   ├── internal/liveview/      ← state machine with persistence
+│   │   ├── internal/policy/        ← signing + NATS publisher
+│   │   ├── internal/vault/         ← Vault client (+ stub mode for tests)
+│   │   ├── internal/postgres/migrations/ ← embedded .sql files
+│   │   └── test/integration/       ← testcontainers-go e2e tests
+│   │
+│   ├── console/                    ← Next.js 15 admin UI (133 files)
+│   │   ├── messages/tr.json + en.json
+│   │   ├── src/app/[locale]/(app)/ ← all pages for Admin/HR/DPO/Manager roles
+│   │   │   ├── dashboard/
+│   │   │   ├── endpoints/
+│   │   │   ├── dsr/                ← KVKK m.11 DPO dashboard
+│   │   │   ├── live-view/          ← request + HR approval + LiveKit viewer
+│   │   │   ├── audit/              ← hash-chained log viewer
+│   │   │   ├── legal-hold/
+│   │   │   ├── destruction-reports/
+│   │   │   ├── policies/           ← SensitivityGuard editor
+│   │   │   └── settings/dlp/       ← ADR 0013 ceremony explainer (NO enable button)
+│   │   └── src/components/
+│   │       └── layout/dlp-status-badge.tsx  ← always-visible DLP state
+│   │
+│   ├── portal/                     ← Next.js 15 employee portal (62 files)
+│   │   ├── messages/tr.json + en.json
+│   │   ├── src/app/[locale]/       ← trust-first design
+│   │   │   ├── aydinlatma/         ← KVKK m.10 legal notice
+│   │   │   ├── verilerim/          ← what is monitored (11 categories)
+│   │   │   ├── neler-izlenmiyor/   ← trust-building: what is NOT monitored (10 items)
+│   │   │   ├── haklar/             ← KVKK m.11 rights
+│   │   │   ├── basvurularim/       ← employee's DSRs
+│   │   │   ├── canli-izleme/       ← policy explainer + session history
+│   │   │   └── dlp-durumu/         ← ADR 0013 employee-facing state
+│   │   └── src/components/
+│   │       └── onboarding/first-login-modal.tsx  ← mandatory audited acknowledgement
+│   │
+│   └── qa/                         ← QA framework (51 files)
+│       ├── cmd/simulator/          ← 10K-agent traffic generator
+│       ├── cmd/audit-redteam/      ← keystroke admin-blindness red team (Phase 1 exit #9)
+│       ├── cmd/footprint-bench/    ← Windows CPU/RAM measurement harness
+│       ├── cmd/chaos/              ← chaos drills
+│       ├── test/e2e/               ← 10 end-to-end suites (enrollment, flow7, DSR, liveview, audit, rbac)
+│       ├── test/load/              ← 4 load scenarios (500 steady, 10k ramp, 10k burst, chaos)
+│       ├── test/security/          ← fuzz + cert pinning + keystroke red team
+│       └── ci/thresholds.yaml      ← Phase 1 exit criteria as machine-readable gates
+│
+└── infra/                          ← On-prem deployment (76 files)
+    ├── install.sh                  ← idempotent installer, 2h target
+    ├── compose/
+    │   ├── docker-compose.yaml     ← production stack (18 services)
+    │   ├── docker-compose.override.yaml
+    │   ├── vault/                  ← Shamir 3-of-5 + HCL policies
+    │   ├── postgres/init.sql       ← bootstrap: audit.append_event proc, RBAC roles
+    │   ├── clickhouse/             ← single-node config + macros for Phase 1 exit replication
+    │   ├── nats/                   ← JetStream at-rest encryption
+    │   ├── keycloak/               ← realm-personel.json (clients, roles)
+    │   ├── dlp/                    ← distroless + seccomp + AppArmor (Profile 1)
+    │   └── prometheus/alerts.yml   ← Flow 7, DSR SLA, Vault audit, backup alerts
+    ├── systemd/                    ← personel-*.service + timers
+    ├── scripts/                    ← preflight, ca-bootstrap, vault-unseal, rotate, forensic-export
+    └── runbooks/                   ← install, backup, DR, upgrade, troubleshooting (TR/EN)
+```
+
+---
+
+## 4. Tech Stack
+
+| Katman | Teknoloji | Sürüm | Gerekçe |
+|---|---|---|---|
+| Agent dili | Rust | MSRV 1.88 | Bellek güvenli, düşük ayak izi, tek binary |
+| Agent Windows API | `windows` crate + ETW user-mode | 0.54 | User-mode first; minifilter Faz 3 |
+| Agent queue | rusqlite + bundled-sqlcipher | 0.31 | AES-256 page encryption, no DLL dep |
+| Agent crypto | aes-gcm, x25519-dalek, hkdf, ed25519-dalek | RustCrypto | FIPS-aligned primitives |
+| Gateway | Go + tonic-gateway | 1.22+ (user has 1.26) | High concurrency, simple ops |
+| Admin API | Go + chi + koanf + golang-migrate | 1.22+ | Stdlib slog, no zap/logrus/viper |
+| Event bus | NATS JetStream | 2.10+ | At-rest encryption, simpler than Kafka |
+| Time-series | ClickHouse | 24.x | 10-30x compression vs SQL Server |
+| Metadata DB | PostgreSQL | 16 | RLS for multi-tenancy |
+| Object store | MinIO | latest | S3-compatible, lifecycle policies |
+| Full-text | OpenSearch | 2.x | Apache 2.0, Elastic licensing trap avoided |
+| PKI / secrets | HashiCorp Vault | 1.15.6 | Transit engine for TMK, `exportable: false` |
+| Auth | Keycloak | 24 | OIDC/SAML/SCIM |
+| Live view | LiveKit (self-hosted) | latest | WebRTC SFU, Apache 2.0 |
+| Admin UI | Next.js 15 + TanStack Query + shadcn/ui + Tailwind 3 | 15.1 | App Router, server components first |
+| Employee portal | Next.js 15 (distinct design from console) | 15.2 | Trust-first palette, smaller deps |
+| i18n | next-intl | 3.26 | TR-first, EN fallback |
+| Observability | OpenTelemetry + Prometheus + Grafana | latest | Vendor-neutral |
+| Deployment | Docker Compose + systemd | compose v2 | On-prem; K8s deferred |
+
+---
+
+## 5. Phase Status
+
+### Faz 0 — Mimari Omurga (✅ TAMAM)
+
+- 11 architecture doc + 13 ADR + 5 proto + 2 security doc
+- Pilot architect (microservices-architect agent) tarafından tek seferde üretildi
+- Revision round 1 ile 3 çakışma + 13 gap kapatıldı
+- Revision round 2 ile ADR 0013 (DLP off-by-default) propage edildi
+
+### Faz 0.5/0.6 — KVKK + Güvenlik + Rakip (✅ TAMAM)
+
+- KVKK compliance framework (compliance-auditor): 8 doc
+- Güvenlik runbook'ları (security-engineer): 7 runbook + security decisions
+- Rakip analizi (competitive-analyst): 8.9K kelime, Teramind/ActivTrak/Veriato/Insightful/Safetica teardown
+
+### Faz 1 — İmplementasyon (✅ BUILD CLEAN)
+
+| Bileşen | Dosya | Build | Test |
+|---|---|---|---|
+| Rust agent (cross-platform crates) | 70 | ✅ `cargo check` clean | ❌ unit tests not run |
+| Rust agent (Windows crates) | (same) | ⚠️ stub code — needs Windows | ❌ |
+| Go gateway + enricher | 51 | ✅ `go build ./...` clean | ❌ integration tests not run |
+| Go admin API | 90 | ✅ `go build ./...` clean | ❌ integration tests not run |
+| Go QA framework | 51 | ✅ `go build ./...` clean | ❌ (it IS the tests) |
+| Next.js console | 133 | ✅ `pnpm build` clean | ❌ Playwright not written |
+| Next.js portal | 62 | ✅ `pnpm build` clean | ❌ |
+| On-prem infra | 76 | ✅ `docker compose config` valid | ❌ full stack not started |
+
+**Faz 1 Exit Criteria durumu**: 18 kriterden hiçbiri doğrulanmadı. Tüm kod build edilebilir durumda ama hiçbir entegrasyon/load/security testi koşmadı. Gerçek pilot hazırlığı için:
+
+1. Full Docker Compose stack'i çalıştır, PKI bootstrap ceremony yap
+2. 500 synthetic endpoint ile load test
+3. Keystroke admin-blindness red team testi (en kritik Phase 1 exit)
+4. Pilot müşteri KVKK DPO review
+
+### Faz 1 Reality Check (2026-04-11)
+
+Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay: bu commit'in mesajına bak.
+
+### Faz 2 (Planlanan, Faz 1 pilot sonrası)
+
+- macOS + Linux agent
+- Canlı izleme WebRTC recording (ADR 0012)
+- OCR on screenshots
+- ML-based category classifier (yerel LLM — Llama 3.1 8B+)
+- UBA / insider threat detection
+- HRIS entegrasyonları (BambooHR, Workday, Personio, BordroPlus, Logo)
+- SCIM provisioning
+- Mobile admin app (React Native/Expo)
+- SIEM entegrasyonları (Splunk, Sentinel, Elastic Security)
+- Windows minifilter driver (forensic DLP)
+
+### Faz 3 (SaaS + sertifikasyon)
+
+- Multi-tenant SaaS deployment (K8s)
+- SOC 2 Type II + ISO 27001 + ISO 27701
+- GDPR genişleme (AB pazarı)
+- Sektörel benchmark (anonim havuzlu)
+- White-label / reseller portalı
+- Billing (Stripe / iyzico)
+
+---
+
+## 6. Locked Decisions
+
+7 decision locked 2026-04-11 (`docs/compliance/... + docs/architecture/*` boyunca referans):
+
+1. **Jurisdiction**: Turkey only (KVKK 6698)
+2. **Deployment**: On-prem first; Docker Compose + systemd; K8s ertelendi
+3. **Windows agent**: User-mode only Faz 1-2; minifilter Faz 3
+4. **Keystroke content**: Şifreli, admin kriptografik olarak okuyamaz, sadece DLP motoru — **ADR 0013 ile "default OFF, opt-in ceremony required"**
+5. **Live view**: HR dual-control + reason code + hash-chained audit + 15/60 dk cap + no recording Faz 1
+6. **MVP OS**: Windows only
+7. **Workflow**: Pilot architect → specialist team; revision round discipline
+
+ADR listesi: `docs/adr/0001..0013` (index: `docs/README.md`).
+
+**ADR 0013 özellikle önemli**: DLP varsayılan KAPALI. Enable etmek için:
+- DPIA amendment (customer DPO)
+- Signed opt-in form (DPO + IT Security + Legal)
+- Vault Secret ID issuance (`infra/scripts/dlp-enable.sh`)
+- Container start via `docker compose --profile dlp up -d`
+- Transparency portal banner
+- Audit checkpoint
+
+---
+
+## 7. Build & Run
+
+### Prerequisites
+
+- Go 1.22+ (tested with 1.26)
+- Rust 1.88+ via rustup (toolchain pinned in `apps/agent/rust-toolchain.toml`)
+- Node 20+ and pnpm 9+
+- Docker 25+ and Docker Compose v2
+- protoc (Protocol Buffers compiler)
+- Optional: buf (or use protoc + protoc-gen-go/protoc-gen-go-grpc)
+
+### Proto Stub Generation
+
+```bash
+# Install Go proto plugins if not already
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+
+# Generate gateway stubs
+cd /path/to/personel
+mkdir -p apps/gateway/pkg/proto/personel/v1
+protoc \
+  --proto_path=proto \
+  --go_out=apps/gateway/pkg/proto \
+  --go_opt=paths=source_relative \
+  --go-grpc_out=apps/gateway/pkg/proto \
+  --go-grpc_opt=paths=source_relative \
+  proto/personel/v1/*.proto
+```
+
+### Go Workspaces
+
+```bash
+# Gateway
+cd apps/gateway && go mod tidy && go build ./...
+
+# Admin API
+cd apps/api && go mod tidy && go build ./...
+
+# QA framework
+cd apps/qa && go mod tidy && go build ./...
+```
+
+### Rust Agent
+
+```bash
+cd apps/agent
+# Cross-platform crates (macOS/Linux dev)
+cargo check -p personel-core -p personel-crypto -p personel-queue -p personel-policy
+
+# Full Windows build (requires Windows + MSVC)
+cargo build --release
+```
+
+### Next.js Apps
+
+```bash
+# Admin console
+cd apps/console
+pnpm install
+pnpm dev   # → http://localhost:3000 (with default locale redirect /tr)
+# or
+pnpm build && pnpm start
+
+# Transparency portal
+cd apps/portal
+pnpm install
+pnpm dev   # → http://localhost:3001
+```
+
+### Full Stack (Docker Compose)
+
+```bash
+cd infra/compose
+cp .env.example .env
+# Edit .env — fill all CHANGEME values
+
+# Validate
+docker compose config
+
+# Start (requires application images to be built first)
+sudo infra/install.sh   # idempotent, runs preflight, Vault unseal ceremony, migrations, smoke test
+```
+
+⚠️ **install.sh is not tested end-to-end yet.** First real run will likely hit several issues — see "Known Issues" below.
+
+---
+
+## 8. Testing
+
+### Unit & Integration
+
+```bash
+# Go integration tests (requires testcontainers-go to pull Docker images)
+cd apps/api && go test -tags integration ./test/integration/...
+
+# QA framework smoke
+cd apps/qa && go test ./...
+```
+
+### End-to-End (planned, not yet runnable against live stack)
+
+```bash
+cd apps/qa
+./ci/scripts/run-e2e.sh
+./ci/scripts/run-load-500.sh
+./ci/scripts/run-security-suite.sh
+./ci/scripts/generate-phase1-exit-report.sh
+```
+
+### Phase 1 Exit Criteria (18 items)
+
+Machine-readable: `apps/qa/ci/thresholds.yaml`. Highlights:
+- <2% CPU, <150MB RAM on endpoint (Windows footprint bench)
+- p95 dashboard query <1s
+- 99.5% uptime over 30 days
+- 500 endpoint pilot stable
+- **#9 (BLOCKING)**: Keystroke admin-blindness red team must pass — admin cannot decrypt keystroke content via any API/role
+- **#17**: ClickHouse replication staging rig validated
+- **#18**: DLP opt-in ceremony end-to-end in <1 hour
+
+---
+
+## 9. Agent Team Workflow
+
+Bu proje **multi-agent Claude Code workflow** ile inşa edildi. Önemli ders: her agent'ın brief'i yeterince detaylı ve context-rich olmalı. Kısa prompt'lar halüsinasyona yol açar.
+
+### Kullanılan uzman agentlar
+
+| Sprint | Agent | Sorumluluk |
+|---|---|---|
+| Faz 0 Pilot | `microservices-architect` | Mimari omurga — single source of truth |
+| Faz 0 | `compliance-auditor` | KVKK 8-doc framework |
+| Faz 0 | `security-engineer` | 7 güvenlik runbook'u |
+| Faz 0 | `competitive-analyst` | UAM pazarı teardown |
+| Faz 1 | `rust-engineer` | Agent workspace (13 crate) |
+| Faz 1 | `golang-pro` | Gateway + enricher |
+| Faz 1 | `backend-developer` | Admin API |
+| Faz 1 | `nextjs-developer` | Admin console |
+| Faz 1 | `frontend-developer` | Transparency portal |
+| Faz 1 | `devops-engineer` | On-prem compose + systemd |
+| Faz 1 | `test-automator` | QA framework + simulator |
+
+### Revision rounds
+
+Agent'lar ilk turda %85-95 doğru üretir. **Revision round discipline** ile kalan %5-15 kapatılır:
+1. Tüm specialist çıktılarını oku
+2. Çakışmaları identify et (cert TTL, DLP isolation mode, recording retention vb)
+3. Gap'leri bayrakla (compliance §13, security concerns §4, proto gaps)
+4. Architect'i tek briefle "propagate this decision" moduna sok
+5. Her edit'i Edit tool ile minimal diff olarak iste
+
+### Reality Check
+
+Reality check ESAS TEST. Agent'lar `cargo build` / `pnpm build` / `go build` çalıştırmadan kod yazarsa compile-level hatalar kaçar. **Commit öncesi her stack'i gerçek makinada build et**. Bu commit'teki 36 hata buradan doğdu.
+
+### Önemli agent davranışları
+
+- **Research agent'lar** (competitive-analyst, compliance-auditor) bazen Write tool'una sahip olmaz ve içeriği inline döndürür. Parent agent bunu kaydeder. Brief yazarken bunu bekle.
+- **Reasoning agent'lar** (architect, security-engineer) invariants önerir (cryptographic, structural). Bunları ADR'a yazıp CI linter ile zorla.
+- **Hallucinated packages** sık karşılaşılan hata paterni: `@radix-ui/react-badge`, `@radix-ui/react-sheet` gibi benzer ama var olmayan paketler. Reality check yakalar.
+
+---
+
+## 10. Known Tech Debt (Faz 1 Polish Listesi)
+
+Faz 1 Reality Check sonrası kalan açık maddeler — polish sprint için:
+
+### Compliance & Legal
+
+- [ ] `docs/compliance/dlp-opt-in-form.md` — ADR 0013'ün referans ettiği imzalı form template'i, compliance-auditor tarafından yazılmalı
+- [ ] **Postgres audit trigger bypass riski**: DBA superuser `ALTER TABLE ... DISABLE TRIGGER` yapabilir. Sekonder WORM sink (OpenSearch write-once index veya S3 Object Lock) pilot öncesi gerekli. (devops-engineer bayrakladı, architect henüz ele almadı)
+- [ ] Schema ownership dokümantasyonu: API migration 0001 `init.sql` baseline varsayıyor mu yoksa idempotent mi oluşturuyor? README netleştirmesi.
+
+### Backend (Admin API)
+
+- [ ] Eksik endpoint: `GET /v1/system/dlp-state` — ADR 0013 için portal/console tarafından talep ediliyor
+- [ ] Eksik endpoint: `POST /v1/me/acknowledge-notification` — transparency portal first-login modal audit entry için
+- [ ] Eksik endpoint: `GET /v1/me/dsr/{id}` — portal şu an list+filter workaround'u yapıyor
+- [ ] `GET /v1/policy/:id/preview` — ADR 0013 için SensitivityGuard editor preview
+- [ ] DLP bootstrap endpoint: `POST /v1/system/dlp-bootstrap-keys` — ADR 0013 amendment A2
+
+### Infra
+
+- [ ] `infra/scripts/dlp-enable.sh` — ADR 0013 opt-in ceremony script (write, rollback semantics per A3)
+- [ ] `infra/scripts/dlp-disable.sh` — ADR 0013 opt-out (A4: don't destroy ciphertext, let TTL age out)
+- [ ] `infra/compose/docker-compose.yaml`: DLP service'e `profiles: [dlp]` ekle
+- [ ] `infra/install.sh`: Vault AppRole oluşturulur ama Secret ID issue edilmez (A2)
+- [ ] NATS JetStream at-rest encryption baseline doğrulama (security-engineer open concern #6)
+- [ ] Reproducible build pipeline for Rust agent on Windows
+- [ ] Vault Enterprise budget kararı (HSM unseal gerekirse)
+
+### QA
+
+- [ ] Phase 1 exit criterion #17 test: ClickHouse replication staging rig end-to-end
+- [ ] Phase 1 exit criterion #18 test: DLP opt-in ceremony end-to-end (yeni, ADR 0013)
+- [ ] `apps/qa/test/e2e/dlp_opt_in_test.go` — yeni test dosyası
+- [ ] Keystroke admin-blindness red team testinin gerçek stack ile koşturulması
+
+### UI Polish
+
+- [ ] Portal `/public/fonts/inter-var.woff2` self-hosted font dosyası commit edilmemiş (frontend-developer bayrakladı)
+- [ ] `exactOptionalPropertyTypes: true` geri alınması ve tüm call-site'ların düzgün düzeltilmesi (reality check'te `false` yapıldı — pragmatik tech debt)
+- [ ] Next.js `typedRoutes` geri alınması ve typed route helpers yazılması
+- [ ] Inter font self-host, portal `globals.css` placeholder düzelt
+- [ ] `next-intl` ve `next` güvenlik patch güncelleme (CVE-2025-66478)
+
+### Rust Agent
+
+- [ ] `missing_docs` lint'in `deny`'e geri alınması ve her pub field'a doc eklenmesi
+- [ ] Windows personel-os crate'lerinin gerçek Windows CI runner'da build testi
+- [ ] ETW collectors gerçek implementation (şu an stub)
+- [ ] DXGI screen capture gerçek implementation
+- [ ] WFP user-mode network flow monitoring gerçek implementation
+- [ ] Phase 2: macOS/Linux stub implementations → real
+- [ ] Policy engine: ADR 0013 `dlp_enabled=false AND keystroke.content_enabled=true` invariant'ı runtime ve sign-time reject
+
+### Cross-stack
+
+- [ ] ADR 0013 A1-A5 amendment item'larının tam implementasyonu (PE-DEK bootstrap, rollback, rules enforcement)
+- [ ] Compliance docs ile architecture docs arasında kalan küçük tutarsızlıkların taranması
+- [ ] Secret rotation otomasyonu (GPG backup key, signing keys)
+
+---
+
+## 11. Hukuki Bağlam — KVKK
+
+Personel'in her mühendislik kararı KVKK bağlamıyla entegre tasarlanmıştır. Yeni kod yazarken bu dokümanları mutlaka oku:
+
+| Konu | Doküman |
+|---|---|
+| **Ana çerçeve** | `docs/compliance/kvkk-framework.md` (15 bölüm, TR) |
+| **Çalışan aydınlatma metni** | `docs/compliance/aydinlatma-metni-template.md` |
+| **Açık rıza (sınırlı kullanım)** | `docs/compliance/acik-riza-metni-template.md` |
+| **DPIA şablonu** | `docs/compliance/dpia-sablonu.md` |
+| **VERBİS kayıt rehberi** | `docs/compliance/verbis-kayit-rehberi.md` |
+| **Saklama ve imha politikası** | `docs/compliance/iltica-silme-politikasi.md` |
+| **Hukuki risk register** | `docs/compliance/hukuki-riskler-ve-azaltimlar.md` (13 risk) |
+| **Bilgilendirme akışı** | `docs/compliance/calisan-bilgilendirme-akisi.md` (state machine) |
+
+### Kritik kurallar (kod yazarken her zaman geçerli)
+
+1. **Hiçbir endpoint ham klavye içeriği döndüremez** — `apps/api/` CI linter bu kuralı zorlamalı
+2. **Her admin mutasyonu audit log'a yazılmalı** — `internal/audit/recorder.go` zorunlu middleware
+3. **Screen capture özel nitelikli veri filtrelerini respect etmeli** — `screenshot_exclude_apps` policy (Gap 1)
+4. **DLP varsayılan KAPALI** — enable sadece `infra/scripts/dlp-enable.sh` ile, UI'dan bypass yok (ADR 0013)
+5. **Live view dual-control enforced** — hem API hem UI tarafında `approver ≠ requester` check
+6. **Hash-chain audit append-only** — app role `INSERT + SELECT` only; `UPDATE/DELETE` revoke edilmeli
+
+---
+
+## 12. İlk Kez Bu Repo'ya Giriyor musun?
+
+İş önceliğine göre önerilen okuma sırası:
+
+### Ürün / Strateji / Karar verme
+1. Bu dosya (`CLAUDE.md`)
+2. `docs/product/competitive-analysis.md`
+3. `docs/architecture/overview.md` (Turkish exec summary)
+4. `docs/adr/0013-dlp-disabled-by-default.md` (en güncel kritik karar)
+
+### Backend geliştirme
+1. Bu dosya
+2. `docs/architecture/c4-container.md`
+3. `docs/architecture/bounded-contexts.md`
+4. `docs/architecture/event-taxonomy.md`
+5. `apps/api/api/openapi.yaml` (API contract)
+6. `proto/personel/v1/*.proto`
+
+### Frontend geliştirme
+1. Bu dosya
+2. `apps/api/api/openapi.yaml` (contract)
+3. `apps/console/messages/tr.json` (localization model)
+4. `docs/compliance/calisan-bilgilendirme-akisi.md` (UI akış state machine)
+
+### Güvenlik / Compliance
+1. Bu dosya
+2. `docs/compliance/kvkk-framework.md`
+3. `docs/security/threat-model.md`
+4. `docs/security/runbooks/dlp-service-isolation.md`
+5. `docs/architecture/key-hierarchy.md`
+6. `docs/adr/0009-keystroke-content-encryption.md` + `0013-dlp-disabled-by-default.md`
+
+### DevOps / SRE
+1. Bu dosya
+2. `infra/runbooks/install.md`
+3. `docs/security/runbooks/pki-bootstrap.md`
+4. `docs/security/runbooks/vault-setup.md`
+5. `docs/security/runbooks/incident-response-playbook.md`
+
+### Rust agent geliştirme
+1. Bu dosya
+2. `docs/architecture/agent-module-architecture.md`
+3. `docs/architecture/key-hierarchy.md`
+4. `docs/security/anti-tamper.md`
+5. `apps/agent/Cargo.toml` + crate README'leri
+
+---
+
+## 13. Önemli Not — Gelecek Claude Oturumları İçin
+
+Bu repo'da çalışırken:
+
+1. **Her zaman önce mimari/ADR'yi oku**. Kod agent'lar için yazıldı ama kararlar insan için alındı.
+2. **Locked decisions'a dokunma** — değiştirmek yeni ADR gerektirir. 7 decision + ADR 0013 kutsaldır.
+3. **KVKK compliance'ı sonradan düşünme** — her yeni feature için ilk soru "bu KVKK m.5/m.6/m.11 açısından ne anlama geliyor?" olmalı.
+4. **Reality check'i ihmal etme** — agent çıktısı %85-95 doğru, kalan %5-15 build time'da ortaya çıkar. `go build`, `cargo check`, `pnpm build` koşmadan PR kapatma.
+5. **Tech debt listesini güncelle** — yeni borç oluşturduysan bu dosyanın §10'una ekle.
+
+---
+
+*Versiyon 1.0 — Faz 1 reality check commit'inde yazıldı. Güncelleme: her major milestone sonrası.*

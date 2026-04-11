@@ -1,0 +1,54 @@
+# =============================================================================
+# Personel Platform — Docker Compose Supervisor Service
+# Manages the full application stack via docker compose.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Docker Compose Stack
+Documentation=file:///opt/personel/infra/runbooks/install.md
+After=docker.service network-online.target
+Requires=docker.service
+PartOf=personel.target
+
+[Service]
+Type=exec
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra/compose
+
+# Environment file contains all service configuration
+EnvironmentFile=/opt/personel/infra/compose/.env
+
+# Exec: start the full stack
+ExecStartPre=/usr/bin/docker compose pull --quiet
+ExecStartPre=/usr/bin/docker compose config --quiet
+ExecStart=/usr/bin/docker compose up \
+    --no-build \
+    --remove-orphans \
+    --timeout 120
+
+ExecStop=/usr/bin/docker compose down \
+    --remove-orphans \
+    --timeout 60
+
+ExecReload=/usr/bin/docker compose up -d \
+    --no-build \
+    --remove-orphans
+
+# Restart policy: restart on failure, but not on deliberate stop
+Restart=on-failure
+RestartSec=30
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+TimeoutStartSec=600
+TimeoutStopSec=120
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-compose
+
+[Install]
+WantedBy=personel.target

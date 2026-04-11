@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS tenant_settings;
+DROP TABLE IF EXISTS tenants;

@@ -1,0 +1,207 @@
+syntax = "proto3";
+
+package personel.v1;
+
+import "personel/v1/common.proto";
+
+option go_package = "github.com/personel/proto/personel/v1;personelv1";
+
+// A PolicyBundle is pushed to an agent as a signed, versioned blob.
+// Agents validate the bundle signature before applying.
+message PolicyBundle {
+  string version = 1;                  // monotonic string, server-assigned
+  TenantId tenant_id = 2;
+  EndpointId endpoint_id = 3;          // target endpoint
+
+  CollectorFlags collectors = 10;
+  ScreenshotSettings screenshot = 11;
+  ScreenClipSettings screen_clip = 12;
+  KeystrokeSettings keystroke = 13;
+  ClipboardSettings clipboard = 14;
+
+  AppBlocklist app_blocklist = 20;
+  UrlBlocklist url_blocklist = 21;
+  UsbRules usb_rules = 22;
+
+  IdleSettings idle = 30;
+  QueueSettings queue = 31;
+  UpdateSettings update = 32;
+
+  // KVKK m.6 sensitivity guardrails (Gap 1 — compliance-auditor).
+  // See docs/architecture/data-retention-matrix.md "Sensitive-Flagged TTL".
+  SensitivityGuard sensitivity = 40;
+
+  // ADR 0013 — DLP disabled by default in Phase 1.
+  //
+  // Defaults to FALSE on every new installation. Flipped to TRUE only by
+  // infra/scripts/dlp-enable.sh after the customer completes the opt-in
+  // ceremony (DPIA amendment -> signed form -> Vault Secret ID issuance ->
+  // container start -> transparency banner -> audit checkpoint).
+  //
+  // Agent behavior when dlp_enabled == false:
+  //   - KeystrokeSettings.content_enabled MUST also be false in the same
+  //     bundle; the policy signer rejects bundles where dlp_enabled=false and
+  //     keystroke.content_enabled=true as structurally invalid.
+  //   - Keystroke counts (KeystrokeWindowStats) are still collected.
+  //   - Clipboard content encryption, screenshot capture, and every other
+  //     collector are unaffected.
+  //   - No PE-DEK exists on this endpoint; any pre-existing PE-DEK is zeroized
+  //     on next policy apply.
+  //
+  // Agent behavior when dlp_enabled == true:
+  //   - Agent expects the server (via the rekey flow on the existing bi-di
+  //     stream) to deliver a PE-DEK sealed to its enrollment public key before
+  //     any keystroke content event is emitted.
+  //   - Agent honors KeystrokeSettings.content_enabled which the opt-in script
+  //     also flips to true.
+  //
+  // This field is the WIRE-LEVEL source of truth consumed by the agent. The
+  // Admin Console badge, the Transparency Portal banner, and the state
+  // endpoint GET /api/v1/system/dlp-state are the OPERATIONAL sources of
+  // truth for humans and UIs; they MUST agree with the active policy bundle's
+  // dlp_enabled value at all times. Drift is detected by a Prometheus rule
+  // dlp_state_mismatch.
+  bool dlp_enabled = 50;
+}
+
+// Guardrails that detect potentially özel-nitelikli content and redirect it
+// to a separate retention bucket with a shorter TTL. These are cross-collector
+// hints; the agent and ingest layer both honor them.
+message SensitivityGuard {
+  // Regexes applied to window titles; a match tags the event with
+  // `sensitive=true` which routes it to the sensitive-flagged bucket with a
+  // shortened TTL and a separate MinIO prefix.
+  repeated string window_title_sensitive_regex = 1;
+
+  // Explicit shortened retention for sensitive-flagged records, in days.
+  // 0 = use the default sensitive-flag TTL per category (see retention matrix).
+  // Must be strictly less than the normal TTL for the same event type.
+  uint32 sensitive_retention_days_override = 2;
+
+  // Hostname globs whose navigation automatically marks foreground events
+  // as sensitive (e.g. "*.saglik.gov.tr", union sites).
+  repeated string sensitive_host_globs = 3;
+
+  // If true, any DLP rule match whose rule id carries the `kvkk_m6:` prefix
+  // automatically routes the source events to the sensitive-flagged bucket.
+  bool auto_flag_on_m6_dlp_match = 4;
+}
+
+message CollectorFlags {
+  bool process = 1;
+  bool window_focus = 2;
+  bool file = 3;
+  bool network = 4;
+  bool dns = 5;
+  bool usb = 6;
+  bool clipboard_meta = 7;
+  bool clipboard_content = 8;
+  bool keystroke_meta = 9;
+  bool keystroke_content = 10;
+  bool print = 11;
+  bool screenshot = 12;
+  bool screen_clip = 13;
+}
+
+message ScreenshotSettings {
+  uint32 interval_seconds = 1;       // 0 = disabled
+  bool on_foreground_change = 2;
+  uint32 max_width = 3;
+  uint32 max_height = 4;
+  uint32 quality_percent = 5;        // WebP quality
+  bool blur_when_off_hours = 6;
+  repeated string blur_exe_names = 7;
+  repeated string blur_host_patterns = 8;
+
+  // KVKK m.6 guard — processes whose foreground state SUPPRESSES screenshot
+  // capture entirely (e.g. company medical portal, union site browsers,
+  // password managers). Glob syntax, matched against full exe path lower-cased.
+  // Added during Phase 0 revision round (Gap 1 — compliance-auditor).
+  repeated string exclude_apps = 9;
+}
+
+message ScreenClipSettings {
+  bool enabled = 1;
+  uint32 max_duration_seconds = 2;
+  uint32 fps = 3;
+}
+
+message KeystrokeSettings {
+  bool meta_enabled = 1;
+  bool content_enabled = 2;      // if false, PE-DEK is still present but unused
+  uint32 flush_interval_seconds = 3;
+  uint32 max_buffer_bytes = 4;
+  repeated string exclude_exe_names = 5; // e.g., password managers
+}
+
+message ClipboardSettings {
+  bool meta_enabled = 1;
+  bool content_enabled = 2;
+  uint32 max_content_bytes = 3;
+}
+
+message AppBlocklist {
+  repeated AppRule rules = 1;
+}
+
+message AppRule {
+  string rule_id = 1;
+  string exe_name_glob = 2;     // e.g. "tor.exe", "*.game"
+  string image_sha256_hex = 3;  // optional
+  string signer = 4;            // optional publisher name
+  Action action = 5;
+  string message = 6;           // shown to user on block (optional)
+}
+
+message UrlBlocklist {
+  repeated UrlRule rules = 1;
+}
+
+message UrlRule {
+  string rule_id = 1;
+  string host_glob = 2;         // "*.torrent-site.example"
+  string category = 3;
+  Action action = 4;
+}
+
+message UsbRules {
+  UsbDefault default_action = 1;
+  repeated UsbException exceptions = 2;
+}
+
+enum UsbDefault {
+  USB_DEFAULT_UNSPECIFIED = 0;
+  USB_DEFAULT_ALLOW = 1;
+  USB_DEFAULT_READ_ONLY = 2;
+  USB_DEFAULT_BLOCK = 3;
+}
+
+message UsbException {
+  string vid = 1;
+  string pid = 2;
+  string serial_hash_hex = 3;
+  UsbDefault action = 4;
+}
+
+enum Action {
+  ACTION_UNSPECIFIED = 0;
+  ACTION_ALLOW = 1;
+  ACTION_BLOCK = 2;
+  ACTION_WARN = 3;
+}
+
+message IdleSettings {
+  uint32 idle_threshold_seconds = 1;
+}
+
+message QueueSettings {
+  uint64 max_bytes = 1;
+  uint32 upload_batch_size = 2;
+  uint32 upload_batch_interval_ms = 3;
+}
+
+message UpdateSettings {
+  bool auto_update = 1;
+  uint32 poll_hours = 2;
+  string channel = 3;           // "stable" | "canary"
+}

@@ -1,0 +1,65 @@
+# =============================================================================
+# Personel Platform — OpenSearch Configuration
+# Single-node for Phase 1 (500 endpoints)
+# =============================================================================
+
+cluster.name: personel-search
+node.name: personel-os-1
+
+# Single-node discovery
+discovery.type: single-node
+
+# Network
+network.host: 0.0.0.0
+http.port: 9200
+
+# Data paths
+path.data: /usr/share/opensearch/data
+path.logs: /var/log/opensearch
+
+# Memory locking (prevent swapping of heap)
+bootstrap.memory_lock: true
+
+# ---------------------------------------------------------------------------
+# TLS / Security
+# ---------------------------------------------------------------------------
+plugins.security.ssl.transport.pemcert_filepath: /etc/personel/tls/opensearch.crt
+plugins.security.ssl.transport.pemkey_filepath: /etc/personel/tls/opensearch.key
+plugins.security.ssl.transport.pemtrustedcas_filepath: /etc/personel/tls/tenant_ca.crt
+plugins.security.ssl.transport.enforce_hostname_verification: false
+plugins.security.ssl.http.enabled: true
+plugins.security.ssl.http.pemcert_filepath: /etc/personel/tls/opensearch.crt
+plugins.security.ssl.http.pemkey_filepath: /etc/personel/tls/opensearch.key
+plugins.security.ssl.http.pemtrustedcas_filepath: /etc/personel/tls/tenant_ca.crt
+
+# Disable demo config (production mode)
+plugins.security.allow_default_init_securityindex: true
+plugins.security.audit.type: internal_opensearch
+plugins.security.enable_snapshot_restore_privilege: true
+plugins.security.check_snapshot_restore_write_privileges: true
+plugins.security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
+
+# Disable unsafe features
+plugins.security.allow_unsafe_democertificates: false
+
+# ---------------------------------------------------------------------------
+# Performance
+# ---------------------------------------------------------------------------
+# Thread pools
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+# Shard settings (single-node)
+cluster.routing.allocation.disk.threshold_enabled: true
+cluster.routing.allocation.disk.watermark.low: "85%"
+cluster.routing.allocation.disk.watermark.high: "90%"
+cluster.routing.allocation.disk.watermark.flood_stage: "95%"
+
+# Index settings defaults
+index.number_of_replicas: 0
+index.number_of_shards: 2
+
+# ---------------------------------------------------------------------------
+# Index Templates for Personel data
+# (applied by install.sh using the files in opensearch/index-templates/)
+# ---------------------------------------------------------------------------

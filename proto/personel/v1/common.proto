@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package personel.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/personel/proto/personel/v1;personelv1";
+
+// Shared identifier types. All IDs are UUIDv4 byte-encoded (16 bytes) unless
+// stated otherwise. Strings are used for external display ids only.
+message TenantId { bytes value = 1; }
+message EndpointId { bytes value = 1; }
+message UserId { bytes value = 1; }
+message SessionId { bytes value = 1; }
+message PolicyId { bytes value = 1; }
+message EventId { bytes value = 1; } // ULID, 16 bytes
+
+// User SID (Windows) in S-1-5-... canonical string form.
+message WindowsUserSid { string value = 1; }
+
+// Semantic version of the agent.
+message AgentVersion {
+  uint32 major = 1;
+  uint32 minor = 2;
+  uint32 patch = 3;
+  string build = 4; // optional build tag
+}
+
+// Hardware fingerprint used at enrollment. Opaque to the server; server only
+// persists and compares for replay detection.
+message HardwareFingerprint {
+  bytes blob = 1; // 32 bytes; derivation defined in agent docs
+}
+
+// PII classification per KVKK event taxonomy.
+enum PiiClass {
+  PII_CLASS_UNSPECIFIED = 0;
+  PII_CLASS_NONE = 1;
+  PII_CLASS_IDENTIFIER = 2;
+  PII_CLASS_BEHAVIORAL = 3;
+  PII_CLASS_CONTENT = 4;
+  PII_CLASS_SENSITIVE = 5;
+}
+
+// Retention class per data retention matrix.
+enum RetentionClass {
+  RETENTION_CLASS_UNSPECIFIED = 0;
+  RETENTION_CLASS_HOT = 1;
+  RETENTION_CLASS_WARM = 2;
+  RETENTION_CLASS_COLD = 3;
+  RETENTION_CLASS_PURGE = 4;
+}
+
+// Severity for alerts/health/tamper events.
+enum Severity {
+  SEVERITY_UNSPECIFIED = 0;
+  SEVERITY_INFO = 1;
+  SEVERITY_LOW = 2;
+  SEVERITY_MEDIUM = 3;
+  SEVERITY_HIGH = 4;
+  SEVERITY_CRITICAL = 5;
+}
+
+// Envelope metadata stamped on every event.
+message EventMeta {
+  EventId event_id = 1;
+  string event_type = 2;            // canonical dotted name, e.g. "process.start"
+  uint32 schema_version = 3;
+  TenantId tenant_id = 4;
+  EndpointId endpoint_id = 5;
+  WindowsUserSid user_sid = 6;
+  google.protobuf.Timestamp occurred_at = 7;
+  google.protobuf.Timestamp received_at = 8; // server-stamped
+  AgentVersion agent_version = 9;
+  uint64 seq = 10;                  // per-endpoint monotonic
+  PiiClass pii = 11;
+  RetentionClass retention = 12;
+}

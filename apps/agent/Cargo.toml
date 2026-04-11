@@ -1,0 +1,164 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/personel-agent",
+    "crates/personel-watchdog",
+    "crates/personel-core",
+    "crates/personel-proto",
+    "crates/personel-collectors",
+    "crates/personel-queue",
+    "crates/personel-transport",
+    "crates/personel-policy",
+    "crates/personel-crypto",
+    "crates/personel-updater",
+    "crates/personel-livestream",
+    "crates/personel-os",
+    "crates/personel-tests",
+]
+
+# Workspace-level deny(unsafe_code) is NOT set here because personel-os
+# requires unsafe for Win32 FFI. Each crate declares its own lint level.
+# personel-os is the ONLY crate allowed to use unsafe; all others set
+# #![deny(unsafe_code)] in their lib.rs / main.rs.
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.75"
+license = "UNLICENSED"
+authors = ["Personel Engineering <eng@personel.io>"]
+
+# ──────────────────────────────────────────────
+# Workspace dependency pins — all versions locked here; crates inherit via
+# { workspace = true }. Rationale for each significant choice is annotated.
+# ──────────────────────────────────────────────
+[workspace.dependencies]
+
+# ── Async runtime ──
+# tokio: multi-thread runtime, conservative worker count (2–4 for agent).
+# We enable only the features we need to avoid binary bloat.
+tokio          = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "fs", "net", "signal"] }
+futures        = "0.3"
+async-trait    = "0.1"
+
+# ── gRPC / proto ──
+# tonic 0.11 targets prost 0.12; stable pairing.
+tonic          = { version = "0.11", features = ["tls", "tls-roots"] }
+tonic-build    = "0.11"
+prost          = "0.12"
+prost-types    = "0.12"
+
+# ── TLS — rustls only; openssl is explicitly excluded ──
+rustls         = { version = "0.22", features = ["ring"] }
+# rustls-pki-types provides CertificateDer, PrivateKeyDer etc. for 0.22 API
+rustls-pki-types = "1"
+# webpki-roots for root CA bundle (fallback when pinning is unavailable)
+webpki-roots   = "0.26"
+# rcgen for generating test certificates in integration tests
+rcgen          = { version = "0.12", optional = false }
+
+# ── Windows APIs ──
+# Official Microsoft `windows` crate — inline table form so it stays a sibling
+# dependency under [workspace.dependencies]. A [workspace.dependencies.windows]
+# header would terminate the parent section and silently reparent every
+# subsequent dep as a field of `windows`.
+windows = { version = "0.54", features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+    "Win32_System_SystemInformation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Security",
+    "Win32_Security_Cryptography",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Diagnostics_Debug",
+    "Win32_System_Diagnostics_Etw",
+    "Win32_System_Registry",
+    "Win32_System_Services",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_System_DataExchange",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Performance",
+    "Win32_System_Power",
+] }
+
+# windows-service crate wraps the SCM API for service lifecycle management.
+windows-service = "0.6"
+
+# ── Offline queue — ADR: SQLCipher via bundled-sqlcipher ──
+# Decision: rusqlite with `bundled-sqlcipher` compiles SQLCipher (SQLite +
+# AES-256-CBC page-level encryption) into the binary, eliminating a runtime
+# DLL dependency and ensuring the database is encrypted at rest without any
+# separate key management layer on top of SQLite. The DPAPI-protected key is
+# passed to SQLCipher on open via `PRAGMA key`. Alternative was sqlx with
+# SQLite WAL + agent-managed AES-GCM pages; that would require a custom VFS
+# shim with more code surface and no off-the-shelf audit. SQLCipher has a
+# well-known security audit. Static bundling avoids DLL hijacking.
+rusqlite       = { version = "0.31", features = ["bundled-sqlcipher"] }
+r2d2           = "0.8"
+r2d2_sqlite    = "0.24"
+
+# ── Crypto ──
+# aes-gcm: pure-Rust AES-256-GCM from RustCrypto; FIPS-aligned algorithm.
+aes-gcm        = "0.10"
+# x25519-dalek: X25519 DH for enrollment key sealing.
+x25519-dalek   = { version = "2", features = ["static_secrets"] }
+# hkdf + sha2: HKDF-SHA256 for key derivation per key-hierarchy.md.
+hkdf           = "0.12"
+sha2           = "0.10"
+# rand: OS-backed CSPRNG. getrandom feature for wasm compat is not needed.
+rand           = "0.8"
+# zeroize: ZeroizeOnDrop for any type holding key material.
+zeroize        = { version = "1", features = ["derive"] }
+# ed25519-dalek: Ed25519 signature verification (policy bundles, update manifests).
+ed25519-dalek  = { version = "2", features = ["rand_core"] }
+
+# ── Serialization ──
+serde          = { version = "1", features = ["derive"] }
+serde_json     = "1"
+toml           = "0.8"
+bincode        = "1"
+bytes          = { version = "1", features = ["serde"] }
+
+# ── Error handling ──
+# thiserror: library-level typed errors.
+thiserror      = "1"
+# anyhow: application-level error context (main.rs / bin only).
+anyhow         = "1"
+
+# ── Observability ──
+# tracing replaces log crate entirely. tracing-subscriber for formatted output.
+tracing        = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# ── IDs ──
+# uuid v1: UUIDv7 requires the `v7` feature. We also need `v4` for generation
+# and `serde` for serialization.
+uuid           = { version = "1", features = ["v4", "v7", "serde"] }
+
+# ── HTTP client for updater ──
+reqwest        = { version = "0.11", features = ["rustls-tls", "stream"], default-features = false }
+
+# ── Tower (middleware for tonic) ──
+tower          = { version = "0.4", features = ["timeout", "retry"] }
+
+# ── Compression ──
+flate2         = "1"
+
+# ── Time ──
+time           = { version = "0.3", features = ["serde"] }
+
+# ── Process utilities ──
+sysinfo        = "0.30"
+
+# ── Hex encoding ──
+hex            = "0.4"
+
+[profile.release]
+opt-level     = 3
+lto           = "thin"
+codegen-units = 1
+strip         = true   # no .pdb shipped per anti-tamper.md §5
+panic         = "abort" # smaller binary; no unwinding in the field
+
+[profile.dev]
+opt-level = 1  # faster incremental builds on dev machines

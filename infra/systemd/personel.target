@@ -1,0 +1,20 @@
+# =============================================================================
+# Personel Platform — Umbrella Target
+# All personel units declare: WantedBy=personel.target
+# Enable with: systemctl enable personel.target
+# Start with:  systemctl start personel.target
+# =============================================================================
+
+[Unit]
+Description=Personel Platform (all components)
+Documentation=file:///opt/personel/infra/runbooks/install.md
+After=network-online.target docker.service
+Requires=docker.service
+Wants=\
+  personel-compose.service \
+  personel-backup.timer \
+  personel-audit-verifier.timer \
+  personel-cert-renewer.timer
+
+[Install]
+WantedBy=multi-user.target

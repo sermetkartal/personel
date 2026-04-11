@@ -1,0 +1,124 @@
+# =============================================================================
+# Personel Platform — Prometheus Configuration
+# Scrapes all service /metrics endpoints.
+# =============================================================================
+
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+  external_labels:
+    installation: 'personel-on-prem'
+    tenant_id:    '${PERSONEL_TENANT_ID}'
+
+# Load alert rules
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+# Alertmanager — optional external integration
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Vault metrics (authenticated via token)
+  - job_name: vault
+    scheme: https
+    tls_config:
+      ca_file: /etc/personel/tls/tenant_ca.crt
+      insecure_skip_verify: false
+    metrics_path: /v1/sys/metrics
+    params:
+      format: ['prometheus']
+    bearer_token_file: /etc/prometheus/vault-metrics-token
+    static_configs:
+      - targets: ['vault:8200']
+
+  # PostgreSQL exporter (sidecar)
+  - job_name: postgres
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # ClickHouse built-in Prometheus endpoint
+  - job_name: clickhouse
+    static_configs:
+      - targets: ['clickhouse:9363']
+
+  # NATS JetStream monitoring
+  - job_name: nats
+    static_configs:
+      - targets: ['nats:8222']
+    metrics_path: /metrics
+
+  # MinIO metrics
+  - job_name: minio
+    static_configs:
+      - targets: ['minio:9000']
+    metrics_path: /minio/v2/metrics/cluster
+    bearer_token: CHANGEME_MINIO_METRICS_TOKEN
+
+  # OpenSearch metrics via exporter
+  - job_name: opensearch
+    static_configs:
+      - targets: ['opensearch:9200']
+    metrics_path: /_prometheus/metrics
+    scheme: https
+    tls_config:
+      ca_file: /etc/personel/tls/tenant_ca.crt
+    basic_auth:
+      username: admin
+      password_file: /etc/prometheus/opensearch-password
+
+  # Keycloak metrics
+  - job_name: keycloak
+    static_configs:
+      - targets: ['keycloak:8080']
+    metrics_path: /metrics
+
+  # Gateway service metrics
+  - job_name: gateway
+    static_configs:
+      - targets: ['gateway:9090']
+    labels:
+      service: gateway
+
+  # Admin API metrics
+  - job_name: api
+    static_configs:
+      - targets: ['api:9091']
+    labels:
+      service: api
+
+  # DLP service metrics
+  - job_name: dlp
+    static_configs:
+      - targets: ['dlp:9092']
+    labels:
+      service: dlp
+
+  # Enricher metrics
+  - job_name: enricher
+    static_configs:
+      - targets: ['enricher:9093']
+    labels:
+      service: enricher
+
+  # Node exporter (host OS metrics — installed on the host, not in Docker)
+  - job_name: node
+    static_configs:
+      - targets: ['172.17.0.1:9100']
+    labels:
+      service: host
+
+  # Grafana metrics
+  - job_name: grafana
+    static_configs:
+      - targets: ['grafana:3000']
+    metrics_path: /metrics

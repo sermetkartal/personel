@@ -1,0 +1,102 @@
+syntax = "proto3";
+
+package personel.v1;
+
+import "google/protobuf/timestamp.proto";
+import "personel/v1/common.proto";
+
+option go_package = "github.com/personel/proto/personel/v1;personelv1";
+
+// Live view control messages. These travel:
+//  - Admin API <-> Admin Console over HTTPS (not specified here; JSON/gRPC)
+//  - Admin API -> Gateway -> Agent over the existing bi-di stream wrapped in ServerMessage
+//  - Agent -> Gateway over AgentMessage.LiveViewAgentEvent
+
+// ------------------- State machine -------------------
+
+enum LiveViewState {
+  LIVE_VIEW_STATE_UNSPECIFIED = 0;
+  LIVE_VIEW_STATE_REQUESTED = 1;
+  LIVE_VIEW_STATE_APPROVED = 2;
+  LIVE_VIEW_STATE_ACTIVE = 3;
+  LIVE_VIEW_STATE_ENDED = 4;
+  LIVE_VIEW_STATE_DENIED = 5;
+  LIVE_VIEW_STATE_EXPIRED = 6;
+  LIVE_VIEW_STATE_FAILED = 7;
+  LIVE_VIEW_STATE_TERMINATED_BY_HR = 8;
+  LIVE_VIEW_STATE_TERMINATED_BY_DPO = 9;
+}
+
+// ------------------- API surface (HTTP/JSON mapped; also usable as gRPC) -------------------
+
+message LiveViewRequest {
+  SessionId request_id = 1;
+  TenantId tenant_id = 2;
+  EndpointId target_endpoint = 3;
+  UserId requested_by = 4;
+  string reason_code = 5;         // ticket id; must be non-empty
+  string justification = 6;
+  uint32 requested_duration_seconds = 7; // <= max (default 900, hard cap 3600)
+  google.protobuf.Timestamp created_at = 8;
+  LiveViewState state = 9;
+}
+
+message LiveViewApproval {
+  SessionId request_id = 1;
+  UserId approver = 2;            // must have HR role; must != requested_by
+  bool approved = 3;
+  string notes = 4;
+  google.protobuf.Timestamp decided_at = 5;
+}
+
+// ------------------- Server->Agent control -------------------
+
+message LiveViewStart {
+  SessionId session_id = 1;
+  string livekit_url = 2;
+  string livekit_room = 3;
+  string agent_token = 4;         // short-lived; publish-only
+  google.protobuf.Timestamp not_after = 5;
+  bytes control_signature = 6;    // signed by policy/control signing key
+  string signing_key_id = 7;
+  string reason_code = 8;
+}
+
+message LiveViewStop {
+  SessionId session_id = 1;
+  string reason = 2;              // "admin_end" | "timeout" | "hr_terminate" | "dpo_terminate"
+  bytes control_signature = 3;
+  string signing_key_id = 4;
+}
+
+// ------------------- Agent->Server events -------------------
+
+message LiveViewAgentEvent {
+  SessionId session_id = 1;
+  LiveViewAgentStatus status = 2;
+  string detail = 3;
+  google.protobuf.Timestamp at = 4;
+}
+
+enum LiveViewAgentStatus {
+  LIVE_VIEW_AGENT_STATUS_UNSPECIFIED = 0;
+  LIVE_VIEW_AGENT_STATUS_ACCEPTED = 1;
+  LIVE_VIEW_AGENT_STATUS_JOINED = 2;
+  LIVE_VIEW_AGENT_STATUS_PUBLISHING = 3;
+  LIVE_VIEW_AGENT_STATUS_DECLINED = 4;
+  LIVE_VIEW_AGENT_STATUS_ENDED = 5;
+  LIVE_VIEW_AGENT_STATUS_ERROR = 6;
+}
+
+// ------------------- Audit -------------------
+
+message LiveViewAuditEntry {
+  SessionId session_id = 1;
+  TenantId tenant_id = 2;
+  string entry_type = 3;          // "requested" | "approved" | "denied" | "started" | "stopped" | "terminated"
+  UserId actor = 4;
+  bytes prev_hash = 5;
+  bytes payload_hash = 6;
+  bytes this_hash = 7;
+  google.protobuf.Timestamp at = 8;
+}

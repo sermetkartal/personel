@@ -1,0 +1,278 @@
+syntax = "proto3";
+
+package personel.v1;
+
+import "google/protobuf/timestamp.proto";
+import "personel/v1/common.proto";
+
+option go_package = "github.com/personel/proto/personel/v1;personelv1";
+
+// Top-level Event wrapper. Carries metadata + one specific payload.
+message Event {
+  EventMeta meta = 1;
+
+  oneof payload {
+    ProcessStart process_start = 10;
+    ProcessStop process_stop = 11;
+    ProcessForegroundChange process_foreground_change = 12;
+    WindowTitleChanged window_title_changed = 13;
+    SessionIdleStart session_idle_start = 14;
+    SessionIdleEnd session_idle_end = 15;
+    ScreenshotCaptured screenshot_captured = 16;
+    FileCreated file_created = 17;
+    FileWritten file_written = 18;
+    FileDeleted file_deleted = 19;
+    FileRenamed file_renamed = 20;
+    ClipboardMetadata clipboard_metadata = 21;
+    UsbDeviceAttached usb_device_attached = 22;
+    UsbDeviceRemoved usb_device_removed = 23;
+    NetworkFlowSummary network_flow_summary = 24;
+    KeystrokeWindowStats keystroke_window_stats = 25;
+    KeystrokeContentEncrypted keystroke_content_encrypted = 26;
+    AppBlockedByPolicy app_blocked_by_policy = 27;
+    WebBlockedByPolicy web_blocked_by_policy = 28;
+    AgentHealthHeartbeat agent_health_heartbeat = 29;
+    AgentTamperDetected agent_tamper_detected = 30;
+    LiveViewStarted live_view_started = 31;
+    LiveViewStopped live_view_stopped = 32;
+    PrintJobSubmitted print_job_submitted = 33;
+    SessionLock session_lock = 34;
+    SessionUnlock session_unlock = 35;
+    WindowFocusLost window_focus_lost = 36;
+    FileRead file_read = 37;
+    FileCopied file_copied = 38;
+  }
+}
+
+// ------------------- Payload messages -------------------
+
+message ProcessStart {
+  uint32 pid = 1;
+  uint32 parent_pid = 2;
+  string image_path = 3;
+  bytes image_sha256 = 4;
+  bytes command_line_hash = 5;  // SHA-256 of command line
+  string signer = 6;
+  string integrity_level = 7;
+}
+
+message ProcessStop {
+  uint32 pid = 1;
+  int32 exit_code = 2;
+  uint64 cpu_ms = 3;
+  uint64 working_set_peak_bytes = 4;
+}
+
+message ProcessForegroundChange {
+  uint32 pid_new = 1;
+  uint32 pid_prev = 2;
+  string exe_new = 3;
+  string exe_prev = 4;
+  uint64 prev_foreground_ms = 5;
+}
+
+message WindowTitleChanged {
+  uint32 pid = 1;
+  uint64 hwnd = 2;
+  string title = 3;
+  string exe_name = 4;
+  uint64 duration_ms_in_previous = 5;
+}
+
+message SessionIdleStart {
+  uint32 idle_threshold_sec = 1;
+}
+
+message SessionIdleEnd {
+  uint64 idle_duration_ms = 1;
+}
+
+message ScreenshotCaptured {
+  string blob_ref = 1;          // minio://...
+  uint32 width = 2;
+  uint32 height = 3;
+  uint32 monitor_index = 4;
+  string foreground_exe = 5;
+  string capture_reason = 6;    // "interval" | "event" | "on_demand"
+  bool blur_applied = 7;
+  bytes sha256 = 8;
+  uint32 bytes_size = 9;
+}
+
+message FileCreated {
+  string path = 1;
+  uint32 pid = 2;
+  bool is_removable_target = 3;
+}
+
+message FileWritten {
+  string path = 1;
+  uint32 pid = 2;
+  uint64 bytes_delta = 3;
+  bytes sha256_after = 4;
+  bool is_removable_target = 5;
+}
+
+message FileDeleted {
+  string path = 1;
+  uint32 pid = 2;
+  bool is_removable_target = 3;
+}
+
+message FileRenamed {
+  string path_from = 1;
+  string path_to = 2;
+  uint32 pid = 3;
+}
+
+message ClipboardMetadata {
+  uint32 source_pid = 1;
+  string source_exe = 2;
+  uint32 content_bytes = 3;
+  string content_kind = 4;  // "text" | "image" | "files" | "other"
+  bool encrypted_content_available = 5;
+  string content_blob_ref = 6;
+}
+
+message UsbDeviceAttached {
+  string vid = 1;
+  string pid = 2;
+  bytes serial_hash = 3;
+  string device_class = 4;
+  string vendor_name = 5;
+}
+
+message UsbDeviceRemoved {
+  string vid = 1;
+  string pid = 2;
+  bytes serial_hash = 3;
+}
+
+message NetworkFlowSummary {
+  uint32 pid = 1;
+  string exe_name = 2;
+  string dest_ip = 3;
+  uint32 dest_port = 4;
+  string protocol = 5;
+  uint64 bytes_out = 6;
+  uint64 bytes_in = 7;
+  google.protobuf.Timestamp flow_start = 8;
+  google.protobuf.Timestamp flow_end = 9;
+}
+
+message KeystrokeWindowStats {
+  uint64 hwnd = 1;
+  string exe_name = 2;
+  uint32 keystroke_count = 3;
+  uint32 backspace_count = 4;
+  uint32 paste_count = 5;
+  uint64 window_duration_ms = 6;
+}
+
+// Keystroke content is transmitted as reference + metadata only. The ciphertext
+// blob itself is uploaded to MinIO by the agent via a separate signed PUT.
+message KeystrokeContentEncrypted {
+  uint64 hwnd = 1;
+  string exe_name = 2;
+  string ciphertext_ref = 3;    // minio://keystroke-blobs/...
+  string dek_wrap_ref = 4;      // vault://transit/keys/... version tag
+  bytes nonce = 5;              // GCM nonce
+  bytes aad = 6;                // canonical aad
+  uint32 byte_len = 7;
+  uint32 key_version = 8;
+}
+
+message AppBlockedByPolicy {
+  string exe_name = 1;
+  string rule_id = 2;
+  string reason = 3;
+}
+
+message WebBlockedByPolicy {
+  string host = 1;
+  string rule_id = 2;
+  string browser_exe = 3;
+}
+
+message AgentHealthHeartbeat {
+  double cpu_percent = 1;
+  uint64 rss_bytes = 2;
+  uint64 queue_depth = 3;
+  uint64 blob_queue_depth = 4;
+  uint64 drops_since_last = 5;
+  string policy_version = 6;
+}
+
+message AgentTamperDetected {
+  string check_name = 1;
+  Severity severity = 2;
+  bytes details_hash = 3;
+}
+
+message LiveViewStarted {
+  SessionId session_id = 1;
+  UserId requested_by = 2;
+  UserId approved_by = 3;
+  string reason_code = 4;
+  string livekit_room = 5;
+  bytes audit_chain_head = 6;
+  // Phase 2 recording fields. Reserved; MUST remain empty in Phase 1.
+  // See ADR 0012 and live-view-protocol.md §Phase 2 Recording.
+  string recording_blob_ref = 7;
+  string lvmk_wrap_ref = 8;
+  uint32 lvmk_version = 9;
+}
+
+message LiveViewStopped {
+  SessionId session_id = 1;
+  string end_reason = 2; // "admin_end" | "timeout" | "hr_terminate" | "dpo_terminate" | "network_drop"
+}
+
+message PrintJobSubmitted {
+  string printer_name = 1;
+  string document_name = 2;
+  uint32 page_count = 3;
+  uint64 byte_size = 4;
+  uint32 pid = 5;
+  string user = 6;
+}
+
+// ------------------- Added during Phase 0 revision round -------------------
+// These complete the event taxonomy gaps flagged by rust-engineer.
+
+message SessionLock {
+  WindowsUserSid user_sid = 1;
+  string lock_reason = 2; // "user" | "idle_timeout" | "remote" | "rdp_disconnect"
+}
+
+message SessionUnlock {
+  WindowsUserSid user_sid = 1;
+  uint64 locked_duration_ms = 2;
+}
+
+// Emitted when the previously-foreground window loses focus. Carries a back-
+// reference so consumers can stitch together (WindowTitleChanged -> focus duration).
+message WindowFocusLost {
+  uint64 hwnd_prev = 1;
+  uint32 pid_prev = 2;
+  string exe_prev = 3;
+  uint64 focused_duration_ms = 4;
+  EventId previous_window_title_event_id = 5; // backref to the WindowTitleChanged for this focus stretch
+}
+
+message FileRead {
+  string path = 1;
+  uint32 process_pid = 2;
+  uint64 size_bytes = 3;
+  uint64 offset = 4;
+  bool is_removable_source = 5;
+}
+
+message FileCopied {
+  string source_path = 1;
+  string destination_path = 2;
+  uint64 size_bytes = 3;
+  uint32 pid = 4;
+  bool destination_is_removable = 5;
+  bool cross_volume = 6;
+}

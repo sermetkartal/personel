@@ -1,0 +1,74 @@
+name: personel
+
+# =============================================================================
+# Customer-Specific Overrides Template
+# =============================================================================
+# TR: Bu dosyayı müşteriye özgü yapılandırmalar için kullanın.
+#     Değişiklikleri yalnızca burada yapın — docker-compose.yaml dosyasına
+#     dokunmayın. Bu dosya compose tarafından otomatik olarak yüklenir.
+# EN: Use this file for customer-specific configuration.
+#     Make changes only here — do not edit docker-compose.yaml.
+#     This file is automatically merged by docker compose.
+#
+# Examples below are commented out. Uncomment and edit as needed.
+# =============================================================================
+
+services: {}
+# NOTE: The empty mapping above is a placeholder. When you uncomment any of the
+# examples below, remove the `{}` and indent the service key as a child of
+# `services:`. Leaving `services:` as `null` (no entries) breaks `docker compose
+# config` with "services must be a mapping".
+
+  # ---------------------------------------------------------------------------
+  # Example: LDAP / Active Directory integration for Keycloak
+  # ---------------------------------------------------------------------------
+  # keycloak:
+  #   environment:
+  #     KC_HOSTNAME: your-actual-fqdn.customer.com
+  #     KEYCLOAK_LDAP_URL: ldap://ad.customer.com:389
+  #     KEYCLOAK_LDAP_BIND_DN: CN=personel-svc,OU=ServiceAccounts,DC=customer,DC=com
+  #     KEYCLOAK_LDAP_BIND_CREDENTIAL: CHANGEME_LDAP_PASSWORD
+  #     KEYCLOAK_LDAP_BASE_DN: DC=customer,DC=com
+
+  # ---------------------------------------------------------------------------
+  # Example: Increase DLP worker count for high-throughput deployments
+  # ---------------------------------------------------------------------------
+  # dlp:
+  #   environment:
+  #     DLP_WORKER_COUNT: "8"
+  #     DLP_BATCH_SIZE: "100"
+
+  # ---------------------------------------------------------------------------
+  # Example: Bind gateway to a specific network interface
+  # ---------------------------------------------------------------------------
+  # gateway:
+  #   ports:
+  #     - "10.0.1.10:9443:9443"
+
+  # ---------------------------------------------------------------------------
+  # Example: External SMTP relay for notifications
+  # ---------------------------------------------------------------------------
+  # api:
+  #   environment:
+  #     SMTP_HOST: smtp.customer.com
+  #     SMTP_PORT: "587"
+  #     SMTP_USER: personel-notify@customer.com
+  #     SMTP_PASSWORD: CHANGEME_SMTP_PASSWORD
+  #     SMTP_FROM: personel-notify@customer.com
+  #     SMTP_TLS: "true"
+
+  # ---------------------------------------------------------------------------
+  # Example: Additional Prometheus scrape targets (customer SNMP/hosts)
+  # ---------------------------------------------------------------------------
+  # prometheus:
+  #   volumes:
+  #     - ./customer-scrape-configs.yml:/etc/prometheus/conf.d/customer.yml:ro
+
+  # ---------------------------------------------------------------------------
+  # Example: DLP on dedicated host (Profile 2 — Phase 2)
+  # Comment out the dlp service above and configure this overlay when the
+  # customer upgrades to a dedicated DLP host.
+  # ---------------------------------------------------------------------------
+  # dlp:
+  #   networks:
+  #     dlp-isolated: null   # remove from shared network; DLP runs on separate host

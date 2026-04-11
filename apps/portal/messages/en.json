@@ -1,0 +1,462 @@
+{
+  "nav": {
+    "home": "Home",
+    "aydinlatma": "Privacy Notice",
+    "verilerim": "My Data",
+    "nelerIzlenmiyor": "What Is Not Monitored?",
+    "canliIzleme": "Live View",
+    "oturumGecmisi": "My Session History",
+    "haklar": "My KVKK Rights",
+    "yeniBasvuru": "New Request",
+    "basvurularim": "My Requests",
+    "dlpDurumu": "Keyboard Privacy",
+    "iletisim": "Contact",
+    "profil": "My Profile",
+    "cikis": "Sign Out"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "errorDetail": "This information is currently unavailable. Please try again later or contact IT support.",
+    "retry": "Try Again",
+    "back": "Back",
+    "close": "Close",
+    "save": "Save",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "learnMore": "Learn more",
+    "lastUpdated": "Last updated",
+    "days": "days",
+    "years": "years",
+    "contactDpo": "Contact the Data Protection Officer",
+    "kvkk": "KVKK",
+    "legalBasis": "Legal basis"
+  },
+  "home": {
+    "welcome": "Welcome",
+    "subtitle": "This portal explains what data your company collects on your work computer, why it is collected, and your rights under KVKK.",
+    "summaryTitle": "Your Data Summary",
+    "quickLinks": "Quick Links",
+    "viewMyData": "View My Data",
+    "viewMyDataDesc": "See which categories of data are collected and their retention periods.",
+    "myRights": "My Rights",
+    "myRightsDesc": "Exercise your right to access, correct, delete, or object.",
+    "myApplications": "My Requests",
+    "myApplicationsDesc": "Track the status of your open KVKK requests.",
+    "openDsrCount": "{count} open request(s)",
+    "noDsr": "No open requests",
+    "dlpStatusLabel": "Keyboard privacy status",
+    "portalPurpose": "What is this portal for?",
+    "portalPurposeText": "KVKK Article 10 requires your company to inform you about data processing. Article 11 grants you rights over that data. This portal fulfils both obligations.",
+    "yourDataIsYours": "Your data belongs to you",
+    "yourDataIsYoursText": "Every page in this portal shows information about you. No administrator or system can see your transparency pages."
+  },
+  "aydinlatma": {
+    "title": "Privacy Notice",
+    "subtitle": "Employee information notice under KVKK Article 10",
+    "plainSidebarTitle": "Plain-language Explanation",
+    "plainSidebarHint": "Each legal clause is accompanied by a plain-language explanation in this sidebar.",
+    "dataController": "Data Controller",
+    "dataControllerPlain": "The organisation collecting and storing your data is your employer. The Personel software vendor does not have access to your data.",
+    "dataCategories": "Personal Data Categories Processed",
+    "dataCategoriesPlain": "The Personel agent installed on your work computer collects data in the categories listed below. Retention period and legal basis are specified for each.",
+    "purposes": "Purposes of Processing",
+    "purposesPlain": "Your data is used for IT security, protecting company assets, and monitoring performance of work contract obligations. It is not used for automated performance evaluation or profiling.",
+    "legalBasis": "Legal Basis",
+    "legalBasisPlain": "The legal basis is 'legitimate interest' (Article 5/2-f) and 'performance of contract' (Article 5/2-c). This means consent is not required — because collecting this data is necessary for workplace security.",
+    "dataTransfer": "Data Transfers",
+    "dataTransferPlain": "Your data is not transferred to any third party domestically or internationally. All data stays on your company's own servers.",
+    "retentionPeriods": "Retention Periods",
+    "retentionPeriodsPlain": "Each data type has a limited retention period. When the period expires, data is automatically deleted.",
+    "liveView": "Live Screen Monitoring",
+    "liveViewPlain": "The live screen monitoring feature exists, but it requires a manager's request and a separate HR officer's approval to start. Every session is recorded and you can see it in this portal.",
+    "keystrokePrivacy": "Cryptographic Protection of Keystroke Content",
+    "keystrokePrivacyPlain": "Your keystrokes are recorded but no administrator can read them. Content is only scanned automatically by an isolated computer program looking for sensitive data patterns. Raw content is never shown to any human.",
+    "yourRights": "Your Rights Under KVKK Article 11",
+    "yourRightsPlain": "You can submit a request through this portal at any time. You will receive a response within 30 days.",
+    "acknowledgement": "Acknowledgement",
+    "acknowledgementPlain": "The existence of this notice is designed to inform you at installation. You can access the current notice in this portal at any time.",
+    "downloadPdf": "Download as PDF",
+    "lastVersion": "Version 1.0 — April 2026"
+  },
+  "verilerim": {
+    "title": "My Data",
+    "subtitle": "Data categories collected on your work computer and their retention periods",
+    "summaryThisMonth": "This month's data summary",
+    "categoriesTitle": "Data Categories",
+    "categoriesSubtitle": "The purpose and retention period for each category are listed below.",
+    "retentionNote": "When the retention period expires, data is automatically and permanently deleted.",
+    "requestThisData": "Request this data",
+    "requestDataDeletion": "Request deletion (KVKK Art. 11)",
+    "collectedSince": "Data collection began",
+    "noDataYet": "No data collected in this category yet.",
+    "categories": {
+      "identity": {
+        "name": "Identity and Session Data",
+        "description": "Your username, Windows session ID, device ID, and login/logout timestamps."
+      },
+      "process": {
+        "name": "Application and Process Usage",
+        "description": "Applications you ran, foreground windows and their titles, usage durations."
+      },
+      "screenshot": {
+        "name": "Screenshots",
+        "description": "Screenshots taken at intervals and on specific events. Sensitive applications are excluded from screenshots."
+      },
+      "file": {
+        "name": "File System Events",
+        "description": "File creation, read, write, deletion, and copy events on your work computer. File name and size are recorded; content is not."
+      },
+      "clipboard": {
+        "name": "Clipboard Data",
+        "description": "Clipboard usage metadata is recorded. Content is stored only in encrypted form and is only readable by the automated DLP system."
+      },
+      "keystroke": {
+        "name": "Keystroke Data",
+        "description": "Statistical data such as keystroke counts is recorded. Keystroke content is stored encrypted; no administrator can read it."
+      },
+      "print": {
+        "name": "Print Jobs",
+        "description": "Print job metadata: document name, page count, printer ID. Document content is not recorded."
+      },
+      "usb": {
+        "name": "USB and External Devices",
+        "description": "USB attach/detach events and device identifiers, monitored for IT security."
+      },
+      "network": {
+        "name": "Network Activity",
+        "description": "Network flow summaries, DNS queries, and connected domain names (SNI). Web page contents are not recorded."
+      },
+      "liveView": {
+        "name": "Live View Audit Records",
+        "description": "Live viewing sessions: requester role, approver role, reason category, duration. Retained for 5 years and immutable."
+      },
+      "policy": {
+        "name": "Policy and Audit Data",
+        "description": "Blocked application or URL events, agent health records."
+      }
+    }
+  },
+  "nelerIzlenmiyor": {
+    "title": "What Is Not Monitored?",
+    "subtitle": "Transparency requires not only stating what is monitored, but also clearly stating what is not.",
+    "intro": "On this page you will find what the Personel platform does not record, cannot see, or cannot access. This list is prepared to convey realistic boundaries.",
+    "items": {
+      "personalPhone": {
+        "title": "Applications and activities on your personal phone",
+        "description": "Personel does not track any applications, messages, photos, or location on your personal phone. Even with a company phone, the telephony function is outside the scope of this system."
+      },
+      "homeComputer": {
+        "title": "Your home computer",
+        "description": "The Personel agent is installed only on the work computer assigned to you by your company. Your home computer, personal laptop or tablet is not connected to any component of this system."
+      },
+      "personalBrowserSessions": {
+        "title": "Personal browser sessions on your work computer",
+        "description": "If you use a personal browser profile not linked to your work account (e.g. a Chrome profile linked to your personal Google account), your browsing in that session is not recorded by Personel at content level. Window titles may be visible; content is not read."
+      },
+      "breakTimes": {
+        "title": "Your break times and brief moments of distraction",
+        "description": "Personel technically records idle time periods; however this data does not feed into performance evaluations. How many minutes you took a break, when you went to the bathroom, or brief momentary distractions are not used to produce an individual performance score."
+      },
+      "personalAccounts": {
+        "title": "Personal email and social media content",
+        "description": "The raw text of messages in Gmail, Hotmail, or social media accounts is not recorded. Network flow metadata (which server you connected to) may be recorded, but the content of these communications cannot be read."
+      },
+      "outsideWorkHours": {
+        "title": "Activities outside work hours (on personal devices)",
+        "description": "When you shut down the work computer outside business hours, the agent stops collecting. Your out-of-hours activities on personal devices are outside the scope of this system."
+      },
+      "keyboardContentDefault": {
+        "title": "Reading your keyboard content (default state)",
+        "description": "Your keystrokes are recorded — but this content is stored encrypted and no administrator, IT staff, or HR personnel can read it. The DLP feature is off by default; even if enabled, only an isolated automated system looks at specific patterns; raw content is never shown to any person."
+      },
+      "privateHealthInfo": {
+        "title": "Your sensitive personal data (health, religion, union membership)",
+        "description": "The system does not aim to collect sensitive personal data. Health applications and certain sensitive sites are excluded from screenshots. If such data is accidentally captured, it is subject to the shortest retention period and heightened access controls."
+      },
+      "performanceScore": {
+        "title": "Automated performance score or benchmarking",
+        "description": "This system does not compare you to your colleagues. It does not generate an individual performance score. Collected data is not used as input to an automated decision mechanism in HR evaluation processes."
+      },
+      "biometrics": {
+        "title": "Biometric data",
+        "description": "Facial recognition, fingerprint, voice recording, or any biometric data is not collected by this system."
+      }
+    },
+    "footer": "This list is based on the platform's technical architecture and KVKK compliance documentation. If you have doubts about anything, contact the Data Protection Officer."
+  },
+  "canliIzleme": {
+    "title": "Live Screen Monitoring",
+    "subtitle": "What is this feature, how does it work, and what are your rights?",
+    "whatIsIt": "What is live monitoring?",
+    "whatIsItText": "The Personel platform allows an authorised manager to view your screen in real time for specific investigation reasons. This is not a routine monitoring practice; it can only be used in a specific investigation process under strict conditions.",
+    "howApproval": "How is monitoring initiated?",
+    "howApprovalText": "Two separate people must approve before live monitoring can start:",
+    "step1": "A manager submits a request with a documented reason (incident or investigation ID).",
+    "step2": "A separate HR officer approves the request. The requester cannot also be the approver.",
+    "step3": "The system cannot technically start without both approvals — this is not a policy rule, it is a cryptographic guarantee.",
+    "guarantees": "Guarantees",
+    "guarantee1": "Each session lasts at most 15 minutes. Extension requires new approval.",
+    "guarantee2": "The DPO or HR officer can terminate the session at any moment.",
+    "guarantee3": "Every session is written to an immutable audit record. These records are retained for 5 years.",
+    "guarantee4": "There is no on-screen indicator during a session. You are pre-informed of this feature's existence through this notice.",
+    "yourRightsDuring": "Your rights during monitoring",
+    "yourRightsDuringText": "Even though there is no on-screen indicator during monitoring, you can always view your past monitoring sessions through this portal. Your right to object under KVKK Article 11 is reserved.",
+    "viewHistory": "View my session history",
+    "visibility": "Visibility policy",
+    "visibilityText": "Session history is visible to you by default. Only your company's Data Protection Officer (DPO) can restrict this visibility, with written justification and an audit record. If such a change occurs, you will be notified through the portal."
+  },
+  "oturumGecmisi": {
+    "title": "My Live View Session History",
+    "subtitle": "The list below shows past sessions where your screen was monitored.",
+    "noSessions": "No live view sessions on record.",
+    "noSessionsDetail": "If this is empty, your screen has not been subject to live monitoring so far.",
+    "restricted": "This information is currently unavailable",
+    "restrictedDetail": "Your company's Data Protection Officer has temporarily restricted this visibility. If this restriction exists, you should have been notified separately. Contact the Data Protection Officer for more information.",
+    "sessionId": "Session ID",
+    "date": "Date",
+    "duration": "Duration",
+    "requesterRole": "Requester Role",
+    "approverRole": "Approver Role",
+    "reasonCategory": "Reason Category",
+    "state": "Status",
+    "seconds": "{n} seconds",
+    "roles": {
+      "yonetici": "Manager",
+      "mudur": "Director",
+      "ik": "Human Resources"
+    },
+    "reasonCategories": {
+      "performans_degerlendirme": "Performance review",
+      "guvenlik_incelemesi": "Security investigation",
+      "is_sureci_denetimi": "Work process audit",
+      "diger": "Other"
+    },
+    "states": {
+      "ENDED": "Completed",
+      "TERMINATED_BY_HR": "Terminated by HR",
+      "TERMINATED_BY_DPO": "Terminated by DPO",
+      "EXPIRED": "Expired"
+    },
+    "privacyNote": "Note: The identities (name, surname, username) of the requester and approver are not shown — only their roles. This is the balance between KVKK transparency and personal data minimisation."
+  },
+  "haklar": {
+    "title": "Your KVKK Article 11 Rights",
+    "subtitle": "Law No. 6698 on Protection of Personal Data grants you the following rights.",
+    "intro": "Click 'Use this right' to exercise any of these rights. Your request will be automatically forwarded to your company's Data Protection Officer (DPO) and answered within 30 days.",
+    "useThisRight": "Use this right",
+    "rights": {
+      "access": {
+        "title": "Right to Request Information",
+        "legalRef": "Art. 11/1-a, Art. 11/1-b",
+        "description": "You have the right to learn whether your personal data is being processed, and if so, to request information about it.",
+        "plain": "Use this right if you want to know what your company knows about you. You can ask what categories of data are held, who processes it, and where it is stored."
+      },
+      "purpose": {
+        "title": "Right to Learn the Purpose of Processing",
+        "legalRef": "Art. 11/1-c",
+        "description": "You have the right to learn the purposes for which your personal data is processed and whether it is used in accordance with those purposes.",
+        "plain": "You can ask whether the collected data is really only used for the stated purposes."
+      },
+      "transfer": {
+        "title": "Right to Know About Transfers",
+        "legalRef": "Art. 11/1-ç",
+        "description": "You have the right to know the third parties to whom your personal data has been transferred domestically or internationally.",
+        "plain": "You can ask whether your data has been shared with other organisations or individuals. (In on-premise installations, data is not transferred.)"
+      },
+      "rectify": {
+        "title": "Right to Rectification",
+        "legalRef": "Art. 11/1-d",
+        "description": "You have the right to request correction of your personal data if it is incomplete or incorrectly processed.",
+        "plain": "If you believe incorrect information is being held about you, you can request it to be corrected."
+      },
+      "erase": {
+        "title": "Right to Erasure or Destruction",
+        "legalRef": "Art. 11/1-e",
+        "description": "You have the right to request the deletion or destruction of your personal data within the conditions set out in KVKK Article 7.",
+        "plain": "You can request deletion of your data. The DPO will evaluate this against the legitimate interest balance and legal retention obligations."
+      },
+      "notify": {
+        "title": "Right to Notification of Third Parties",
+        "legalRef": "Art. 11/1-f",
+        "description": "You have the right to request that corrections or deletions be notified to third parties to whom your data has been transferred.",
+        "plain": "If your data was shared with others and a correction/deletion was made, you can request that the relevant parties be notified of this change."
+      },
+      "object": {
+        "title": "Right to Object to Automated Decisions",
+        "legalRef": "Art. 11/1-g",
+        "description": "You have the right to object to a result that emerges against you solely through automated analysis of your personal data.",
+        "plain": "If the system made an automated decision about you and you were negatively affected, you can object."
+      },
+      "compensation": {
+        "title": "Right to Seek Compensation",
+        "legalRef": "Art. 11/1-ğ",
+        "description": "You have the right to seek compensation for damage suffered due to unlawful processing of personal data.",
+        "plain": "If you suffered harm due to unlawful processing of your data, you can seek compensation."
+      }
+    },
+    "responseTime": "You will receive a response within 30 days",
+    "kvkkBoard": "If you are not satisfied with the response to your request, you can file a complaint with the Personal Data Protection Authority (kvkk.gov.tr)."
+  },
+  "yeniBasvuru": {
+    "title": "New KVKK Request",
+    "subtitle": "Fill in the form below. Your request will be automatically forwarded to your company's Data Protection Officer (DPO).",
+    "requestType": "Request Type",
+    "requestTypePlaceholder": "Select a request type",
+    "scope": "Scope (optional)",
+    "scopePlaceholder": "E.g. screenshots from the last 3 months, or a specific date range",
+    "justification": "Description (optional)",
+    "justificationPlaceholder": "You may add additional information supporting your request",
+    "submitButton": "Submit Request",
+    "successTitle": "Your request has been received",
+    "successText": "Your request was recorded with number {id}. You will receive a response within 30 days. You can track its status on the 'My Requests' page.",
+    "goToMyApplications": "Go to My Requests",
+    "slaNote": "Under KVKK Article 13, your request will be answered within at most 30 days at no charge.",
+    "types": {
+      "access": "Access — I want to see data held about me",
+      "rectify": "Rectification — There is incorrect data, I want it corrected",
+      "erase": "Erasure — I want my data deleted",
+      "object": "Object — I am objecting to an automated decision",
+      "restrict": "Restriction — I want data processing restricted",
+      "portability": "Portability — I want a copy of my data"
+    },
+    "validation": {
+      "requestTypeRequired": "Please select a request type"
+    }
+  },
+  "basvurularim": {
+    "title": "My Requests",
+    "subtitle": "List of requests submitted under KVKK Article 11",
+    "noApplications": "No requests yet",
+    "noApplicationsDetail": "Visit the 'New Request' page to exercise your KVKK rights.",
+    "newApplication": "Open New Request",
+    "ticketId": "Request No.",
+    "type": "Type",
+    "status": "Status",
+    "created": "Created",
+    "slaDeadline": "SLA Deadline",
+    "daysRemaining": "{n} days remaining",
+    "overdue": "Overdue",
+    "viewDetail": "View details",
+    "states": {
+      "open": "Open",
+      "at_risk": "At risk",
+      "overdue": "Overdue",
+      "closed": "Closed",
+      "rejected": "Rejected"
+    },
+    "slaTimeline": {
+      "title": "SLA Timeline",
+      "submitted": "Request received",
+      "atRisk": "Risk threshold (day 20)",
+      "deadline": "Legal deadline (day 30)",
+      "closed": "Closed"
+    }
+  },
+  "basvuruDetay": {
+    "title": "Request Detail",
+    "requestType": "Request Type",
+    "scope": "Scope",
+    "justification": "Description",
+    "response": "DPO Response",
+    "noResponse": "Awaiting response.",
+    "timeline": "Process Timeline",
+    "downloadResponse": "Download response (PDF)"
+  },
+  "dlpDurumu": {
+    "title": "Keyboard Privacy Status",
+    "subtitle": "How are your keystrokes protected?",
+    "stateLabel": "Current status",
+    "stateOff": "Off — DLP Service Not Active",
+    "stateOn": "Active — DLP Service Running",
+    "offTitle": "Your keyboard content is recorded but not being read",
+    "offExplanation": "Your keystrokes are stored encrypted on your work computer. Currently there is no system or person that can decrypt this encrypted content. Simply put: the data is in a vault and the key is not being used.",
+    "offTechnical": "Technical guarantee: The service (DLP) that can access the decryption key is not running by default. This is not a setting; it is a fundamental architectural property.",
+    "offActivation": "How could this change?",
+    "offActivationText": "For your company to enable DLP, the following steps are required: (1) Data Protection Impact Assessment (DPIA) update, (2) signed approval by DPO + IT Security Director + Legal Counsel, (3) technical activation. This process is recorded and auditable.",
+    "onTitle": "DLP active: your keyboard content is being automatically scanned",
+    "onExplanation": "Your company has enabled the DLP feature through an official approval process. Since that date, your keystrokes are stored encrypted and then scanned by an isolated automated system for specific patterns (e.g. credit card numbers, national ID numbers and other sensitive data patterns).",
+    "onActivatedOn": "Activation date",
+    "onCeremonyRef": "Approval reference",
+    "onHamIcerik": "Your raw keyboard content is not read by any administrator, IT staff, or HR personnel. Only if a match is found, a warning metadata is produced; this metadata does not contain raw content.",
+    "whatIsEncrypted": "What data is encrypted?",
+    "whatIsEncryptedText": "All keystrokes are encrypted with AES-256-GCM on your work computer. The encryption key is tied to a hierarchy that only the DLP service can access. The admin console has no key material in this hierarchy.",
+    "retentionNote": "Keystroke content is retained for at most 14 days, then automatically deleted.",
+    "moreInfo": "For more information",
+    "contactDpo": "Data Protection Officer"
+  },
+  "iletisim": {
+    "title": "Contact",
+    "subtitle": "For questions about your KVKK rights, you can use the channels below.",
+    "dpoContact": "Data Protection Officer (DPO)",
+    "dpoEmail": "Email",
+    "dpoAddress": "Written Application Address",
+    "portalApplication": "Application via Portal",
+    "portalApplicationText": "The fastest way to exercise your KVKK Article 11 rights is through the Transparency Portal. Your request is automatically forwarded to the DPO and the SLA timer starts.",
+    "kvkkBoard": "Personal Data Protection Authority",
+    "kvkkBoardText": "If you are not satisfied with the response to your request, you can file a complaint with the Personal Data Protection Authority (KVKK Board).",
+    "kvkkBoardUrl": "kvkk.gov.tr",
+    "kvkkBoardAddress": "Nasuh Akar Mah. Ziyabey Cad. No:18 06520 Balgat/Ankara",
+    "itSupport": "IT Support",
+    "itSupportText": "If you have trouble logging in to the portal or have a technical problem, contact your organisation's IT support team.",
+    "responseTime": "Your requests must be answered within the legal period of 30 days."
+  },
+  "profil": {
+    "title": "My Profile",
+    "email": "Email",
+    "language": "Language Preference",
+    "logout": "Sign Out",
+    "logoutConfirm": "Are you sure you want to sign out?",
+    "languageTr": "Türkçe",
+    "languageEn": "English"
+  },
+  "giris": {
+    "title": "Sign In",
+    "subtitle": "Sign in with your corporate account to access the Transparency Portal.",
+    "loginButton": "Sign In with Corporate Account",
+    "loginButtonSub": "Continuing with Keycloak SSO",
+    "info": "This portal is open to company employees only. You see your own data and exercise your KVKK rights."
+  },
+  "errors": {
+    "notFound": "Page Not Found",
+    "notFoundText": "The page you are looking for does not exist or may have been moved.",
+    "notFoundAction": "Return to home",
+    "unauthorized": "Not Signed In",
+    "unauthorizedText": "You need to sign in to view this page.",
+    "unauthorizedAction": "Sign In",
+    "forbidden": "Access Denied",
+    "forbiddenText": "You do not have permission to access this page. Contact your organisation's IT support team.",
+    "serverError": "Temporary Problem",
+    "serverErrorText": "Something went wrong. Please try again later. If the problem persists, contact IT support."
+  },
+  "dlpBanner": {
+    "offMessage": "Keystroke content is being recorded but is not being read by any system or person. It can be enabled with your company's written DPO approval.",
+    "offLearnMore": "Details",
+    "onMessage": "DLP active: since {date}, keystroke content is being automatically scanned without showing raw text to any human.",
+    "onLearnMore": "Details"
+  },
+  "firstLoginModal": {
+    "title": "This computer is subject to corporate monitoring",
+    "subtitle": "Please read the following information before continuing.",
+    "body": "Your company has installed Personel endpoint monitoring software on this work computer. This software collects data in categories such as application usage, file events, network activity, and keystroke statistics. Live screen monitoring is available; however each monitoring session requires HR approval and creates an audit record you can view in this portal. All data is stored on your company's own servers; no data is transferred externally.",
+    "readFull": "Read the Privacy Notice",
+    "confirmButton": "I understand, continue",
+    "confirmNote": "Clicking this button is required to record your acknowledgement in the audit log.",
+    "mustConfirm": "Please click 'I understand' to continue.",
+    "alreadyAcknowledged": "Previously acknowledged"
+  },
+  "legalTerms": {
+    "kvkk": "Law No. 6698 on Protection of Personal Data — the primary law governing personal data processing in Turkey.",
+    "m10": "KVKK Article 10 — The data controller's obligation to inform data subjects about collected data.",
+    "m11": "KVKK Article 11 — Data subjects' rights over their personal data: access, rectification, erasure, objection.",
+    "meruMenfaat": "Legitimate interest (Art. 5/2-f) — The legal basis under which the data controller can process data for business purposes. Subject to the condition that it does not harm the data subject's fundamental rights.",
+    "verbis": "VERBİS — Data Controllers' Registry Information System. The official registry where organisations record their data processing activities with the Personal Data Protection Authority.",
+    "dpo": "Data Protection Officer (DPO) — The person responsible for the organisation's KVKK compliance who processes data subject requests.",
+    "dpia": "Data Protection Impact Assessment (DPIA) — A risk assessment required before high-risk data processing activities.",
+    "dsr": "Data Subject Request (DSR) — A formal request by a data subject to exercise their rights under KVKK Article 11.",
+    "dlp": "Data Loss Prevention (DLP) — An automated system that prevents sensitive data from leaking through unauthorised channels.",
+    "legalHold": "Legal Hold — A mechanism that stops data from being deleted during an active lawsuit or investigation.",
+    "meruMenfaatDengest": "Legitimate interest balance test — A three-step test that evaluates the necessity of processing and its balance with the data subject's interests.",
+    "dataController": "Data Controller — The person or organisation that determines the purposes and means of processing personal data."
+  }
+}

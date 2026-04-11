@@ -1,0 +1,19 @@
+# =============================================================================
+# Personel Platform — Nightly Backup Timer
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Nightly Backup Timer
+PartOf=personel.target
+
+[Timer]
+# Run at 02:00 local time every night
+OnCalendar=*-*-* 02:00:00
+# If the system was off at the scheduled time, run as soon as possible
+Persistent=true
+# Add jitter to avoid thundering herd on multi-server installs
+RandomizedDelaySec=300
+Unit=personel-backup.service
+
+[Install]
+WantedBy=personel.target

@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Macros
+  ==========================================================================
+  Phase 1: Single-node. Macros are set but NOT used (MergeTree, not
+  ReplicatedMergeTree). They are pre-populated so that the Phase-1-exit
+  migration to ReplicatedMergeTree can use {replica} and {shard} without
+  changing the config — only the CREATE TABLE statements change.
+
+  Phase-1-exit procedure (per clickhouse-scaling-plan.md §Stage 2):
+  1. Provision ch-01 and ch-02 hosts with updated macros.xml per host.
+  2. Run scripts/staging-replication-rig.sh to validate.
+  3. ALTER TABLE ... MODIFY ENGINE = ReplicatedMergeTree(...)
+     (or ATTACH PARTITION trick for zero-downtime migration).
+  4. Confirm replication convergence before switching writers.
+  ==========================================================================
+-->
+<clickhouse>
+    <macros>
+        <!-- Unique replica identifier for this host.
+             On ch-01: replica-01, on ch-02: replica-02 -->
+        <replica>replica-01</replica>
+
+        <!-- Shard identifier. For Phase 1 single-shard: shard-01 -->
+        <shard>shard-01</shard>
+
+        <!-- Cluster name used in remote_servers.xml and Distributed tables -->
+        <cluster>personel_cluster</cluster>
+    </macros>
+</clickhouse>

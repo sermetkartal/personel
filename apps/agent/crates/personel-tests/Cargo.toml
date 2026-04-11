@@ -1,0 +1,16 @@
+[package]
+name    = "personel-tests"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+
+[dependencies]
+personel-core    = { path = "../personel-core" }
+personel-crypto  = { path = "../personel-crypto" }
+personel-queue   = { path = "../personel-queue" }
+personel-policy  = { path = "../personel-policy" }
+personel-proto   = { path = "../personel-proto" }
+
+uuid             = { workspace = true }
+zeroize          = { workspace = true }

@@ -1,0 +1,250 @@
+{
+  "realm": "personel",
+  "displayName": "Personel Platform",
+  "displayNameHtml": "<b>Personel</b> Platform",
+  "enabled": true,
+  "sslRequired": "all",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": false,
+  "editUsernameAllowed": false,
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "waitIncrementSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "failureFactor": 5,
+
+  "passwordPolicy": "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername(undefined) and passwordHistory(5)",
+
+  "defaultSignatureAlgorithm": "ES256",
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "accessTokenLifespan": 900,
+  "accessTokenLifespanForImplicitFlow": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "offlineSessionMaxLifespanEnabled": true,
+  "offlineSessionMaxLifespan": 5184000,
+
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Platform administrator — full access to all features"
+      },
+      {
+        "name": "hr",
+        "description": "HR role — can approve live-view sessions"
+      },
+      {
+        "name": "dpo",
+        "description": "Data Protection Officer — legal holds, DSR management, destruction reports"
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only analytics viewer"
+      },
+      {
+        "name": "employee",
+        "description": "Employee — access to Transparency Portal only"
+      }
+    ]
+  },
+
+  "groups": [
+    {
+      "name": "Admins",
+      "realmRoles": ["admin"]
+    },
+    {
+      "name": "HR",
+      "realmRoles": ["hr"]
+    },
+    {
+      "name": "DPO",
+      "realmRoles": ["dpo"]
+    },
+    {
+      "name": "Viewers",
+      "realmRoles": ["viewer"]
+    },
+    {
+      "name": "Employees",
+      "realmRoles": ["employee"]
+    }
+  ],
+
+  "clients": [
+    {
+      "clientId": "console",
+      "name": "Admin Console",
+      "description": "Personel Admin Console (Next.js)",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "CHANGEME_CONSOLE_CLIENT_SECRET",
+      "redirectUris": [
+        "https://CHANGEME_HOST/console/*",
+        "http://localhost:3000/*"
+      ],
+      "webOrigins": [
+        "https://CHANGEME_HOST",
+        "http://localhost:3000"
+      ],
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "authorizationServicesEnabled": false,
+      "defaultClientScopes": ["web-origins", "profile", "roles", "email"],
+      "optionalClientScopes": ["address", "phone"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "use.refresh.tokens": "true",
+        "client.session.idle.timeout": "1800",
+        "client.session.max.lifespan": "36000"
+      },
+      "protocolMappers": [
+        {
+          "name": "tenant_id",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "tenant_id",
+            "claim.value": "CHANGEME_TENANT_ID",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "portal",
+      "name": "Transparency Portal",
+      "description": "Employee Transparency Portal (Next.js)",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "CHANGEME_PORTAL_CLIENT_SECRET",
+      "redirectUris": [
+        "https://CHANGEME_HOST/portal/*",
+        "http://localhost:3001/*"
+      ],
+      "webOrigins": [
+        "https://CHANGEME_HOST",
+        "http://localhost:3001"
+      ],
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "defaultClientScopes": ["web-origins", "profile", "roles", "email"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      }
+    },
+    {
+      "clientId": "api",
+      "name": "Admin API",
+      "description": "Internal API service account",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "CHANGEME_API_CLIENT_SECRET",
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "authorizationServicesEnabled": false,
+      "defaultClientScopes": ["web-origins", "profile", "roles", "email"]
+    },
+    {
+      "clientId": "grafana",
+      "name": "Grafana",
+      "description": "Grafana SSO via Keycloak",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "CHANGEME_GRAFANA_CLIENT_SECRET",
+      "redirectUris": [
+        "https://CHANGEME_HOST/grafana/login/generic_oauth",
+        "http://localhost:3002/login/generic_oauth"
+      ],
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "serviceAccountsEnabled": false
+    }
+  ],
+
+  "authenticationFlows": [
+    {
+      "alias": "personel-browser",
+      "description": "Browser-based authentication with MFA for admin roles",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-cookie",
+          "requirement": "ALTERNATIVE",
+          "priority": 10,
+          "autheticatorFlow": false
+        },
+        {
+          "requirement": "ALTERNATIVE",
+          "priority": 20,
+          "flowAlias": "personel-login-form",
+          "autheticatorFlow": true
+        }
+      ]
+    },
+    {
+      "alias": "personel-login-form",
+      "description": "Username + password + conditional OTP",
+      "providerId": "basic-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "auth-username-password-form",
+          "requirement": "REQUIRED",
+          "priority": 10
+        },
+        {
+          "authenticator": "auth-otp-form",
+          "requirement": "CONDITIONAL",
+          "priority": 20,
+          "authConfig": {
+            "defaultOtpOutcome": "force"
+          }
+        }
+      ]
+    }
+  ],
+
+  "browserFlow": "personel-browser",
+
+  "smtpServer": {
+    "host": "CHANGEME_SMTP_HOST",
+    "port": "587",
+    "from": "noreply@CHANGEME_DOMAIN",
+    "fromDisplayName": "Personel Platform",
+    "starttls": "true",
+    "auth": "true",
+    "user": "CHANGEME_SMTP_USER",
+    "password": "CHANGEME_SMTP_PASSWORD"
+  },
+
+  "internationalizationEnabled": true,
+  "supportedLocales": ["tr", "en"],
+  "defaultLocale": "tr"
+}

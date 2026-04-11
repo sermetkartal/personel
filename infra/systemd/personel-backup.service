@@ -1,0 +1,40 @@
+# =============================================================================
+# Personel Platform — Backup Service
+# Invokes infra/backup.sh to run full encrypted backup.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Nightly Backup
+After=personel-compose.service
+Requires=docker.service
+PartOf=personel.target
+# Do not run if compose stack is not running
+BindsTo=personel-compose.service
+
+[Service]
+Type=oneshot
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra
+
+EnvironmentFile=/opt/personel/infra/compose/.env
+
+ExecStart=/opt/personel/infra/backup.sh
+
+# Timeout: 4 hours (generous for large installations)
+TimeoutStartSec=14400
+
+# Backup failures are critical — do not restart, alert instead
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-backup
+
+# After successful backup, record timestamp to Prometheus textfile collector
+ExecStartPost=/bin/sh -c \
+  'echo "personel_backup_last_success_ts $(date +%%s)" > /var/lib/node_exporter/textfile_collector/personel_backup.prom'
+
+[Install]
+WantedBy=personel.target

@@ -1,0 +1,35 @@
+[package]
+name    = "personel-agent"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "personel-agent"
+path = "src/main.rs"
+
+[[bin]]
+name = "enroll"
+path = "src/bin/enroll.rs"
+
+[dependencies]
+personel-core        = { path = "../personel-core" }
+personel-proto       = { path = "../personel-proto" }
+personel-collectors  = { path = "../personel-collectors" }
+personel-queue       = { path = "../personel-queue" }
+personel-transport   = { path = "../personel-transport" }
+personel-policy      = { path = "../personel-policy" }
+personel-crypto      = { path = "../personel-crypto" }
+personel-updater     = { path = "../personel-updater" }
+personel-livestream  = { path = "../personel-livestream" }
+personel-os          = { path = "../personel-os" }
+
+tokio           = { workspace = true }
+anyhow          = { workspace = true }
+zeroize         = { workspace = true }
+tracing         = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde           = { workspace = true }
+serde_json      = { workspace = true }
+toml            = { workspace = true }
+

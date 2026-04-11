@@ -1,0 +1,19 @@
+[package]
+name    = "personel-watchdog"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "personel-agent-watchdog"
+path = "src/main.rs"
+
+[dependencies]
+personel-core = { path = "../personel-core" }
+personel-os   = { path = "../personel-os" }
+
+tokio         = { workspace = true }
+anyhow        = { workspace = true }
+tracing       = { workspace = true }
+tracing-subscriber = { workspace = true }
+sysinfo       = { workspace = true }

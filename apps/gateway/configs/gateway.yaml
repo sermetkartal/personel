@@ -1,0 +1,64 @@
+# gateway.yaml — example configuration for the Personel Ingest Gateway.
+# Override any value with PERSONEL_GATEWAY_<SECTION>_<KEY> environment variables.
+# All paths are relative to the working directory of the binary.
+
+server_version: "1.0.0"
+
+grpc:
+  listen_addr: "0.0.0.0:9443"
+  tls_cert_file: "/etc/personel/tls/gateway.crt"
+  tls_key_file: "/etc/personel/tls/gateway.key"
+  # Client CA must be the Tenant Agent Intermediate CA (or the Tenant CA itself).
+  tls_client_ca_file: "/etc/personel/tls/tenant_ca.crt"
+  max_recv_msg_size: 4194304   # 4 MB — large enough for an EventBatch of ~500 events
+  graceful_stop_timeout: "30s"
+
+nats:
+  urls:
+    - "nats://nats.internal:4222"
+  creds_file: ""                     # leave empty if NATS auth is not configured
+  connect_timeout: "10s"
+  max_reconnect: -1                  # reconnect indefinitely
+  publish_timeout: "5s"
+
+postgres:
+  dsn: "postgres://personel_gw:changeme@postgres.internal:5432/personel?sslmode=verify-full&sslrootcert=/etc/personel/tls/root_ca.crt"
+  max_conns: 20
+  min_conns: 2
+  conn_timeout: "10s"
+  query_timeout: "5s"
+
+vault:
+  addr: "https://vault.internal:8200"
+  role_id: ""                        # injected via PERSONEL_GATEWAY_VAULT_ROLE_ID
+  secret_id: ""                      # injected via PERSONEL_GATEWAY_VAULT_SECRET_ID
+  ca_cert: "/etc/personel/tls/root_ca.crt"
+
+observability:
+  otlp_endpoint: "otelcollector.internal:4317"
+  prometheus_addr: "0.0.0.0:9090"
+  log_level: "info"
+  service_name: "personel-gateway"
+
+rate_limit:
+  per_endpoint_events_per_sec: 5000.0  # 5k events/sec per endpoint (~max reasonable)
+  per_endpoint_burst: 10000
+  per_tenant_events_per_sec: 100000.0  # aggregate across all endpoints in a tenant
+  per_tenant_burst: 200000
+
+backpressure:
+  # 16 unacknowledged batches maximum per stream before the recv loop pauses.
+  # At ~200 events/batch this is 3200 events in-flight per agent at peak.
+  max_unacked_batches: 16
+
+heartbeat:
+  degraded_after: "90s"
+  offline_after: "5m"
+  offline_extended_after: "2h"
+  silence_alert_after: "4h"   # DPO alert threshold during business hours
+  check_interval: "30s"
+
+live_view:
+  livekit_server_url: "https://livekit.internal"
+  livekit_api_key: ""         # injected via env
+  livekit_api_secret: ""      # injected via env

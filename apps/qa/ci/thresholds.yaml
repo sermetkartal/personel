@@ -1,0 +1,179 @@
+# Phase 1 Exit Criteria — Machine-Readable Thresholds
+# Source of truth for pass/fail gates in the load test runner.
+# Each entry maps to a Phase 1 exit criterion from docs/architecture/mvp-scope.md.
+
+thresholds:
+  - id: EC-2
+    criterion_number: 2
+    description: "Agent CPU average < 2% on typical corporate laptop (i5/i7, SSD)"
+    metric_key: agent_cpu_avg_percent
+    operator: lt
+    value: 2.0
+    unit: "%"
+    test_file: "test/footprint/README.md (footprint-bench on Windows)"
+    blocking: true
+
+  - id: EC-3
+    criterion_number: 3
+    description: "Agent memory RSS < 150 MB"
+    metric_key: agent_rss_peak_mb
+    operator: lt
+    value: 150.0
+    unit: "MB"
+    test_file: "test/footprint/README.md (footprint-bench on Windows)"
+    blocking: true
+
+  - id: EC-4
+    criterion_number: 4
+    description: "Agent disk footprint < 500 MB including queue at steady state"
+    metric_key: agent_disk_footprint_mb
+    operator: lt
+    value: 500.0
+    unit: "MB"
+    test_file: "test/footprint/README.md (footprint-bench on Windows)"
+    blocking: true
+
+  - id: EC-5
+    criterion_number: 5
+    description: "Dashboard query p95 < 1s (top 10 apps, active time, alerts)"
+    metric_key: dashboard_query_p95_sec
+    operator: lt
+    value: 1.0
+    unit: "s"
+    test_file: "test/e2e/event_flow_test.go"
+    blocking: true
+
+  - id: EC-6
+    criterion_number: 6
+    description: "Event loss rate < 0.01% under normal network"
+    metric_key: event_loss_rate_pct
+    operator: lt
+    value: 0.01
+    unit: "%"
+    test_file: "test/e2e/event_flow_test.go, test/load/scenarios/500_steady.json"
+    blocking: true
+
+  - id: EC-7
+    criterion_number: 7
+    description: "End-to-end event latency p95 < 5s (endpoint to queryable)"
+    metric_key: e2e_latency_p95_sec
+    operator: lt
+    value: 5.0
+    unit: "s"
+    test_file: "test/e2e/event_flow_test.go"
+    blocking: true
+
+  - id: EC-8
+    criterion_number: 8
+    description: "Server uptime >= 99.5% over 14-day pilot window"
+    metric_key: server_uptime_pct
+    operator: gte
+    value: 99.5
+    unit: "%"
+    test_file: "test/e2e/flow7_silence_test.go, 14-day pilot measurement"
+    blocking: true
+
+  - id: EC-9
+    criterion_number: 9
+    description: "Keystroke-content isolation: admin cannot decrypt"
+    metric_key: redteam_pass
+    operator: gte
+    value: 1.0
+    unit: "bool (1=pass)"
+    test_file: "test/security/keystroke_admin_blindness_test.go, cmd/audit-redteam"
+    blocking: true
+    notes: "HIGHEST PRIORITY. Any failure here is an immediate Phase 1 blocker."
+
+  - id: EC-10
+    criterion_number: 10
+    description: "Live-view governance: dual-control enforced; 100% of sessions hash-chained; chain integrity verified"
+    metric_key: liveview_audit_chain_valid
+    operator: gte
+    value: 1.0
+    unit: "bool"
+    test_file: "test/e2e/liveview_test.go"
+    blocking: true
+
+  - id: EC-13
+    criterion_number: 13
+    description: "mTLS revocation propagates to all gateways within 5 minutes"
+    metric_key: cert_revocation_propagation_sec
+    operator: lt
+    value: 300.0
+    unit: "s"
+    test_file: "test/e2e/enrollment_test.go"
+    blocking: true
+
+  - id: EC-17
+    criterion_number: 17
+    description: "ClickHouse Stage 2 replication validated in staging with failover, catch-up, backup restore"
+    metric_key: clickhouse_replication_validated
+    operator: gte
+    value: 1.0
+    unit: "bool"
+    test_file: "Staging validation drill — see clickhouse-scaling-plan.md"
+    blocking: true
+
+  - id: EC-18
+    criterion_number: 18
+    description: "Sensitive-flagged bucket end-to-end: m.6 signal routes to sensitive bucket with shortened TTL"
+    metric_key: sensitive_bucket_routing_pass
+    operator: gte
+    value: 1.0
+    unit: "bool"
+    test_file: "test/e2e/legalhold_test.go"
+    blocking: true
+
+  - id: EC-19
+    criterion_number: 19
+    description: "Legal hold end-to-end: placement, TTL bypass, release, audit all functional"
+    metric_key: legal_hold_e2e_pass
+    operator: gte
+    value: 1.0
+    unit: "bool"
+    test_file: "test/e2e/legalhold_test.go"
+    blocking: true
+
+  - id: EC-20
+    criterion_number: 20
+    description: "DSR SLA timer: open → at_risk → overdue with notifications and audit entries"
+    metric_key: dsr_sla_transitions_pass
+    operator: gte
+    value: 1.0
+    unit: "bool"
+    test_file: "test/e2e/dsr_test.go"
+    blocking: true
+
+  - id: EC-21
+    criterion_number: 21
+    description: "Destruction report: first H1 report renders, signature verifies, contents match independent count"
+    metric_key: destruction_report_pass
+    operator: gte
+    value: 1.0
+    unit: "bool"
+    test_file: "Manual + test/e2e/legalhold_test.go"
+    blocking: false
+    notes: "Semi-automated: report generation is automated, signature verification is manual."
+
+# Simulator-specific thresholds (used in load test pass/fail).
+simulator_thresholds:
+  - id: SIM-1
+    description: "Simulator pool error rate < 1%"
+    metric_key: personel_sim_errors_total
+    operator: lt
+    value: 1.0
+    unit: "%"
+
+  - id: SIM-2
+    description: "Batch ack ratio > 99%"
+    metric_key: personel_sim_batches_acked_total_div_sent
+    operator: gte
+    value: 99.0
+    unit: "%"
+
+  - id: SIM-3
+    description: "Ack latency p95 < 5s"
+    metric_key: personel_sim_ack_latency_seconds_p95
+    operator: lt
+    value: 5.0
+    unit: "s"

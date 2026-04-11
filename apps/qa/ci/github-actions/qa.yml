@@ -1,0 +1,392 @@
+name: QA Pipeline
+
+on:
+  push:
+    branches: [main, develop, 'release/**']
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Full security suite runs nightly at 02:00 UTC.
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      run_load_10k:
+        description: 'Run 10K load test (takes ~45 min)'
+        type: boolean
+        default: false
+      run_load_500:
+        description: 'Run 500-agent load test (takes ~35 min)'
+        type: boolean
+        default: false
+
+env:
+  GO_VERSION: '1.22'
+  # QA_INTEGRATION=1 enables integration tests that start containers.
+  # Set in jobs that have Docker available.
+
+jobs:
+  # ── Job 1: Lint and Build ────────────────────────────────────────────────────
+  lint-and-build:
+    name: Lint and Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        working-directory: apps/qa
+        run: go mod download
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          working-directory: apps/qa
+          args: --timeout=5m
+
+      - name: Build all commands
+        working-directory: apps/qa
+        run: |
+          go build ./cmd/simulator/...
+          go build ./cmd/probe/...
+          go build ./cmd/audit-redteam/...
+          go build ./cmd/chaos/...
+          # footprint-bench is Windows-only; skip on Linux
+          echo "NOTE: footprint-bench skipped on Linux (go:build windows)"
+
+      - name: Build all packages
+        working-directory: apps/qa
+        run: go build ./...
+
+      - name: Vet
+        working-directory: apps/qa
+        run: go vet ./...
+
+  # ── Job 2: Unit Tests ────────────────────────────────────────────────────────
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run unit tests
+        working-directory: apps/qa
+        run: |
+          go test -v -short -timeout 5m \
+            ./internal/simulator/... \
+            ./internal/assertions/... \
+            ./test/security/... \
+            -count=1
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: apps/qa/test-results/
+
+  # ── Job 3: E2E Tests (Integration) ──────────────────────────────────────────
+  e2e-tests:
+    name: E2E Tests (Integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint-and-build]
+
+    services:
+      docker:
+        image: docker:dind
+        options: --privileged
+
+    env:
+      QA_INTEGRATION: '1'
+      # GATEWAY_ADDR is empty unless a real gateway binary is present.
+      # Tests requiring GATEWAY_ADDR will skip gracefully.
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: E2E — enrollment flow
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 10m \
+            -run TestEnrollmentFlow \
+            ./test/e2e/... \
+            -count=1
+        continue-on-error: true  # Gateway binary not yet available; test skips gracefully.
+
+      - name: E2E — audit chain integrity
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 10m \
+            -run TestAuditChain \
+            ./test/e2e/... \
+            -count=1
+
+      - name: E2E — DSR workflow
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 10m \
+            -run TestDSR \
+            ./test/e2e/... \
+            -count=1
+        continue-on-error: true
+
+      - name: E2E — RBAC matrix
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 10m \
+            -run TestRBACMatrix \
+            ./test/e2e/... \
+            -count=1
+        continue-on-error: true
+
+      - name: E2E — live-view governance
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 10m \
+            -run TestLiveView \
+            ./test/e2e/... \
+            -count=1
+        continue-on-error: true
+
+  # ── Job 4: Security Tests ────────────────────────────────────────────────────
+  security-tests:
+    name: Security Tests (Red Team)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [lint-and-build]
+
+    env:
+      QA_INTEGRATION: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Cert pinning tests
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 5m \
+            -run TestCertPinning \
+            ./test/security/... \
+            -count=1
+
+      - name: Audit chain tamper detection
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 5m \
+            -run TestAuditChainTamper \
+            ./test/security/... \
+            -count=1
+
+      - name: "RED TEAM: Keystroke admin-blindness (Phase 1 EC-9)"
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 15m \
+            -run TestKeystrokeAdminBlindness \
+            ./test/security/... \
+            -count=1
+        # NOTE: If this step fails, Phase 1 is BLOCKED.
+        # DO NOT use continue-on-error here.
+
+      - name: RBAC keystroke endpoint check
+        working-directory: apps/qa
+        run: |
+          go test -v -timeout 5m \
+            -run TestKeystrokeEndpointsDontExist \
+            ./test/e2e/... \
+            -count=1
+        continue-on-error: true
+
+  # ── Job 5: Fuzz Tests (short, for CI) ────────────────────────────────────────
+  fuzz-tests-short:
+    name: Fuzz Tests (60s each)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [unit-tests]
+    # Only run on main and nightly schedule.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'schedule'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Fuzz AgentMessage parsing (60s)
+        working-directory: apps/qa
+        run: |
+          go test -fuzz=FuzzAgentMessageParsing -fuzztime=60s \
+            ./test/security/fuzz/...
+
+      - name: Fuzz ServerMessage parsing (60s)
+        working-directory: apps/qa
+        run: |
+          go test -fuzz=FuzzServerMessageParsing -fuzztime=60s \
+            ./test/security/fuzz/...
+
+      - name: Fuzz EventBatch parsing (60s)
+        working-directory: apps/qa
+        run: |
+          go test -fuzz=FuzzEventBatchParsing -fuzztime=60s \
+            ./test/security/fuzz/...
+
+  # ── Job 6: Load Test — 500 Agents ───────────────────────────────────────────
+  load-test-500:
+    name: Load Test (500 agents, ~35 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [e2e-tests, security-tests]
+    # Only run when explicitly requested or on main branch.
+    if: >
+      github.ref == 'refs/heads/main' ||
+      github.event.inputs.run_load_500 == 'true' ||
+      github.event_name == 'schedule'
+
+    env:
+      QA_INTEGRATION: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Start infrastructure (testcontainers)
+        working-directory: apps/qa
+        run: echo "testcontainers started by the test itself"
+
+      - name: Run 500-agent load test
+        working-directory: apps/qa
+        run: |
+          go build -o /tmp/simulator ./cmd/simulator/...
+          /tmp/simulator run \
+            --scenario test/load/scenarios/500_steady.json \
+            --thresholds ci/thresholds.yaml \
+            --report /tmp/reports \
+            --no-progress
+        env:
+          GATEWAY_ADDR: ${{ secrets.STAGING_GATEWAY_ADDR }}
+        continue-on-error: true  # Won't have a gateway in most CI runs
+
+      - name: Upload load test report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-500-report
+          path: /tmp/reports/
+
+  # ── Job 7: Load Test — 10K Agents (manual only) ──────────────────────────────
+  load-test-10k:
+    name: Load Test (10K agents, ~45 min)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    needs: [load-test-500]
+    if: github.event.inputs.run_load_10k == 'true'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Run 10K ramp load test
+        working-directory: apps/qa
+        run: |
+          go build -o /tmp/simulator ./cmd/simulator/...
+          /tmp/simulator run \
+            --scenario test/load/scenarios/10k_ramp.json \
+            --thresholds ci/thresholds.yaml \
+            --report /tmp/reports-10k \
+            --no-progress
+        env:
+          GATEWAY_ADDR: ${{ secrets.STAGING_GATEWAY_ADDR }}
+
+      - name: Upload 10K report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: load-test-10k-report
+          path: /tmp/reports-10k/
+
+  # ── Job 8: Phase 1 Exit Report ────────────────────────────────────────────────
+  phase1-exit-report:
+    name: Generate Phase 1 Exit Report
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [e2e-tests, security-tests]
+    if: always()
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download all reports
+        uses: actions/download-artifact@v4
+        with:
+          path: /tmp/all-reports
+
+      - name: Generate Phase 1 Exit Report
+        working-directory: apps/qa
+        run: |
+          ci/scripts/generate-phase1-exit-report.sh /tmp/all-reports /tmp/phase1-exit-report
+
+      - name: Upload Phase 1 Exit Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase1-exit-report
+          path: /tmp/phase1-exit-report/
+
+      - name: Fail if security tests failed
+        if: needs.security-tests.result == 'failure'
+        run: |
+          echo "CRITICAL: Security tests failed. Phase 1 exit criterion #9 (keystroke admin-blindness) may be violated."
+          exit 1

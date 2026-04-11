@@ -1,0 +1,97 @@
+# =============================================================================
+# Personel DLP Service — AppArmor Profile
+# Per dlp-service-isolation.md §6.2
+#
+# Load profile:
+#   apparmor_parser -r /etc/apparmor.d/personel-dlp
+#   aa-enforce /etc/apparmor.d/personel-dlp
+#
+# Verify:
+#   aa-status | grep personel-dlp
+# =============================================================================
+
+profile personel-dlp flags=(attach_disconnected,mediate_deleted) {
+  # Default deny everything
+  deny /** rwklx,
+
+  # -------------------------------------------------------------------------
+  # Binary execution — the DLP binary only; no shell, no other executables
+  # -------------------------------------------------------------------------
+  /dlp rix,
+
+  # -------------------------------------------------------------------------
+  # Read-only config and TLS material
+  # -------------------------------------------------------------------------
+  /etc/personel/dlp/** r,
+  /etc/personel/tls/** r,
+
+  # -------------------------------------------------------------------------
+  # Writable tmpfs mounts (pattern cache and temp files)
+  # -------------------------------------------------------------------------
+  /var/cache/dlp/ rw,
+  /var/cache/dlp/** rw,
+  /tmp/ rw,
+  /tmp/** rw,
+
+  # -------------------------------------------------------------------------
+  # /proc access (Go runtime needs some /proc access)
+  # -------------------------------------------------------------------------
+  /proc/sys/kernel/hostname r,
+  /proc/sys/net/core/somaxconn r,
+  /proc/meminfo r,
+  /proc/cpuinfo r,
+  /proc/self/ r,
+  /proc/self/** r,
+
+  # DENY: cannot read other processes' memory or mappings
+  deny /proc/*/mem rwklx,
+  deny /proc/*/maps r,
+  deny /proc/*/status r,
+  deny /proc/*/cmdline r,
+  deny /proc/*/fd/ r,
+  deny /proc/*/fd/** r,
+
+  # -------------------------------------------------------------------------
+  # /sys — deny debugging and kernel internals
+  # -------------------------------------------------------------------------
+  deny /sys/kernel/debug/** rwklx,
+  deny /sys/kernel/tracing/** rwklx,
+  /sys/fs/cgroup/** r,
+
+  # -------------------------------------------------------------------------
+  # Networking — needed for NATS, Vault, Postgres, MinIO connections
+  # -------------------------------------------------------------------------
+  network inet stream,
+  network inet6 stream,
+  network inet dgram,
+  network inet6 dgram,
+
+  # -------------------------------------------------------------------------
+  # Unix sockets (Go runtime)
+  # -------------------------------------------------------------------------
+  unix (create,connect,send,receive) type=stream,
+  unix (create,connect,send,receive) type=dgram,
+
+  # -------------------------------------------------------------------------
+  # Signals — own process only
+  # -------------------------------------------------------------------------
+  signal (receive) set=(hup,int,term,quit,pipe,alrm,usr1,usr2),
+
+  # -------------------------------------------------------------------------
+  # Standard file descriptors (stdin/stdout/stderr — though DLP uses neither)
+  # -------------------------------------------------------------------------
+  /dev/null rw,
+  /dev/urandom r,
+  /dev/random r,
+
+  # -------------------------------------------------------------------------
+  # Go runtime and libc resolution
+  # -------------------------------------------------------------------------
+  /etc/nsswitch.conf r,
+  /etc/hosts r,
+  /etc/resolv.conf r,
+  /etc/ld.so.cache r,
+  /etc/ssl/certs/ r,
+  /etc/ssl/certs/** r,
+  /usr/share/zoneinfo/** r,
+}

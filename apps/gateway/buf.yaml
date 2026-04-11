@@ -1,0 +1,16 @@
+version: v2
+modules:
+  - path: ../../proto
+    name: buf.build/personel/personel
+
+lint:
+  use:
+    - DEFAULT
+  except:
+    - PACKAGE_VERSION_SUFFIX   # we use v1 not API v1
+  ignore:
+    - google/protobuf
+
+breaking:
+  use:
+    - FILE

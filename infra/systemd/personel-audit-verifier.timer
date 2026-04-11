@@ -1,0 +1,17 @@
+# =============================================================================
+# Personel Platform — Daily Audit Chain Verifier Timer
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Daily Audit Chain Verification Timer
+PartOf=personel.target
+
+[Timer]
+# Run at 03:30 local time (after backup completes)
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=personel-audit-verifier.service
+
+[Install]
+WantedBy=personel.target

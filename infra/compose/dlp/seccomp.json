@@ -1,0 +1,116 @@
+{
+  "defaultAction": "SCMP_ACT_ALLOW",
+  "archMap": [
+    {
+      "architecture": "SCMP_ARCH_X86_64",
+      "subArchitectures": ["SCMP_ARCH_X86", "SCMP_ARCH_X32"]
+    },
+    {
+      "architecture": "SCMP_ARCH_AARCH64",
+      "subArchitectures": ["SCMP_ARCH_ARM"]
+    }
+  ],
+  "syscalls": [
+    {
+      "names": [
+        "ptrace",
+        "process_vm_readv",
+        "process_vm_writev"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Memory inspection — cannot debug or inspect DLP process memory"
+    },
+    {
+      "names": [
+        "kcmp"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Process comparison — used to determine if two fds refer to the same resource"
+    },
+    {
+      "names": [
+        "perf_event_open",
+        "bpf"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Performance monitoring — can leak memory across process boundaries"
+    },
+    {
+      "names": [
+        "userfaultfd"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "User-space page fault handling — potential memory disclosure vector"
+    },
+    {
+      "names": [
+        "kexec_load",
+        "kexec_file_load",
+        "init_module",
+        "finit_module",
+        "delete_module"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Kernel loading — no reason for DLP to load kernel modules or replace kernel"
+    },
+    {
+      "names": [
+        "mount",
+        "umount",
+        "umount2",
+        "pivot_root",
+        "chroot"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Filesystem manipulation — DLP should not mount or chroot"
+    },
+    {
+      "names": [
+        "reboot",
+        "swapon",
+        "swapoff"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "System control — DLP must not swap memory or reboot"
+    },
+    {
+      "names": [
+        "setuid",
+        "setgid",
+        "setreuid",
+        "setregid",
+        "setresuid",
+        "setresgid",
+        "setfsuid",
+        "setfsgid"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Privilege escalation — combined with no-new-privileges, belt-and-braces"
+    },
+    {
+      "names": [
+        "clone",
+        "unshare"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Namespace operations — DLP does not need to create namespaces"
+    },
+    {
+      "names": [
+        "mprotect"
+      ],
+      "action": "SCMP_ACT_ERRNO",
+      "errnoRet": 1,
+      "comment": "Memory protection changes — Go runtime uses mmap; mprotect with PROT_EXEC on data is blocked (distroless Go binary is pre-linked; Go does not call mprotect at runtime for code pages)"
+    }
+  ]
+}

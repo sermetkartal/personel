@@ -1,0 +1,9 @@
+Test fixtures directory.
+
+Integration tests use testcontainers-go to spin up real infrastructure.
+Fixtures here are for:
+- SQL seed scripts for complex test scenarios
+- JSON request/response golden files for contract tests
+- Sample policy JSON for policy validation tests
+
+Most tests use the seedTenant/seedUser helpers in helpers_test.go directly.

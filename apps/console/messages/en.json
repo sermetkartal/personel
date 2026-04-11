@@ -1,0 +1,884 @@
+{
+  "common": {
+    "appName": "Personel",
+    "appTagline": "Enterprise Employee Activity Monitoring",
+    "loading": "Loading...",
+    "saving": "Saving...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View",
+    "download": "Download",
+    "export": "Export",
+    "search": "Search",
+    "filter": "Filter",
+    "clear": "Clear",
+    "apply": "Apply",
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "yes": "Yes",
+    "no": "No",
+    "unknown": "Unknown",
+    "notAvailable": "N/A",
+    "all": "All",
+    "none": "None",
+    "active": "Active",
+    "inactive": "Inactive",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "status": "Status",
+    "actions": "Actions",
+    "details": "Details",
+    "createdAt": "Created At",
+    "updatedAt": "Updated At",
+    "pagination": {
+      "showing": "Showing {from}-{to} of {total}",
+      "previous": "Previous",
+      "next": "Next",
+      "pageOf": "Page {current} of {total}"
+    },
+    "table": {
+      "noResults": "No records found.",
+      "noResultsFiltered": "No records match the current filter."
+    },
+    "datePicker": {
+      "selectDate": "Select date",
+      "from": "From",
+      "to": "To"
+    },
+    "roles": {
+      "admin": "Administrator",
+      "manager": "Manager",
+      "hr": "Human Resources",
+      "dpo": "Data Protection Officer",
+      "investigator": "Investigator",
+      "auditor": "Auditor",
+      "employee": "Employee"
+    },
+    "kvkk": "KVKK",
+    "copy": "Copy",
+    "copied": "Copied"
+  },
+
+  "auth": {
+    "login": {
+      "title": "Admin Console",
+      "heading": "Personel Admin Console",
+      "subheading": "Enterprise employee activity monitoring platform",
+      "subtitle": "Enterprise employee activity monitoring platform",
+      "ssoNote": "Sign in securely with your corporate identity provider (Keycloak).",
+      "cta": "Sign in with Corporate Account",
+      "loginButton": "Sign in with Keycloak",
+      "loginDescription": "Sign in securely with your corporate identity provider.",
+      "redirecting": "Redirecting...",
+      "welcome": "Welcome",
+      "kvkkNotice": "This system operates under KVKK (Law No. 6698). By signing in, you accept the system policies."
+    },
+    "callback": {
+      "processing": "Authenticating...",
+      "loading": "Creating session...",
+      "error": "Authentication error",
+      "errorTitle": "Sign In Failed",
+      "authError": "Identity provider error: {error}",
+      "missingParams": "Missing parameters. Please sign in again.",
+      "exchangeFailed": "Token exchange failed. Please try again.",
+      "networkError": "Could not reach the server. Check your network connection.",
+      "tryAgain": "Try Again"
+    },
+    "logout": {
+      "button": "Sign Out",
+      "confirming": "Signing out..."
+    },
+    "session": {
+      "expired": "Your session has expired. Please sign in again.",
+      "invalid": "Invalid session. Please sign in again."
+    },
+    "errors": {
+      "loginFailed": "Login failed. Please try again.",
+      "unauthorized": "You are not authorized to access this resource.",
+      "forbidden": "You do not have permission to perform this action."
+    }
+  },
+
+  "nav": {
+    "dashboard": "Dashboard",
+    "endpoints": "Endpoints",
+    "employees": "Employees",
+    "reports": "Reports",
+    "liveView": "Live View",
+    "dsr": "Data Subject Requests (m.11)",
+    "legalHold": "Legal Hold",
+    "destructionReports": "Destruction Reports",
+    "audit": "Audit Trail",
+    "policies": "Policies",
+    "settings": "Settings",
+    "silence": "Silence Management",
+    "profile": "My Profile",
+    "settingsMenu": {
+      "dlp": "DLP Settings",
+      "tenants": "Tenants",
+      "users": "Users",
+      "integrations": "Integrations",
+      "profile": "Profile"
+    }
+  },
+
+  "dashboard": {
+    "title": "Dashboard",
+    "subtitle": "System status and key metrics",
+    "cards": {
+      "activeEndpoints": "Active Endpoints",
+      "activeEndpointsDesc": "Signal received in the last 5 minutes",
+      "silentEndpoints": "Silent Endpoints",
+      "silentEndpointsDesc": "Gaps exceeding expected interval",
+      "pendingDsrs": "Pending DSRs",
+      "pendingDsrsDesc": "Data subject requests awaiting response",
+      "pendingLiveViewApprovals": "Live View Awaiting Approval",
+      "pendingLiveViewApprovalsDesc": "Requests pending HR approval",
+      "overduedsrs": "Overdue DSRs",
+      "overduedsrsDesc": "30-day SLA deadline passed",
+      "atRiskDsrs": "At-Risk DSRs",
+      "atRiskDsrsDesc": "20+ days elapsed, urgent"
+    },
+    "dlpBanner": {
+      "disabled": {
+        "title": "DLP Service Disabled",
+        "description": "Keystroke content is encrypted at rest but no DLP patterns are being matched. Follow the mandatory ceremony to enable DLP.",
+        "action": "Go to DLP Settings"
+      },
+      "active": {
+        "title": "DLP Active",
+        "description": "Keystroke content is being processed by the DLP engine.",
+        "action": "View DLP Status"
+      }
+    },
+    "recentAudit": {
+      "title": "Recent Audit Events",
+      "viewAll": "View All"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "newLiveViewRequest": "Request Live View",
+      "viewPendingDsrs": "View Pending DSRs",
+      "auditLog": "View Audit Trail"
+    }
+  },
+
+  "endpoints": {
+    "title": "Endpoints",
+    "subtitle": "Manage enrolled agent endpoints",
+    "enroll": "Enroll New",
+    "enrollTitle": "Enroll New Endpoint",
+    "backToList": "Back to Endpoint List",
+    "detail": {
+      "title": "Endpoint Detail",
+      "hostname": "Hostname",
+      "osVersion": "Operating System",
+      "agentVersion": "Agent Version",
+      "status": "Status",
+      "lastSeen": "Last Seen",
+      "enrolledAt": "Enrolled At",
+      "policy": "Assigned Policy",
+      "tabs": {
+        "overview": "Overview",
+        "timeline": "Timeline",
+        "screenshots": "Screenshots",
+        "sessions": "Sessions"
+      }
+    },
+    "status": {
+      "active": "Active",
+      "revoked": "Revoked",
+      "offline": "Offline"
+    },
+    "actions": {
+      "revoke": "Revoke Token",
+      "delete": "Delete Endpoint",
+      "requestLiveView": "Request Live View",
+      "revokeConfirm": "Are you sure you want to revoke this endpoint's token? The agent will no longer be able to connect.",
+      "deleteConfirm": "Are you sure you want to delete this endpoint? This action cannot be undone."
+    },
+    "filters": {
+      "allStatuses": "All Statuses",
+      "searchPlaceholder": "Search by hostname..."
+    },
+    "enrollment": {
+      "hostname": "Hostname",
+      "hostnameHint": "Network hostname of the Windows computer",
+      "osVersion": "OS Version",
+      "policy": "Assign Policy (optional)",
+      "tokenIssued": "Enrollment Token Issued",
+      "tokenWarning": "This token is shown only once. Copy it securely.",
+      "secretId": "Secret ID",
+      "roleId": "Role ID",
+      "vaultAddr": "Vault Address",
+      "expiresAt": "Expires At"
+    }
+  },
+
+  "employees": {
+    "title": "Employees",
+    "subtitle": "View employee records",
+    "detail": {
+      "title": "Employee Detail",
+      "endpoints": "Associated Endpoints",
+      "dsrHistory": "DSR History",
+      "liveViewHistory": "Live View History"
+    }
+  },
+
+  "reports": {
+    "title": "Reports",
+    "subtitle": "ClickHouse-backed activity analytics",
+    "dateRange": "Date Range",
+    "endpoint": "Endpoint",
+    "allEndpoints": "All Endpoints",
+    "productivity": {
+      "title": "Productivity Timeline",
+      "description": "Hourly active/idle time distribution",
+      "activeTime": "Active Time",
+      "idleTime": "Idle Time"
+    },
+    "topApps": {
+      "title": "Top Applications",
+      "description": "Application ranking by active usage time",
+      "appName": "Application",
+      "duration": "Duration",
+      "percentage": "Percentage"
+    },
+    "idleActive": {
+      "title": "Idle / Active Analysis",
+      "description": "Period-based idle vs active time comparison"
+    },
+    "blockingEvents": {
+      "title": "Blocking Events",
+      "description": "Policy blocking and DLP event history",
+      "eventType": "Event Type",
+      "count": "Count",
+      "lastOccurrence": "Last Occurrence"
+    },
+    "appBlocks": {
+      "title": "App Blocking Events",
+      "description": "Applications blocked by policy and event counts"
+    }
+  },
+
+  "liveView": {
+    "title": "Live View",
+    "subtitle": "Real-time screen monitoring sessions",
+    "newRequest": "New Request",
+    "approvalQueue": "Approval Queue",
+    "activeSessions": "Active Sessions",
+    "noActiveSessions": "No active live view sessions.",
+    "myRequests": "My Requests",
+    "minutes": "minutes",
+    "timeCap": "Time cap",
+    "watch": "Watch",
+    "sessions": {
+      "active": "Active Sessions",
+      "recent": "Recent Sessions",
+      "pending": "Awaiting Approval"
+    },
+    "request": {
+      "title": "Live View Request",
+      "subtitle": "HR approval required. Approval must come from a different user.",
+      "kvkkNoticeTitle": "KVKK Notice",
+      "kvkkNoticeBody": "Live view may only be used for legitimate purposes within the proportionality principle. Every session is logged to the audit trail.",
+      "dualControlNote": "This request must be approved by a different user with the HR role (dual control). You cannot approve your own request.",
+      "endpointLabel": "Target Endpoint",
+      "endpointPlaceholder": "Select an endpoint",
+      "noEndpoints": "No active endpoints found",
+      "reasonLabel": "Reason Code",
+      "reasonPlaceholder": "Select a reason",
+      "durationLabel": "Session Duration",
+      "durationCustom": "Custom duration",
+      "durationNote": "Maximum 60 minutes for proportionality.",
+      "minutes": "minutes",
+      "submit": "Submit Request",
+      "submitting": "Submitting...",
+      "cancel": "Cancel",
+      "successToast": "Live view request submitted. Awaiting HR approval.",
+      "endpoint": "Endpoint",
+      "selectEndpoint": "Select an endpoint",
+      "reasonCode": "Reason Code",
+      "reasonCodeHint": "Ticket number, incident ID, or investigation reference. Free text only is not accepted.",
+      "duration": "Duration (minutes)",
+      "durationHint": "Default: 15 min, Maximum: 60 min",
+      "waitingApproval": "Waiting for HR approval...",
+      "approvalNotice": "This request must be approved by a different user with the HR role.",
+      "submitted": "Request submitted. Wait for approval notification."
+    },
+    "viewer": {
+      "titlePrefix": "Live View:",
+      "title": "Live View Session",
+      "sessionId": "Session ID",
+      "auditNoticeTitle": "Audit Trail",
+      "auditNoticeBody": "All actions during this session are recorded to the audit trail.",
+      "notActiveTitle": "Session Not Active",
+      "notActiveBody": "This session cannot be viewed right now. State: {state}",
+      "endedAt": "Ended at",
+      "timeRemaining": "Time remaining",
+      "sessionEnded": "Session ended",
+      "timeWarning": "2 minutes remaining! Session will auto-terminate shortly.",
+      "terminate": "Force Terminate",
+      "terminateTitle": "Force Terminate Session",
+      "terminateDesc": "Enter a reason for termination. This action is irreversible and will be logged.",
+      "terminateReasonLabel": "Termination Reason",
+      "terminateReasonPlaceholder": "Enter termination reason",
+      "confirmTerminate": "Yes, Terminate",
+      "terminating": "Terminating...",
+      "terminatedToast": "Session successfully terminated.",
+      "cancel": "Cancel",
+      "connecting": "Connecting...",
+      "disconnected": "Disconnected. Redirecting...",
+      "screenLabel": "Endpoint screen",
+      "status": {
+        "connecting": "Connecting",
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "reconnecting": "Reconnecting"
+      }
+    },
+    "approval": {
+      "title": "Live View Approval Queue",
+      "subtitle": "Requests awaiting HR approval",
+      "approve": "Approve",
+      "deny": "Deny",
+      "selfApprovalBlocked": "You cannot approve your own request.",
+      "selfApprovalTooltip": "Dual control: The requester and approver must be different users.",
+      "requester": "Requester",
+      "targetEndpoint": "Target Endpoint",
+      "reasonCode": "Reason Code",
+      "requestedAt": "Requested At",
+      "duration": "Requested Duration",
+      "approveConfirm": "Do you want to approve this live view session?",
+      "denyConfirm": "Are you sure you want to deny this request?",
+      "denyReason": "Reason for denial",
+      "noRequests": "No requests awaiting approval."
+    },
+    "session": {
+      "viewing": "Viewing",
+      "endSession": "End Session",
+      "terminateSession": "Force Terminate",
+      "terminateReason": "Reason for termination",
+      "sessionEnded": "Session ended.",
+      "connecting": "Connecting...",
+      "disconnected": "Disconnected",
+      "liveIndicator": "LIVE",
+      "timeCap": "Remaining: {remaining}",
+      "endConfirm": "Are you sure you want to end this live view session?"
+    },
+    "states": {
+      "REQUESTED": "Requested",
+      "APPROVED": "Approved",
+      "ACTIVE": "Active",
+      "ENDED": "Ended",
+      "DENIED": "Denied",
+      "EXPIRED": "Expired",
+      "FAILED": "Failed",
+      "TERMINATED_BY_HR": "Terminated by HR",
+      "TERMINATED_BY_DPO": "Terminated by DPO"
+    }
+  },
+
+  "dsr": {
+    "title": "Data Subject Requests (KVKK m.11)",
+    "subtitle": "Manage personal data subject access requests",
+    "dashboard": {
+      "open": "Open",
+      "atRisk": "At Risk",
+      "overdue": "Overdue",
+      "resolved": "Resolved",
+      "rejected": "Rejected",
+      "medianResponse": "Median Response Time (90 days)",
+      "days": "{count} days"
+    },
+    "types": {
+      "access": "Access Request",
+      "rectify": "Rectification",
+      "erase": "Erasure",
+      "object": "Objection",
+      "restrict": "Restriction",
+      "portability": "Portability"
+    },
+    "states": {
+      "open": "Open",
+      "at_risk": "At Risk (20+ days)",
+      "overdue": "Overdue (30+ days)",
+      "resolved": "Resolved",
+      "rejected": "Rejected"
+    },
+    "backToList": "Back to Request List",
+    "detail": {
+      "title": "Request Detail",
+      "slaTitle": "SLA Status",
+      "infoTitle": "Request Details",
+      "actionsTitle": "Actions",
+      "employee": "Employee",
+      "requestType": "Request Type",
+      "scope": "Scope",
+      "justification": "Justification",
+      "submittedAt": "Submitted At",
+      "deadline": "Deadline",
+      "slaDeadline": "SLA Deadline",
+      "assignedTo": "Assigned To",
+      "artifactRef": "Response Artifact Reference",
+      "responseArtifact": "Response Artifact",
+      "daysRemaining": "{days} days remaining",
+      "daysOverdue": "{days} days overdue (SLA Breach)"
+    },
+    "actions": {
+      "assign": "Assign",
+      "respond": "Respond",
+      "extend": "Extend SLA",
+      "reject": "Reject",
+      "erase": "Erase Data",
+      "exportData": "Export Data",
+      "noActions": "No actions available for this state: {state}",
+      "respondTitle": "Respond to Request",
+      "respondDesc": "Enter the response artifact reference to close the request.",
+      "rejectTitle": "Reject Request",
+      "rejectDesc": "Specify the reason for rejection.",
+      "rejectReasonLabel": "Rejection Reason",
+      "rejectReasonPlaceholder": "Enter rejection reason",
+      "rejectSuccess": "Request rejected.",
+      "rejecting": "Rejecting...",
+      "confirmReject": "Yes, Reject",
+      "extendTitle": "Extend SLA Deadline",
+      "extendDesc": "A justification is required per KVKK.",
+      "extendJustLabel": "Extension Justification",
+      "extendJustPlaceholder": "Enter extension justification",
+      "extendSuccess": "SLA deadline extended.",
+      "extending": "Extending...",
+      "confirmExtend": "Confirm Extension",
+      "cancel": "Cancel"
+    },
+    "response": {
+      "successToast": "Response saved. Request closed.",
+      "artifactNote": "The response artifact must not contain raw personal data. Enter only a MinIO object path or encrypted document reference.",
+      "artifactLabel": "Response Artifact Reference",
+      "artifactPlaceholder": "e.g. dsr-responses/2024/uuid.pdf",
+      "artifactHint": "MinIO bucket/key path or secure download reference.",
+      "notesLabel": "Notes (optional)",
+      "notesPlaceholder": "Notes about the processing",
+      "submit": "Save Response",
+      "submitting": "Saving..."
+    },
+    "slaTimeline": {
+      "submitted": "Submitted",
+      "atRisk": "At Risk (Day 20)",
+      "critical": "Critical (Day 28)",
+      "deadline": "Deadline (Day 30)",
+      "daysElapsed": "{count} days elapsed",
+      "daysRemaining": "{count} days remaining",
+      "breach": "SLA breach! {count} days overdue"
+    },
+    "extend": {
+      "title": "Extend SLA Deadline",
+      "justification": "Extension justification (required by KVKK)",
+      "maxExtension": "Maximum extension is 30 days.",
+      "confirm": "Confirm Extension"
+    },
+    "respond": {
+      "title": "Respond to Request",
+      "artifactRef": "Response Artifact Reference",
+      "artifactRefHint": "MinIO object path or document reference",
+      "notes": "Notes",
+      "confirm": "Save Response"
+    },
+    "new": {
+      "title": "New Data Subject Request",
+      "subtitle": "Exercise data subject rights under KVKK Article 11",
+      "kvkkTitle": "KVKK Article 11 Rights",
+      "kvkkBody": "Data subjects can exercise: access, rectification, erasure, objection, restriction, and portability rights. All requests must be answered within 30 days.",
+      "typeLabel": "Request Type",
+      "typePlaceholder": "Select a request type",
+      "slaNote": "The 30-day SLA begins when the request is submitted.",
+      "submit": "Submit Request",
+      "submitting": "Submitting...",
+      "cancel": "Cancel",
+      "successToast": "Data request created.",
+      "adminInitiated": "Admin-Initiated",
+      "adminInitiatedHint": "This form is rarely used. Employees typically apply via the Transparency Portal."
+    }
+  },
+
+  "legalHold": {
+    "title": "Legal Hold",
+    "subtitle": "Available to Data Protection Officer only",
+    "newHold": "New Hold",
+    "dpoOnly": "This action is restricted to the Data Protection Officer (DPO) role.",
+    "new": {
+      "title": "New Legal Hold"
+    },
+    "list": {
+      "active": "Active Holds",
+      "released": "Released Holds",
+      "daysRemaining": "{count} days remaining",
+      "affectedRows": "Affected Records: ~{count}"
+    },
+    "place": {
+      "title": "Place Legal Hold",
+      "reasonCode": "Reason Code",
+      "ticketId": "Ticket / Case Reference",
+      "justification": "Justification",
+      "scope": "Scope",
+      "endpoint": "Endpoint",
+      "user": "User",
+      "dateRange": "Date Range",
+      "eventTypes": "Event Types",
+      "maxDuration": "Maximum Duration (days)",
+      "maxDurationHint": "Maximum 730 days (2 years)",
+      "submit": "Place Hold"
+    },
+    "release": {
+      "title": "Release Legal Hold",
+      "justification": "Release justification (required)",
+      "confirm": "Release Hold",
+      "warning": "After release, record TTLs will be recalculated and overdue records will be deleted."
+    }
+  },
+
+  "destructionReports": {
+    "title": "Destruction Reports",
+    "subtitle": "6-month periodic data destruction reports (required by KVKK Regulation)",
+    "autoGenerated": "Reports are auto-generated on January 1 and July 1 each year.",
+    "generateManual": "Generate Manually",
+    "list": {
+      "period": "Period",
+      "generatedAt": "Generated At",
+      "signatureStatus": "Signature",
+      "signatureValid": "Valid",
+      "signatureInvalid": "Invalid",
+      "download": "Download PDF"
+    },
+    "detail": {
+      "title": "Destruction Report Detail",
+      "summary": "Summary",
+      "deletedRows": "Deleted Records",
+      "legalHoldEvents": "Legal Hold Events",
+      "dsrDeletions": "DSR-Triggered Deletions",
+      "keyDestructions": "Key Destructions",
+      "outstandingHolds": "Outstanding Holds"
+    }
+  },
+
+  "audit": {
+    "title": "Audit Trail",
+    "subtitle": "Immutable hash-chained audit log",
+    "totalRecords": "records",
+    "page": "Page",
+    "pageOf": "Page {page}/{total}",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "noRecords": "No audit records found",
+    "noRecordsHint": "Try clearing filters or broadening the date range.",
+    "errorLoadingRecords": "Failed to load records",
+    "retry": "Retry",
+    "recordsLabel": "Audit records",
+    "pagination": "Pagination",
+    "filterLabel": "Audit filter",
+    "filterAction": "Action type",
+    "filterActor": "Actor UUID",
+    "filterFrom": "Start date",
+    "filterTo": "End date",
+    "clearFilters": "Clear Filters",
+    "refresh": "Refresh",
+    "verifyLink": "Verify Chain",
+    "backToLog": "Back to Log",
+    "verify": {
+      "title": "Chain Verification",
+      "subtitle": "Hash chain integrity check",
+      "algorithmTitle": "About the Algorithm",
+      "algorithmBody": "Each record includes the hash of the previous record. This cryptographically guarantees that no record can be modified after the fact.",
+      "retentionNote": "Records are retained for 5 years in accordance with KVKK Article 7 and related legislation.",
+      "status": {
+        "valid": "Chain Valid",
+        "broken": "Chain Breach Detected!",
+        "pending": "Verifying..."
+      },
+      "lastVerified": "Last Verified",
+      "chainHead": "Chain Head (Hash)",
+      "totalRecords": "Total Records"
+    },
+    "chain": {
+      "verifying": "Verifying chain...",
+      "errorTitle": "Verification Error",
+      "errorBody": "Could not retrieve chain status. Please try again.",
+      "validCompact": "Chain valid",
+      "records": "records",
+      "brokenAt": "Broken at Seq",
+      "validTitle": "Hash Chain Valid",
+      "validBody": "All records cryptographically verified. No tampering detected.",
+      "brokenTitle": "Chain Breach Detected",
+      "brokenBody": "A gap was found in the hash chain. This may indicate one or more records were modified.",
+      "totalRecords": "Total Records",
+      "lastVerified": "Last Verified",
+      "chainHead": "Chain Head",
+      "integrityLabel": "Integrity",
+      "integrityOK": "Valid",
+      "integrityFAIL": "Breach"
+    },
+    "event": {
+      "action": "Action",
+      "actor": "Actor",
+      "subject": "Subject",
+      "timestamp": "Timestamp",
+      "hash": "Hash",
+      "prevHash": "Previous Hash"
+    },
+    "filters": {
+      "action": "Action Filter",
+      "actor": "Actor",
+      "dateRange": "Date Range",
+      "allActions": "All Actions"
+    },
+    "actions": {
+      "adminLoginSuccess": "Admin Login (Success)",
+      "adminLoginFailed": "Admin Login (Failed)",
+      "userCreated": "User Created",
+      "userRoleChanged": "User Role Changed",
+      "userDisabled": "User Disabled",
+      "policyCreated": "Policy Created",
+      "policyUpdated": "Policy Updated",
+      "policyPushed": "Policy Pushed",
+      "endpointEnrolled": "Endpoint Enrolled",
+      "endpointRevoked": "Endpoint Revoked",
+      "screenshotViewed": "Screenshot Viewed",
+      "liveViewRequested": "Live View Requested",
+      "liveViewApproved": "Live View Approved",
+      "liveViewDenied": "Live View Denied",
+      "liveViewStarted": "Live View Started",
+      "liveViewStopped": "Live View Stopped",
+      "dsrSubmitted": "DSR Submitted",
+      "dsrAssigned": "DSR Assigned",
+      "dsrResponded": "DSR Responded",
+      "dsrErased": "DSR Erasure Executed",
+      "legalHoldPlaced": "Legal Hold Placed",
+      "legalHoldReleased": "Legal Hold Released",
+      "retentionDestructionReportGenerated": "Destruction Report Generated",
+      "agentSilenceAcknowledged": "Agent Silence Acknowledged"
+    }
+  },
+
+  "policies": {
+    "title": "Policies",
+    "subtitle": "Manage agent monitoring policies",
+    "create": "Create Policy",
+    "push": "Push to Endpoints",
+    "detail": {
+      "title": "Policy Detail",
+      "name": "Name",
+      "description": "Description",
+      "version": "Version",
+      "rules": "Rules",
+      "assignedEndpoints": "Assigned Endpoints"
+    },
+    "rules": {
+      "screenshot": "Screenshot",
+      "screenshotEnabled": "Enabled",
+      "screenshotInterval": "Interval (seconds)",
+      "appBlockList": "App Block List",
+      "appAllowList": "App Allow List",
+      "sensitivityGuard": "Sensitivity Guard (KVKK m.6)"
+    },
+    "sensitivityGuard": {
+      "title": "Sensitivity Guard",
+      "subtitle": "KVKK m.6 sensitive data processing guardrails",
+      "windowTitleRegex": "Window Title Regex Patterns",
+      "windowTitleRegexHint": "Patterns for window titles containing sensitive data (health, union, religion, etc.)",
+      "sensitiveHostGlobs": "Sensitive URL/Host Patterns",
+      "sensitiveHostGlobsHint": "Mask access to sensitive sites such as health portals",
+      "excludeApps": "Excluded Applications",
+      "excludeAppsHint": "Application names that will never be captured in screenshots",
+      "autoFlag": "Auto-flag on m.6 DLP Match",
+      "addPattern": "Add Pattern",
+      "regexError": "Invalid regex pattern",
+      "regexValid": "Valid regex pattern"
+    },
+    "push": {
+      "title": "Push Policy",
+      "selectEndpoints": "Select Target Endpoints",
+      "all": "All Active Endpoints",
+      "specific": "Specific Endpoints",
+      "confirm": "Push",
+      "success": "Policy queued for delivery.",
+      "pushDescription": "This policy will be signed and delivered to the selected endpoints via NATS."
+    }
+  },
+
+  "dlp": {
+    "title": "DLP Settings",
+    "subtitle": "Data Loss Prevention service status and opt-in ceremony",
+    "statusBadge": {
+      "active": "DLP: Active",
+      "inactive": "DLP: Off"
+    },
+    "state": {
+      "title": "DLP Service Status",
+      "disabled": {
+        "heading": "DLP Service Off (Default)",
+        "body": "This is the secure default. Keystroke content is encrypted at rest but no process holds the decryption key — the system is technically 'keystroke-blind'.",
+        "legalClaim": "In this configuration: 'No process on this system has ever held the keystroke decryption key.' — provable from Vault audit logs."
+      },
+      "active": {
+        "heading": "DLP Service Active",
+        "body": "Keystroke content is being processed by the DLP engine for pattern matching. All employees receive a notification in the Transparency Portal.",
+        "enabledAt": "Enabled At",
+        "enabledBy": "Enabled By"
+      }
+    },
+    "ceremony": {
+      "title": "DLP Enable Ceremony",
+      "subtitle": "The following steps are REQUIRED to enable the DLP service. The console cannot bypass this ceremony.",
+      "warning": "There is no 'Enable' button in this console. This is by design (ADR 0013).",
+      "steps": {
+        "1": {
+          "title": "1. DPIA Amendment",
+          "body": "The DPO must update the organization's DPIA to cover active DLP processing. Must be signed by legal counsel."
+        },
+        "2": {
+          "title": "2. Written Sign-Off Form",
+          "body": "DPO + IT Security Director + Legal Counsel must sign the template. Form: docs/compliance/dlp-opt-in-form.md"
+        },
+        "3": {
+          "title": "3. Operator Script",
+          "body": "A Personel operator with the vault-admin role must run the following script:",
+          "command": "infra/scripts/dlp-enable.sh"
+        },
+        "4": {
+          "title": "4. Transparency Notification",
+          "body": "After the script completes successfully, the Transparency Portal will display a DLP activation notice to all employees."
+        },
+        "5": {
+          "title": "5. Audit Checkpoint",
+          "body": "The enable event will be written to the hash-chained audit log and included in the daily signed checkpoint."
+        }
+      },
+      "signoffTemplate": "View Sign-Off Form Template",
+      "disableTitle": "Disabling DLP",
+      "disableBody": "To disable DLP: infra/scripts/dlp-disable.sh — This revokes the Secret ID, stops the service, and creates an audit record."
+    }
+  },
+
+  "settings": {
+    "title": "Settings",
+    "tabs": {
+      "dlp": "DLP",
+      "tenants": "Tenants",
+      "users": "Users",
+      "integrations": "Integrations",
+      "profile": "Profile"
+    },
+    "tenants": {
+      "title": "Tenant Settings",
+      "liveViewHistoryRestricted": "Restrict Employee Live View History Visibility",
+      "liveViewHistoryRestrictedHint": "When disabled, DPO must provide written justification and an audit record is created.",
+      "maxScreenshotRetention": "Maximum Screenshot Retention (days)"
+    },
+    "users": {
+      "title": "User Management",
+      "createUser": "Add User",
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "disabled": "Disabled"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "keycloak": "Keycloak OIDC",
+      "livekit": "LiveKit SFU",
+      "vault": "HashiCorp Vault",
+      "status": "Connection Status"
+    },
+    "profile": {
+      "title": "My Profile",
+      "subtitle": "View your account information",
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "tenant": "Tenant",
+      "userId": "User ID",
+      "keycloakNote": "To change your account information, contact your Keycloak portal.",
+      "changePassword": "Change Password"
+    },
+    "newHold": "New Hold"
+  },
+
+  "silence": {
+    "title": "Silence Management",
+    "subtitle": "Monitor and acknowledge agent signal gaps",
+    "description": "View heartbeat gaps (Flow 7) that exceed the expected interval and acknowledge them with reason codes.",
+    "gap": {
+      "started": "Gap Started",
+      "ended": "Gap Ended",
+      "duration": "Duration",
+      "acknowledged": "Acknowledged",
+      "notAcknowledged": "Not Acknowledged",
+      "reason": "Reason"
+    },
+    "acknowledge": {
+      "title": "Acknowledge Silence Gap",
+      "reason": "Reason code",
+      "reasonHint": "E.g., maintenance, holiday, device failure",
+      "confirm": "Acknowledge"
+    }
+  },
+
+  "screenshots": {
+    "title": "Screenshots",
+    "restrictedRole": "Only Investigator and DPO roles can access.",
+    "reasonCodeRequired": "A reason code is required to access images.",
+    "reasonCode": "Reason Code",
+    "reasonCodeHint": "Investigation reference or case number",
+    "viewImage": "Load Image",
+    "auditNotice": "Every image access is written to the audit log.",
+    "capturedAt": "Captured At",
+    "endpoint": "Endpoint",
+    "sessionId": "Session"
+  },
+
+  "unauthorized": {
+    "title": "Access Denied",
+    "heading": "Access Denied",
+    "body": "You do not have the required role to view this page. Please contact your system administrator.",
+    "subtitle": "You do not have permission to view this page.",
+    "requiredRole": "Required Role: {role}",
+    "yourRole": "Your Role: {role}",
+    "contactAdmin": "Contact your system administrator to request access.",
+    "backToDashboard": "Back to Dashboard",
+    "backHome": "Return to Home"
+  },
+
+  "errors": {
+    "generic": "An unexpected error occurred. Please try again.",
+    "network": "Cannot connect to the server. Please check your network connection.",
+    "unauthorized": "You do not have permission to perform this action.",
+    "forbidden": "Access to this resource was denied.",
+    "notFound": "The requested resource was not found.",
+    "conflict": "This resource already exists or there is a conflict.",
+    "validation": "Request validation failed. Please check your inputs.",
+    "serverError": "Server error. Please contact your system administrator.",
+    "timeout": "The request timed out. Please try again.",
+    "auditFailed": "Audit record could not be created. Operation cancelled.",
+    "sessionExpired": "Your session has expired.",
+    "liveKitError": "Could not establish LiveKit connection.",
+    "boundary": {
+      "title": "Something went wrong",
+      "description": "An error occurred while loading the page.",
+      "reset": "Reload Page"
+    }
+  },
+
+  "notFound": {
+    "title": "Page Not Found",
+    "description": "The page you are looking for does not exist or may have been moved.",
+    "backHome": "Return to Home"
+  }
+}

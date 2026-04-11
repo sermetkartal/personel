@@ -1,0 +1,91 @@
+{
+  "Rules": [
+    {
+      "ID": "screenshots-normal-ttl",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "Expiration": {
+        "Days": 90
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 7
+      }
+    },
+    {
+      "ID": "sensitive-flagged-short-ttl",
+      "Status": "Enabled",
+      "Filter": {
+        "And": {
+          "Tags": [
+            {
+              "Key": "personel:sensitivity",
+              "Value": "m6-special-category"
+            }
+          ]
+        }
+      },
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 3
+      }
+    },
+    {
+      "ID": "keystroke-blobs-ttl",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": "keystroke-blobs/"
+      },
+      "Expiration": {
+        "Days": 30
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 3
+      }
+    },
+    {
+      "ID": "keystroke-blobs-sensitive-ttl",
+      "Status": "Enabled",
+      "Filter": {
+        "And": {
+          "Prefix": "keystroke-blobs/",
+          "Tags": [
+            {
+              "Key": "personel:sensitivity",
+              "Value": "m6-special-category"
+            }
+          ]
+        }
+      },
+      "Expiration": {
+        "Days": 14
+      },
+      "NoncurrentVersionExpiration": {
+        "NoncurrentDays": 1
+      }
+    },
+    {
+      "ID": "screen-clips-ttl",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "Expiration": {
+        "Days": 60
+      }
+    },
+    {
+      "ID": "abort-incomplete-uploads",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "AbortIncompleteMultipartUpload": {
+        "DaysAfterInitiation": 1
+      }
+    }
+  ]
+}

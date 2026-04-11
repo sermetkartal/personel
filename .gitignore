@@ -1,0 +1,119 @@
+# Dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# Build outputs
+target/
+**/target/
+.next/
+**/.next/
+dist/
+**/dist/
+build/
+**/build/
+out/
+**/out/
+
+# Rust
+Cargo.lock
+!/apps/agent/Cargo.lock
+
+# Go
+/apps/gateway/gateway
+/apps/gateway/enricher
+/apps/api/api
+/apps/qa/simulator
+/apps/qa/probe
+/apps/qa/footprint-bench
+/apps/qa/audit-redteam
+/apps/qa/chaos
+*.test
+*.out
+coverage.out
+coverage.html
+
+# Generated Go proto stubs (regenerated on build via buf/protoc)
+# Keep committed so fresh clones don't need protoc toolchain up front.
+# Uncomment the next line if you prefer to regenerate:
+# /apps/gateway/pkg/proto/personel/
+
+# TypeScript / Next.js
+*.tsbuildinfo
+next-env.d.ts
+/apps/console/.env*.local
+/apps/portal/.env*.local
+
+# pnpm — lockfile IS committed intentionally
+# (do not add pnpm-lock.yaml here)
+
+# Environment / secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+!**/.env.example
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*_rsa
+*_rsa.pub
+id_*
+*.secret
+
+# Vault
+infra/compose/vault/data/
+infra/compose/vault/logs/
+*.vault-token
+
+# Docker / Compose runtime state
+.docker/
+docker-compose.local.yaml
+
+# Database data (local dev / test containers leak these sometimes)
+*.db
+*.sqlite
+*.sqlite-journal
+*.sqlite-shm
+*.sqlite-wal
+/data/
+/var/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+*~
+.*.swp
+.*.swo
+
+# Editors
+.vscode/
+!.vscode/extensions.json
+!.vscode/settings.recommended.json
+.idea/
+*.iml
+.fleet/
+.zed/
+.cursor/
+
+# Test / coverage
+/apps/qa/reports/
+.nyc_output/
+coverage/
+
+# Backups
+*.bak
+*.backup
+*.orig
+
+# Temp
+tmp/
+.tmp/
+*.tmp

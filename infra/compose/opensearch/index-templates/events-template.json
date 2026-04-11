@@ -1,0 +1,46 @@
+{
+  "index_patterns": ["personel-events-*"],
+  "template": {
+    "settings": {
+      "number_of_shards": 2,
+      "number_of_replicas": 0,
+      "refresh_interval": "5s",
+      "index.lifecycle.name": "personel-events-policy",
+      "analysis": {
+        "analyzer": {
+          "turkish_text": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "turkish_stop", "asciifolding"]
+          }
+        },
+        "filter": {
+          "turkish_stop": {
+            "type": "stop",
+            "stopwords": "_turkish_"
+          }
+        }
+      }
+    },
+    "mappings": {
+      "dynamic": "strict",
+      "properties": {
+        "event_id":       { "type": "keyword" },
+        "tenant_id":      { "type": "keyword" },
+        "endpoint_id":    { "type": "keyword" },
+        "user_sid":       { "type": "keyword" },
+        "event_type":     { "type": "keyword" },
+        "ts":             { "type": "date" },
+        "ingested_at":    { "type": "date" },
+        "window_title":   { "type": "text", "analyzer": "turkish_text", "fields": { "keyword": { "type": "keyword", "ignore_above": 512 } } },
+        "process_name":   { "type": "keyword" },
+        "exe_path":       { "type": "keyword" },
+        "url":            { "type": "keyword" },
+        "url_host":       { "type": "keyword" },
+        "file_path":      { "type": "text", "fields": { "keyword": { "type": "keyword", "ignore_above": 1024 } } },
+        "sensitivity":    { "type": "keyword" },
+        "metadata":       { "type": "object", "dynamic": true }
+      }
+    }
+  }
+}

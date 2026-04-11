@@ -1,0 +1,154 @@
+syntax = "proto3";
+
+package personel.v1;
+
+import "google/protobuf/timestamp.proto";
+import "personel/v1/common.proto";
+import "personel/v1/events.proto";
+import "personel/v1/policy.proto";
+import "personel/v1/live_view.proto";
+
+option go_package = "github.com/personel/proto/personel/v1;personelv1";
+
+// Bidirectional stream between an Endpoint Agent and the Ingest Gateway.
+// One long-lived stream per agent instance.
+service AgentService {
+  rpc Stream(stream AgentMessage) returns (stream ServerMessage);
+}
+
+// ---------------------- Agent -> Server ----------------------
+
+message AgentMessage {
+  oneof payload {
+    Hello hello = 1;
+    Heartbeat heartbeat = 2;
+    EventBatch event_batch = 3;
+    PolicyAck policy_ack = 4;
+    UpdateAck update_ack = 5;
+    LiveViewAgentEvent live_view_event = 6;
+    CsrSubmit csr = 7;
+    QueueHealth queue_health = 8;
+  }
+}
+
+message Hello {
+  AgentVersion agent_version = 1;
+  EndpointId endpoint_id = 2;
+  TenantId tenant_id = 3;
+  HardwareFingerprint hw_fingerprint = 4;
+  bytes resume_cookie = 5;       // opaque; allows server to skip full policy push
+  uint64 last_acked_seq = 6;     // for event-queue resume
+  string os_version = 7;
+  string agent_build = 8;
+
+  // Key version handshake (see docs/architecture/key-hierarchy.md §Key Version Handshake).
+  // Gateway compares these to the expected versions in Postgres and refuses
+  // EventBatch acceptance until the endpoint re-enrolls if either is stale.
+  // The gateway NEVER decrypts; this is a plain integer comparison.
+  uint32 pe_dek_version = 9;
+  uint32 tmk_version = 10;
+}
+
+message Heartbeat {
+  google.protobuf.Timestamp sent_at = 1;
+  uint64 queue_depth = 2;
+  uint64 blob_queue_depth = 3;
+  double cpu_percent = 4;
+  uint64 rss_bytes = 5;
+  string policy_version = 6;
+}
+
+message EventBatch {
+  uint64 batch_id = 1;
+  repeated Event events = 2;   // see events.proto
+  bytes batch_hmac = 3;        // optional integrity check
+}
+
+message PolicyAck {
+  string policy_version = 1;
+  bool applied = 2;
+  string error = 3;
+}
+
+message UpdateAck {
+  AgentVersion from = 1;
+  AgentVersion to = 2;
+  bool success = 3;
+  string error = 4;
+}
+
+message CsrSubmit {
+  bytes csr_der = 1;           // PKCS#10 CSR
+  string reason = 2;           // "enroll" | "rotate" | "rekey"
+}
+
+message QueueHealth {
+  uint64 total_bytes = 1;
+  uint64 capacity_bytes = 2;
+  uint64 evictions_since_last = 3;
+}
+
+// ---------------------- Server -> Agent ----------------------
+
+message ServerMessage {
+  oneof payload {
+    Welcome welcome = 1;
+    PolicyPush policy_push = 2;
+    UpdateNotify update_notify = 3;
+    LiveViewStart live_view_start = 4;
+    LiveViewStop live_view_stop = 5;
+    RotateCert rotate_cert = 6;
+    PinUpdate pin_update = 7;
+    Ping ping = 8;
+    CsrResponse csr_response = 9;
+    BatchAck batch_ack = 10;
+  }
+}
+
+message Welcome {
+  google.protobuf.Timestamp server_time = 1;
+  string server_version = 2;
+  uint64 ack_up_to_seq = 3;
+}
+
+message PolicyPush {
+  string policy_version = 1;
+  PolicyBundle bundle = 2;     // see policy.proto
+  bytes signature = 3;         // Ed25519 over the canonical encoding of bundle
+  string signing_key_id = 4;
+}
+
+message UpdateNotify {
+  AgentVersion target_version = 1;
+  string artifact_url = 2;     // relative path on update mirror
+  bytes manifest_sha256 = 3;
+  bytes manifest_signature = 4;
+  bool canary = 5;
+}
+
+message RotateCert {
+  google.protobuf.Timestamp not_after = 1;
+  string reason = 2;
+}
+
+message PinUpdate {
+  repeated bytes allowed_spki_sha256 = 1; // new pinset
+  bytes signature = 2;
+  string signing_key_id = 3;
+}
+
+message CsrResponse {
+  bytes cert_der = 1;
+  repeated bytes chain_der = 2;
+  google.protobuf.Timestamp not_after = 3;
+}
+
+message BatchAck {
+  uint64 batch_id = 1;
+  uint64 accepted_count = 2;
+  uint64 rejected_count = 3;
+}
+
+message Ping {
+  google.protobuf.Timestamp sent_at = 1;
+}

@@ -1,0 +1,9 @@
+[toolchain]
+# MSRV bumped from 1.75 → 1.85 during Phase 1 reality check (2026-04-11):
+# the transitive `getrandom 0.4.2` dependency requires the `edition2024`
+# Cargo feature which was stabilized in Rust 1.85. 1.75 would need an
+# ancient pinned getrandom, which pulls insecure crypto. 1.85 is the
+# minimum that compiles the current dep graph cleanly.
+channel = "1.88"
+components = ["rustfmt", "clippy"]
+targets = ["x86_64-pc-windows-msvc"]

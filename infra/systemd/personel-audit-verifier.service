@@ -1,0 +1,40 @@
+# =============================================================================
+# Personel Platform — Audit Chain Verifier Service
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Audit Chain Integrity Verification
+After=personel-compose.service
+Requires=docker.service
+PartOf=personel.target
+
+[Service]
+Type=oneshot
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra
+EnvironmentFile=/opt/personel/infra/compose/.env
+
+ExecStart=/opt/personel/infra/scripts/verify-audit-chain.sh
+
+TimeoutStartSec=1800
+
+# Write result to Prometheus textfile collector
+ExecStartPost=/bin/sh -c \
+  'echo "personel_audit_chain_last_verification_ts $(date +%%s)" > /var/lib/node_exporter/textfile_collector/personel_audit.prom'
+ExecStartPost=/bin/sh -c \
+  'echo "personel_audit_chain_last_verification_success 1" >> /var/lib/node_exporter/textfile_collector/personel_audit.prom'
+
+# On failure, record 0
+ExecStopPost=/bin/sh -c \
+  'if [ "$$SERVICE_RESULT" != "success" ]; then echo "personel_audit_chain_last_verification_success 0" > /var/lib/node_exporter/textfile_collector/personel_audit.prom; fi'
+
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-audit-verifier
+
+[Install]
+WantedBy=personel.target

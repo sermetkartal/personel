@@ -1,0 +1,19 @@
+{
+  "name": "500-endpoint-steady-state",
+  "description": "Phase 1 pilot validation: 500 agents, realistic event mix, 30-minute steady state. Primary test for exit criteria EC-1, EC-6, EC-7, EC-8.",
+  "agent_count": 500,
+  "ramp_duration_sec": 120,
+  "steady_duration_sec": 1800,
+  "ramp_down_sec": 60,
+  "gateway_addr": "",
+  "tenant_id": "pilot-tenant-00-0000-0000-000000000001",
+  "seed": 42,
+  "phase1_criteria": ["EC-1", "EC-6", "EC-7", "EC-8"],
+  "notes": {
+    "event_mix": "Follows taxonomy: process 40%, window 15%, file 10%, network 25%, keystroke 10%",
+    "cpu_target": "< 2% average per agent",
+    "ram_target": "< 150 MB RSS per agent",
+    "loss_target": "< 0.01% event loss",
+    "latency_target": "p95 < 5s end-to-end"
+  }
+}

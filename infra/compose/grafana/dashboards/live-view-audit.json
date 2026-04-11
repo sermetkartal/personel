@@ -1,0 +1,26 @@
+{
+  "title": "Personel — Live View Audit",
+  "uid": "personel-live-view-audit",
+  "tags": ["personel", "live-view", "kvkk"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "panels": [
+    { "id": 1, "title": "Sessions (Last 7 Days)", "type": "stat", "gridPos": {"h":4,"w":4,"x":0,"y":0},
+      "targets": [{"expr":"increase(personel_live_view_sessions_total[7d])","legendFormat":"Sessions"}] },
+    { "id": 2, "title": "Pending Approval", "type": "stat", "gridPos": {"h":4,"w":4,"x":4,"y":0},
+      "targets": [{"expr":"personel_live_view_requests_by_state{state=\"pending\"}","legendFormat":"Pending"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":0},{"color":"yellow","value":1}]}}} },
+    { "id": 3, "title": "Active Sessions Now", "type": "stat", "gridPos": {"h":4,"w":4,"x":8,"y":0},
+      "targets": [{"expr":"personel_live_view_requests_by_state{state=\"active\"}","legendFormat":"Active"}],
+      "fieldConfig": {"defaults": {"thresholds": {"steps": [{"color":"green","value":0},{"color":"orange","value":1}]}}} },
+    { "id": 4, "title": "Rejected Requests", "type": "stat", "gridPos": {"h":4,"w":4,"x":12,"y":0},
+      "targets": [{"expr":"increase(personel_live_view_sessions_total{state=\"rejected\"}[7d])","legendFormat":"Rejected"}] },
+    { "id": 5, "title": "Session Timeline (dual-control audit)", "type": "timeseries", "gridPos": {"h":8,"w":24,"x":0,"y":4},
+      "targets": [
+        {"expr":"rate(personel_live_view_sessions_total[1h]) * 3600","legendFormat":"Sessions/h"},
+        {"expr":"personel_live_view_requests_by_state{state=\"active\"}","legendFormat":"Active now"}
+      ],
+      "description": "All sessions require dual-control (admin request + HR approval). Every session is hash-chained in the audit log." }
+  ]
+}
