@@ -19,7 +19,17 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";       -- for ILIKE full-text on smaller columns
 CREATE EXTENSION IF NOT EXISTS "btree_gin";     -- GIN index support for JSONB
-CREATE EXTENSION IF NOT EXISTS "pg_cron";       -- scheduled maintenance jobs (retention, DSR SLA)
+
+-- pg_cron is intentionally NOT created here. docker-entrypoint.sh runs
+-- init.sql against a temporary postgres process started BEFORE the
+-- mounted postgresql.conf is read, which means shared_preload_libraries
+-- hasn't picked up pg_cron yet and CREATE EXTENSION fails with
+-- "cron.database_name unknown parameter". The extension is instead
+-- enabled by a post-bootstrap step (psql -c "CREATE EXTENSION pg_cron")
+-- once postgres is running with the full config. The Go audit verifier
+-- uses an in-process ticker and does NOT depend on pg_cron; the only
+-- consumers are retention jobs which can be installed at provisioning
+-- time. Fixed 2026-04-11 after first real postgres boot attempt.
 
 -- ---------------------------------------------------------------------------
 -- Application roles (passwords are overridden at runtime by Vault dynamic secrets)
@@ -174,7 +184,13 @@ CREATE TABLE IF NOT EXISTS core.dsr_requests (
                         CHECK (state IN ('open','at_risk','overdue','extended','responded','rejected','closed')),
   justification         TEXT NOT NULL,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
-  sla_deadline          TIMESTAMPTZ NOT NULL GENERATED ALWAYS AS (created_at + INTERVAL '30 days') STORED,
+  -- sla_deadline was originally GENERATED ALWAYS AS (created_at +
+  -- INTERVAL '30 days') STORED, but Postgres rejects that with "the
+  -- generation expression is not immutable" because timestamptz +
+  -- interval is STABLE (DST-sensitive for day-level intervals), not
+  -- immutable. A DEFAULT evaluated at INSERT time achieves the same
+  -- thing without the immutability constraint. Fixed 2026-04-11.
+  sla_deadline          TIMESTAMPTZ NOT NULL DEFAULT (now() + INTERVAL '30 days'),
   extended_deadline     TIMESTAMPTZ,
   assigned_to           UUID REFERENCES core.users(id),
   response_artifact_ref TEXT,                  -- MinIO path to signed PDF
@@ -219,8 +235,19 @@ CREATE TABLE IF NOT EXISTS core.cert_deny_list (
 -- audit_events: the append-only hash-chained journal.
 -- GRANT: app_admin_api may INSERT; no UPDATE or DELETE for any role.
 -- Trigger enforces append-only at DB level.
+-- NOTE: Partitioned PRIMARY KEY must include the partitioning column.
+-- Postgres rejects a plain `id BIGSERIAL PRIMARY KEY` on a partitioned
+-- table with "unique constraint on partitioned table must include all
+-- partitioning columns". Fixed to (id, signed_at) 2026-04-11.
+--
+-- ALSO DEAD CODE FLAG: this table is not used by the live API code.
+-- apps/api/internal/audit uses `audit.audit_log` (created by migration
+-- 004_audit_log.up.sql), not `audit.audit_events`. init.sql was written
+-- before the Go migrations existed and has drifted. Keeping the table
+-- here so the bootstrap SQL stays self-consistent, but future work
+-- should reconcile the two sources of truth.
 CREATE TABLE IF NOT EXISTS audit.audit_events (
-  id          BIGSERIAL PRIMARY KEY,
+  id          BIGSERIAL,
   tenant_id   UUID NOT NULL,
   event_type  TEXT NOT NULL,       -- e.g. 'live_view.started', 'dsr.submitted', 'admin.login'
   actor_id    UUID,                -- user or service identity; NULL for system events
@@ -231,7 +258,8 @@ CREATE TABLE IF NOT EXISTS audit.audit_events (
   prev_hash   TEXT,                -- SHA-256 of previous row's hash (chain link)
   row_hash    TEXT,                -- SHA-256 of this row's canonical fields
   signed_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  seq         BIGINT NOT NULL      -- monotonically increasing within tenant
+  seq         BIGINT NOT NULL,     -- monotonically increasing within tenant
+  PRIMARY KEY (id, signed_at)
 ) PARTITION BY RANGE (signed_at);
 
 -- Create monthly partitions for current year (extend in upgrade.sh)
@@ -402,48 +430,58 @@ CREATE POLICY tenant_isolation ON core.legal_holds
 -- ---------------------------------------------------------------------------
 -- PG_CRON JOBS — Retention and DSR SLA
 -- ---------------------------------------------------------------------------
+--
+-- Wrapped in a DO block that skips silently if pg_cron is not loaded.
+-- pg_cron cannot be CREATE EXTENSIONed from init.sql (see the extensions
+-- block above). The intent is: once the operator installs pg_cron as a
+-- post-install step, these jobs get scheduled by re-running this section
+-- manually. In dev/smoke-test bring-up pg_cron is absent and the DO
+-- block becomes a no-op. ALSO: `SELECT ... ON CONFLICT` was invalid
+-- syntax — ON CONFLICT is INSERT-only. Removed. Fixed 2026-04-11.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'personel-dsr-sla-check',
+      '0 8 * * *',
+      $sql$
+        UPDATE core.dsr_requests
+        SET state = 'overdue', updated_at = now()
+        WHERE state IN ('open', 'at_risk')
+          AND now() >= sla_deadline;
 
--- DSR SLA timer: open -> at_risk at day 20, open/at_risk -> overdue at day 30
-SELECT cron.schedule(
-  'personel-dsr-sla-check',
-  '0 8 * * *',  -- daily at 08:00 UTC
-  $$
-    UPDATE core.dsr_requests
-    SET state = 'overdue', updated_at = now()
-    WHERE state IN ('open', 'at_risk')
-      AND now() >= sla_deadline;
+        UPDATE core.dsr_requests
+        SET state = 'at_risk', updated_at = now()
+        WHERE state = 'open'
+          AND now() >= (created_at + INTERVAL '20 days')
+          AND now() < sla_deadline;
+      $sql$
+    );
 
-    UPDATE core.dsr_requests
-    SET state = 'at_risk', updated_at = now()
-    WHERE state = 'open'
-      AND now() >= (created_at + INTERVAL '20 days')
-      AND now() < sla_deadline;
-  $$
-) ON CONFLICT DO NOTHING;
+    PERFORM cron.schedule(
+      'personel-lv-expire',
+      '*/15 * * * *',
+      $sql$
+        UPDATE core.live_view_requests
+        SET state = 'ended', ended_at = now(), updated_at = now()
+        WHERE state = 'active'
+          AND started_at < now() - INTERVAL '2 hours';
+      $sql$
+    );
 
--- Expire live view sessions that were never ended (safety net, max 2 hours)
-SELECT cron.schedule(
-  'personel-lv-expire',
-  '*/15 * * * *',
-  $$
-    UPDATE core.live_view_requests
-    SET state = 'ended', ended_at = now(), updated_at = now()
-    WHERE state = 'active'
-      AND started_at < now() - INTERVAL '2 hours';
-  $$
-) ON CONFLICT DO NOTHING;
-
--- Expire legal holds past their expiry date
-SELECT cron.schedule(
-  'personel-legal-hold-expire',
-  '0 1 * * *',
-  $$
-    UPDATE core.legal_holds
-    SET status = 'released', released_at = now()
-    WHERE status = 'active'
-      AND expires_at < now();
-  $$
-) ON CONFLICT DO NOTHING;
+    PERFORM cron.schedule(
+      'personel-legal-hold-expire',
+      '0 1 * * *',
+      $sql$
+        UPDATE core.legal_holds
+        SET status = 'released', released_at = now()
+        WHERE status = 'active'
+          AND expires_at < now();
+      $sql$
+    );
+  END IF;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- INITIAL SEED: default tenant placeholder (replaced by install.sh)

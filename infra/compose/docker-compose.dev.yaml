@@ -1,0 +1,109 @@
+name: personel
+
+# =============================================================================
+# Dev/smoke-test override.
+#
+# Brings up the minimum viable slice without the full production ceremony
+# (no TLS bootstrap, no Shamir unseal, no realm import). Use:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.dev.yaml up -d postgres
+#
+# This override exists so developers can validate the stack incrementally
+# on macOS / Linux without needing to run infra/install.sh first.
+# NEVER use this file in production — it disables every security control.
+# =============================================================================
+
+volumes:
+  # Override every production-bound volume back to plain Docker-managed
+  # local volumes. The base file binds these to host paths under
+  # /var/lib/personel/... which only exist on a real deployment host
+  # after infra/install.sh has provisioned them.
+  postgres-data:
+    driver: local
+    driver_opts: !reset null
+  clickhouse-data:
+    driver: local
+    driver_opts: !reset null
+  minio-data:
+    driver: local
+    driver_opts: !reset null
+  nats-data:
+    driver: local
+    driver_opts: !reset null
+  vault-data:
+    driver: local
+    driver_opts: !reset null
+  opensearch-data:
+    driver: local
+    driver_opts: !reset null
+  keycloak-data:
+    driver: local
+    driver_opts: !reset null
+  prometheus-data:
+    driver: local
+    driver_opts: !reset null
+  grafana-data:
+    driver: local
+    driver_opts: !reset null
+  tls-certs:
+    driver: local
+    driver_opts: !reset null
+  audit-log:
+    driver: local
+    driver_opts: !reset null
+  ml-models:
+    driver: local
+    driver_opts: !reset null
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # Postgres — boot without waiting for Vault, without the TLS volume mount.
+  # ---------------------------------------------------------------------------
+  postgres:
+    depends_on: !reset []
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    environment:
+      POSTGRES_PASSWORD: dev-postgres-do-not-use-in-prod
+
+  # ---------------------------------------------------------------------------
+  # Vault — dev mode (in-memory, no Shamir, root token = dev-root-token).
+  # Health check on /v1/sys/health with ?standbyok=true.
+  # ---------------------------------------------------------------------------
+  vault:
+    image: hashicorp/vault:1.15
+    entrypoint:
+      - vault
+      - server
+      - -dev
+      - -dev-root-token-id=dev-root-token
+      - -dev-listen-address=0.0.0.0:8200
+    cap_add:
+      - IPC_LOCK
+    depends_on: !reset []
+    volumes: !reset []
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-root-token
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://127.0.0.1:8200
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8200/v1/sys/health?standbyok=true"]
+      interval: 5s
+      timeout: 2s
+      retries: 10
+      start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # MinIO — single-node dev mode, no Object Lock (bucket created by init).
+  # ---------------------------------------------------------------------------
+  minio:
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin-dev-only
+
+  minio-init: !reset null
+  minio-worm-init: !reset null
