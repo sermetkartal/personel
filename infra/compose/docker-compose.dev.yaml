@@ -128,8 +128,11 @@ services:
   api:
     ports: !override
       # Port 8000 is used by Docker Desktop internals on macOS — move
-      # the dev API to 8001 to avoid "port already allocated".
-      - "127.0.0.1:8001:8000"
+      # the dev API to 8001 to avoid "port already allocated". Bind on
+      # 0.0.0.0 so host.docker.internal (resolved from the console
+      # container's gateway) can reach the mapped port — see the
+      # keycloak block above for the same pattern.
+      - "0.0.0.0:8001:8000"
     # The base Dockerfile defines HEALTHCHECK [/personel-api healthcheck]
     # but main.go has no healthcheck subcommand — the binary just
     # re-runs the full server, which fails with "address already in
@@ -194,7 +197,13 @@ services:
     environment:
       NEXTAUTH_SECRET: dev-nextauth-secret-not-for-prod
       NEXTAUTH_URL: http://localhost:13000
-      NEXT_PUBLIC_API_URL: http://localhost:8001
+      # Must be reachable from BOTH the browser (via host /etc/hosts)
+      # AND the server-side fetch from inside the console container
+      # (via Docker Desktop host.docker.internal DNS). Port 8001 on the
+      # host maps to api:8000. apiClient reads NEXT_PUBLIC_API_BASE_URL;
+      # keep both set so any other caller code also resolves correctly.
+      NEXT_PUBLIC_API_URL: http://host.docker.internal:8001
+      NEXT_PUBLIC_API_BASE_URL: http://host.docker.internal:8001
       # These env vars are read by server-side API routes
       # (app/api/auth/login and /callback). They must point at a
       # browser-reachable Keycloak URL, not the in-network name.

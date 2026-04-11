@@ -141,6 +141,12 @@ export interface FetchOptions extends Omit<RequestInit, "body"> {
    * token instead of the in-memory store. Used from Server Components.
    */
   serverSide?: boolean;
+  /**
+   * Explicit bearer token override. Server Components pass the session
+   * user's access_token directly because the /api/auth/session indirection
+   * cannot forward cookies through a server-side fetch.
+   */
+  token?: string;
   /** Pass an AbortSignal for request cancellation. */
   signal?: AbortSignal;
 }
@@ -171,11 +177,12 @@ async function apiFetch<T>(
   const {
     body,
     serverSide = false,
+    token: explicitToken,
     signal,
     ...init
   } = options;
 
-  const token = await getToken(serverSide);
+  const token = explicitToken ?? (await getToken(serverSide));
 
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -248,7 +255,7 @@ async function apiFetch<T>(
 // ── Convenience methods ───────────────────────────────────────────────────────
 
 export const apiClient = {
-  get: <T>(path: string, opts?: FetchOptions) =>
+  get: <T>(path: string, opts?: FetchOptions & { token?: string }) =>
     apiFetch<T>(path, { ...opts, method: "GET" }),
 
   post: <T>(path: string, body?: unknown, opts?: FetchOptions) =>

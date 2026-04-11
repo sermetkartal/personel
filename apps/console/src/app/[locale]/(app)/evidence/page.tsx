@@ -32,8 +32,16 @@ export default async function EvidencePage({
 
   // Fetch on the server so the page renders with data already in place.
   // Failure here is a configuration issue (no evidence store wired) —
-  // render an empty-state rather than crashing.
-  const coverage = await getEvidenceCoverage(period).catch(() => null);
+  // render an empty-state rather than crashing. The DPO's access_token
+  // must be forwarded explicitly; the apiClient's automatic lookup path
+  // can't reach /api/auth/session with cookies during a server render.
+  const coverage = await getEvidenceCoverage(period, session.user.access_token).catch((err) => {
+    // Surface server-side fetch errors so dev bring-up can diagnose
+    // connectivity problems (wrong API base URL, invalid token, etc.)
+    // instead of silently showing an empty state.
+    console.error("[evidence] server-side coverage fetch failed:", err);
+    return null;
+  });
 
   const canDownload = can(session.user.role, "download:evidence-pack");
 

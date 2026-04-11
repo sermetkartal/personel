@@ -31,10 +31,18 @@ export interface CoverageResponse {
 /**
  * Fetch the evidence coverage matrix for the given period (YYYY-MM).
  * Omit period to get the current month.
+ *
+ * When called from a Server Component, pass the session's access_token
+ * explicitly — the client's in-memory token store is empty server-side
+ * and /api/auth/session can't be reached with session cookies from
+ * inside the server render pipeline.
  */
-export async function getEvidenceCoverage(period?: string): Promise<CoverageResponse> {
+export async function getEvidenceCoverage(
+  period?: string,
+  token?: string,
+): Promise<CoverageResponse> {
   const qs = period ? `?period=${encodeURIComponent(period)}` : "";
-  return apiClient.get<CoverageResponse>(`/v1/system/evidence-coverage${qs}`);
+  return apiClient.get<CoverageResponse>(`/v1/system/evidence-coverage${qs}`, { token });
 }
 
 /**
