@@ -99,7 +99,12 @@ export function sessionCookieOptions(): {
 } {
   return {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    // INSECURE_COOKIES=1 is a dev-only escape hatch for testing the
+    // OIDC flow end-to-end over plain HTTP on localhost. NEVER set
+    // this in production — the cookie jar leaks session tokens.
+    secure:
+      process.env.INSECURE_COOKIES !== "1" &&
+      process.env.NODE_ENV === "production",
     sameSite: "lax",
     path: "/",
     // 8 hours — matches Keycloak access token lifetime

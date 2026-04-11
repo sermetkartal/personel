@@ -60,7 +60,10 @@ vault:
   token_renew_interval: 10m
 
 keycloak:
-  issuer_url: "http://keycloak:8080/realms/personel"
+  # host.docker.internal resolves from both the browser (via host
+  # /etc/hosts entry) AND every container (via Docker Desktop magic
+  # DNS). See docker-compose.dev.yaml keycloak block for rationale.
+  issuer_url: "http://host.docker.internal:8080/realms/personel"
   client_id: "personel-admin-api"
 
 observability:

@@ -53,21 +53,27 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // Store PKCE verifier and state in short-lived cookies
   response.cookies.set("pkce_verifier", codeVerifier, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.INSECURE_COOKIES !== "1" &&
+      process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 300, // 5 minutes
     path: "/",
   });
   response.cookies.set("auth_state", state, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.INSECURE_COOKIES !== "1" &&
+      process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 300,
     path: "/",
   });
   response.cookies.set("callback_url", callbackUrl, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure:
+      process.env.INSECURE_COOKIES !== "1" &&
+      process.env.NODE_ENV === "production",
     sameSite: "lax",
     maxAge: 300,
     path: "/",

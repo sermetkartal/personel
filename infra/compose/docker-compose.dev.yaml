@@ -195,9 +195,22 @@ services:
       NEXTAUTH_SECRET: dev-nextauth-secret-not-for-prod
       NEXTAUTH_URL: http://localhost:13000
       NEXT_PUBLIC_API_URL: http://localhost:8001
+      # These env vars are read by server-side API routes
+      # (app/api/auth/login and /callback). They must point at a
+      # browser-reachable Keycloak URL, not the in-network name.
+      NEXT_PUBLIC_KEYCLOAK_URL: http://host.docker.internal:8080
+      NEXT_PUBLIC_KEYCLOAK_REALM: personel
+      NEXT_PUBLIC_KEYCLOAK_CLIENT_ID: console
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: personel
       KEYCLOAK_CLIENT_ID: console
+      # Temporary until the callback extracts the real role from JWT
+      # realm_access.roles (TODO in route.ts). For dev we hardcode dpo
+      # so the DPO-only /tr/evidence page is reachable end-to-end.
+      DEV_DEFAULT_ROLE: dpo
+      DEFAULT_TENANT_ID: "00000000-0000-0000-0000-000000000001"
+      # Insecure cookies for HTTP dev. Read by session.ts + login route.
+      INSECURE_COOKIES: "1"
       NODE_ENV: production
 
   # ---------------------------------------------------------------------------
@@ -227,6 +240,12 @@ services:
   # override is dev-only and loses realm state on container restart.
   # ---------------------------------------------------------------------------
   keycloak:
+    ports: !override
+      # Bind on all interfaces so host.docker.internal can reach it
+      # from inside other containers (API container's OIDC discovery).
+      # 127.0.0.1-only binding (base default) works for host curl but
+      # not for container-side fetches via the Docker host gateway.
+      - "0.0.0.0:8080:8080"
     # start-dev performs a fresh Quarkus build at startup (not --optimized)
     # so the postgres JDBC driver is selected correctly based on KC_DB.
     # We removed --import-realm to simplify the first smoke test; once
@@ -264,10 +283,16 @@ services:
       # then compares the discovered issuer to its configured
       # issuer_url (http://keycloak:8080/realms/personel) and fails
       # because they don't match. Force the in-network name here.
-      # Keycloak 24 rejects "both hostname and hostname-url" — use just
-      # hostname-url to pin the issuer to the in-network name.
+      # host.docker.internal resolves to the Docker host gateway from
+      # inside every container (Docker Desktop magic DNS). With port
+      # 8080 mapped to keycloak on the host, both the API container
+      # AND the host browser reach Keycloak at the same URL. This
+      # solves the Keycloak "front-channel vs back-channel" hostname
+      # problem for single-host dev: one issuer URL works everywhere.
+      # Add `127.0.0.1 host.docker.internal` to /etc/hosts on the host
+      # for the browser to resolve it.
       KC_HOSTNAME: ""
-      KC_HOSTNAME_URL: "http://keycloak:8080"
+      KC_HOSTNAME_URL: "http://host.docker.internal:8080"
       KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
       KC_HOSTNAME_STRICT: "false"
       KC_HTTP_ENABLED: "true"

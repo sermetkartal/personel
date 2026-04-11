@@ -34,6 +34,13 @@ function isPublicPath(pathname: string): boolean {
 export async function middleware(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
 
+  // API routes must bypass next-intl entirely — otherwise
+  // intlMiddleware rewrites /api/auth/login to /tr/api/auth/login
+  // which 404s. /api/* handlers are locale-agnostic by design.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   // Skip auth check for public paths and static assets
   if (
     isPublicPath(pathname) ||

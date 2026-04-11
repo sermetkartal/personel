@@ -92,17 +92,32 @@ if [[ "$CLIENT_LIST" == "[]" ]]; then
     -d '{
       "clientId": "console",
       "enabled": true,
-      "publicClient": false,
-      "clientAuthenticatorType": "client-secret",
-      "secret": "dev-console-client-secret",
+      "publicClient": true,
       "standardFlowEnabled": true,
       "directAccessGrantsEnabled": true,
       "protocol": "openid-connect",
       "redirectUris": ["http://localhost:13000/*"],
-      "webOrigins": ["http://localhost:13000", "+"]
+      "webOrigins": ["http://localhost:13000", "+"],
+      "attributes": {"pkce.code.challenge.method": "S256"}
     }'
 else
-  echo "console client already exists"
+  # Idempotent update: force publicClient + PKCE on every run.
+  EXISTING_ID=$(echo "$CLIENT_LIST" | python3 -c "import sys,json;print(json.load(sys.stdin)[0]['id'])")
+  curl -sS -o /dev/null -X PUT \
+    "http://localhost:8080/admin/realms/personel/clients/$EXISTING_ID" \
+    -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+    -d '{
+      "clientId": "console",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://localhost:13000/*"],
+      "webOrigins": ["http://localhost:13000", "+"],
+      "attributes": {"pkce.code.challenge.method": "S256"}
+    }'
+  echo "console client updated (public + PKCE)"
 fi
 
 CLIENT_ID=$(curl -sS "http://localhost:8080/admin/realms/personel/clients?clientId=console" \
