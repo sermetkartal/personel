@@ -51,6 +51,14 @@ const (
 	ActionPolicyPushed  Action = "policy.pushed"
 )
 
+// --- Backup (Phase 3.0 — A1.2 / CC9.1) ---
+const (
+	// ActionBackupRun is emitted by the out-of-API backup runner after a
+	// successful dump. Input to the backup.Service.RecordRun evidence
+	// collector.
+	ActionBackupRun Action = "backup.run"
+)
+
 // --- Endpoint fleet ---
 const (
 	ActionEndpointEnrolled Action = "endpoint.enrolled"
@@ -197,6 +205,7 @@ var AllActions = []Action{
 	ActionPolicyUpdated,
 	ActionPolicyDeleted,
 	ActionPolicyPushed,
+	ActionBackupRun,
 	ActionEndpointEnrolled,
 	ActionEndpointRevoked,
 	ActionEndpointDeleted,

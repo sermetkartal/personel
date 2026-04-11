@@ -28,6 +28,7 @@ import (
 
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
+	"github.com/personel/api/internal/backup"
 	clickhouseclient "github.com/personel/api/internal/clickhouse"
 	"github.com/personel/api/internal/config"
 	"github.com/personel/api/internal/destruction"
@@ -263,6 +264,11 @@ func main() {
 	}
 	_ = evidenceStore // referenced via the recorder; retained for future direct queries
 
+	// backup.Service is constructed unconditionally; if evidenceRecorder
+	// is nil the service still writes the audit entry for the backup run
+	// but skips the A1.2 evidence emission. Scaffold mode stays useful.
+	backupSvc := backup.NewService(recorder, evidenceRecorder, log)
+
 	// --- 10. Mobile BFF service (Phase 2.9) ---
 	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
 
@@ -293,6 +299,7 @@ func main() {
 		Mobile:       mobileSvc,
 		Evidence:     evidenceStore,
 		EvidencePack: evidencePackBuilder,
+		Backup:       backupSvc,
 		Log:          log,
 	}, met)
 

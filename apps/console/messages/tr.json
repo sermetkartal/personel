@@ -115,6 +115,7 @@
     "dsr": "Veri Talepleri (m.11)",
     "legalHold": "Hukuki Saklama",
     "destructionReports": "İmha Raporları",
+    "evidence": "SOC 2 Kanıt Kasası",
     "audit": "Denetim İzi",
     "policies": "Politikalar",
     "settings": "Ayarlar",
@@ -543,6 +544,25 @@
       "confirm": "Saklamayı Kaldır",
       "warning": "Saklama kaldırıldıktan sonra kayıtların TTL'i yeniden hesaplanacak ve zamanı geçmiş olanlar silinecektir."
     }
+  },
+
+  "evidence": {
+    "title": "SOC 2 Kanıt Kasası",
+    "subtitle": "TSC kontrol bazında kanıt kapsama matrisi ve denetçi paket dışa aktarımı",
+    "periodLabel": "Dönem",
+    "downloadPack": "Paketi İndir (ZIP)",
+    "totalItems": "Toplam Kanıt",
+    "controlsCovered": "Kapsanan Kontrol",
+    "gapControls": "Eksik Kontrol",
+    "gapTitle": "Kanıt eksiği tespit edildi",
+    "gapDescription": "Aşağıdaki kontrollerde bu dönem için hiç kanıt üretilmedi. SOC 2 Tip II gözlem penceresi kapanmadan önce ilgili collector'ların bağlanması gerekiyor.",
+    "colControl": "Kontrol",
+    "colCount": "Kanıt Sayısı",
+    "colStatus": "Durum",
+    "statusCovered": "Kapsanıyor",
+    "statusGap": "Eksik",
+    "emptyState": "Bu dönem için kanıt bulunamadı",
+    "refreshing": "Güncelleniyor..."
   },
 
   "destructionReports": {

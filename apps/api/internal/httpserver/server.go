@@ -15,6 +15,7 @@ import (
 
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
+	"github.com/personel/api/internal/backup"
 	"github.com/personel/api/internal/config"
 	"github.com/personel/api/internal/destruction"
 	"github.com/personel/api/internal/dlpstate"
@@ -54,6 +55,7 @@ type Services struct {
 	Mobile       *mobile.Service
 	Evidence     *evidence.Store
 	EvidencePack *evidence.PackBuilder
+	Backup       *backup.Service
 	Log          *slog.Logger
 }
 
@@ -280,6 +282,14 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			// POST /v1/system/dlp-bootstrap-keys — dlp-admin only (invoked by dlp-enable.sh)
 			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
 				Post("/dlp-bootstrap-keys", dlpstate.BootstrapPEDEKsHandler(svc.DLPState))
+
+			// POST /v1/system/backup-runs — admin-only ingest path for
+			// the out-of-API backup runner. Records an A1.2 evidence
+			// item (KindBackupRun) from the submitted run report.
+			if svc.Backup != nil {
+				r.With(auth.RequireRole(auth.RoleAdmin)).
+					Post("/backup-runs", backup.RecordRunHandler(svc.Backup))
+			}
 
 			// GET /v1/system/evidence-coverage?period=YYYY-MM — SOC 2
 			// Type II coverage matrix for the current tenant. Lists the

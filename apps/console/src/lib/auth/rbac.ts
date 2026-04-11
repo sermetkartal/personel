@@ -113,6 +113,17 @@ export function canViewDestructionReports(role: Role): boolean {
   return role === "dpo" || role === "admin";
 }
 
+// SOC 2 evidence locker — DPO and auditor roles only. Coverage and pack
+// export are sensitive compliance posture indicators; ordinary admins
+// should not see gap state or pull the signed ZIP.
+export function canViewEvidence(role: Role): boolean {
+  return role === "dpo" || role === "auditor";
+}
+
+export function canDownloadEvidencePack(role: Role): boolean {
+  return role === "dpo";
+}
+
 export function canDownloadDestructionReports(role: Role): boolean {
   return role === "dpo";
 }
@@ -189,6 +200,8 @@ export type Action =
   | "place:legal-hold"
   | "view:destruction-reports"
   | "download:destruction-reports"
+  | "view:evidence"
+  | "download:evidence-pack"
   | "view:screenshots"
   | "view:audit-log"
   | "view:audit-trail"
@@ -218,6 +231,8 @@ const ACTION_CHECKS: Record<Action, (role: Role) => boolean> = {
   "place:legal-hold": canPlaceLegalHold,
   "view:destruction-reports": canViewDestructionReports,
   "download:destruction-reports": canDownloadDestructionReports,
+  "view:evidence": canViewEvidence,
+  "download:evidence-pack": canDownloadEvidencePack,
   "view:screenshots": canViewScreenshots,
   "view:audit-log": canViewAuditLog,
   "view:audit-trail": canViewAuditTrail,

@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.2 — Faz 3.0 kickoff (Evidence Locker + ilk collector) — 2026-04-11
+> Versiyon: 1.4 — Faz 3.0.3 (console UI + runbook + backup collector) — 2026-04-11
 
 ---
 
@@ -405,13 +405,79 @@ Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay:
     defence-in-depth skip, Recorder-error swallow.
 
 **Design pattern established**: domain services gain evidence via optional
-setter injection. Every future collector (DSR completion, policy deploy,
-backup run, etc.) follows the same shape:
+setter injection. Every future collector (backup run, vendor review, etc.)
+follows the same shape:
   1. Import `internal/evidence`
   2. Add `evidenceRecorder evidence.Recorder` field + `SetEvidenceRecorder`
   3. Emit in the post-success path of the relevant method
   4. Swallow errors, log loudly, cite the relevant audit log ID(s)
   5. Wire in `cmd/api/main.go` under the `if wormSink != nil` block
+
+**Phase 3.0.3 — Console UI + runbook + backup collector**:
+  - `/tr/evidence` console sayfası: coverage matrix tablosu + gap uyarı
+    kartı + DPO rol gated "Paketi İndir (ZIP)" butonu + dönem seçici
+  - `apps/console/src/lib/api/evidence.ts`: `getEvidenceCoverage` +
+    `buildEvidencePackURL`; rbac'a `view:evidence` + `download:evidence-pack`
+    izinleri; sidebar'a SOC 2 Kanıt Kasası navigation item
+  - `infra/runbooks/soc2-evidence-pack-retrieval.md`: aylık pack üretimi +
+    imza doğrulama + PGP teslimatı + acil durum senaryolarını içeren
+    DPO operasyonel runbook'u (Türkçe)
+  - `apps/api/internal/backup/` yeni paketi: `backup.Service.RecordRun` +
+    `POST /v1/system/backup-runs` (admin-only); out-of-API cron runner'ı
+    backup dump sonrası bu endpoint'e SHA256 + size + duration + target
+    path gönderir, service A1.2 + KindBackupRun kanıtı üretir
+  - `audit.ActionBackupRun` eklendi; expectedControls() listesinde A1.2
+    artık "wired" durumda
+  - 4 yeni backup unit test: eksik alan reddi, negatif süre reddi,
+    payload şekli snapshot'ı, safePrefix helper
+
+**Phase 3.0.2 — Collectors B→A→D→C** (commit ba044d9):
+  - **Collector B (policy.Push → CC8.1)**: every successful signed-policy
+    push emits a `KindChangeAuthorization` item capturing actor, target
+    endpoint (or `*` for broadcast), policy version, and the full rules
+    JSON. Auditor can trace back to the exact deployed bundle.
+  - **Collector A (dsr.Respond → P7.1)**: every KVKK m.11 fulfilment emits
+    a `KindComplianceAttestation` item with lifecycle metadata:
+    created_at, sla_deadline, closed_at, `within_sla` bool,
+    `seconds_before_deadline` (negative for overdue), response artifact
+    MinIO key, and control_tags `[P5.1, P7.1]`. Overdue DSRs still emit —
+    auditors need the overdue record for CC7.3 incident evidence.
+  - **Coverage endpoint D (`GET /v1/system/evidence-coverage`)**:
+    DPO/Auditor-only. Query param `period=YYYY-MM`. Returns item count per
+    expected TSC control + explicit `gap_controls` array of zero-item
+    controls. `evidence.expectedControls()` is the CODE source of truth
+    for "complete coverage" — adding a control here without a collector
+    deliberately creates a gap alert.
+  - **Pack export C (`GET /v1/dpo/evidence-packs`)**: DPO-only. Streams a
+    signed ZIP: `manifest.json` + per-item JSON + per-item `.signature` +
+    `manifest.signature` + `manifest.key_version.txt`. Canonical bytes are
+    NOT re-packed — auditors pull them from `audit-worm` via the
+    `worm_object_key` in each manifest row. Two independent verification
+    gates: (1) manifest signature over the list, (2) each item's own
+    signature over its canonical WORM payload.
+  - 10 new unit tests (policy, dsr, evidence pack + handlers); full API
+    suite green.
+
+### Phase 3.0 endpoint surface (net new)
+
+| Method | Path | Role | Purpose |
+|---|---|---|---|
+| GET | `/v1/system/evidence-coverage?period=YYYY-MM` | DPO, Auditor | SOC 2 coverage matrix + gap list |
+| GET | `/v1/dpo/evidence-packs?period=YYYY-MM&controls=...` | DPO | Signed ZIP export |
+
+### Expected controls (evidence.expectedControls)
+
+| Control | Status | Collector |
+|---|---|---|
+| CC6.1 | ✅ wired | `liveview.Service.terminateSession` |
+| CC6.3 | ❌ gap | access review (Phase 3.0.3+) |
+| CC7.1 | ✅ indirect | policy push (shared with CC8.1) |
+| CC7.3 | ❌ gap | UBA/silence incident (Phase 3.0.3+) |
+| CC8.1 | ✅ wired | `policy.Service.Push` |
+| CC9.1 | ❌ gap | BCP drill (Phase 3.0.3+) |
+| A1.2 | ✅ wired | `backup.Service.RecordRun` (Phase 3.0.3) |
+| P5.1 | ✅ secondary | DSR respond (tag) |
+| P7.1 | ✅ wired | `dsr.Service.Respond` |
 
 ### Faz 2 remaining work (future commits)
 
@@ -445,18 +511,19 @@ design-level control substrate şart — bu sprint o altyapıyı kuruyor.
   + vendor management + BCDR, Türkçe gövde + İngilizce auditor özeti
 - Evidence Locker (commit a98366f): dual-write implementation,
   migration 0025, RLS, append-only, WORM anchor, 4 unit test
-- Vault signer + ilk collector (commit f574786): `liveview` artık her
-  sonlandırılan ayrıcalıklı erişim oturumunu `CC6.1` kanıtı olarak üretiyor
+- Vault signer + ilk collector (commit f574786): `liveview` → `CC6.1`
+- Collectors B+A + coverage + pack export (commit ba044d9):
+  * `policy.Push` → `CC8.1` change authorization
+  * `dsr.Respond` → `P7.1` KVKK m.11 fulfilment (within/overdue her ikisi)
+  * `GET /v1/system/evidence-coverage` → tenant × period matrix + gap list
+  * `GET /v1/dpo/evidence-packs` → signed ZIP stream (manifest + per-item
+    JSON + per-item + manifest Ed25519 signatures + key version)
 
 **Phase 3.0 kalan iş:**
-- Ek domain collector'ları (öncelik sırasına göre):
-  * DSR completion → `CtrlP5_1` + `CtrlP7_1` (KVKK m.11 + GDPR Art. 28)
-  * Policy deploy → `CtrlCC7_1` + `CtrlCC8_1` (change mgmt)
-  * Backup run → `CtrlA1_2` (availability)
-  * Vendor review → `CtrlCC9_2`
-- Evidence pack export API — `POST /v1/dpo/evidence-packs` → ZIP stream,
-  DPO-only, `PackBuilder` canonical manifest + signature
-- `/healthz` evidence coverage check (tenant × period × control matrix)
+- Üçüncü tur collector'ları (CC6.3 access review, CC7.3 incident detection,
+  CC9.1 BCP drill, A1.2 backup run)
+- Konsol `/dpo/evidence` UI (coverage tablosu + pack download düğmesi)
+- `infra/runbooks/soc2-evidence-pack-retrieval.md` DPO operasyonel runbook
 - Vault transit anahtarlarının key-rotation testi (5 yıllık retention için
   historical signature verification path)
 - HRIS → Keycloak 4h revocation automation (ADR 0018 scaffold → real)
@@ -809,5 +876,6 @@ Bu repo'da çalışırken:
 
 ---
 
-*Versiyon 1.2 — Faz 3.0 kickoff (Evidence Locker dual-write + Vault signer + ilk
-domain collector: liveview). Güncelleme: her major milestone sonrası.*
+*Versiyon 1.3 — Faz 3.0 evidence substrate complete: dual-write locker + Vault
+signer + 3 collector (liveview, policy, DSR) + coverage endpoint + pack export.
+Güncelleme: her major milestone sonrası.*

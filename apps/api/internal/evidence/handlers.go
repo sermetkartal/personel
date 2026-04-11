@@ -207,8 +207,8 @@ func expectedControls() []ControlID {
 		CtrlCC7_1, // configuration management (policy collector, shared with CC8.1)
 		CtrlCC7_3, // incident detection (UBA/silence — not yet)
 		CtrlCC8_1, // change management (policy collector)
-		CtrlCC9_1, // business continuity (backup runs — not yet)
-		CtrlA1_2,  // backup + recovery (backup runs — not yet)
+		CtrlCC9_1, // business continuity (BCP drill — not yet)
+		CtrlA1_2,  // backup + recovery (backup.Service.RecordRun)
 		CtrlP5_1,  // choice + consent (DSR collector secondary)
 		CtrlP7_1,  // use + retention (DSR collector primary)
 	}

@@ -115,6 +115,7 @@
     "dsr": "Data Subject Requests (m.11)",
     "legalHold": "Legal Hold",
     "destructionReports": "Destruction Reports",
+    "evidence": "SOC 2 Evidence",
     "audit": "Audit Trail",
     "policies": "Policies",
     "settings": "Settings",
@@ -543,6 +544,25 @@
       "confirm": "Release Hold",
       "warning": "After release, record TTLs will be recalculated and overdue records will be deleted."
     }
+  },
+
+  "evidence": {
+    "title": "SOC 2 Evidence Locker",
+    "subtitle": "Control-level evidence coverage matrix and auditor pack export",
+    "periodLabel": "Period",
+    "downloadPack": "Download Pack (ZIP)",
+    "totalItems": "Total Items",
+    "controlsCovered": "Controls Covered",
+    "gapControls": "Gap Controls",
+    "gapTitle": "Evidence gap detected",
+    "gapDescription": "The following controls have zero evidence for this period. The corresponding collectors must be wired before the SOC 2 Type II observation window closes.",
+    "colControl": "Control",
+    "colCount": "Item Count",
+    "colStatus": "Status",
+    "statusCovered": "Covered",
+    "statusGap": "Gap",
+    "emptyState": "No evidence found for this period",
+    "refreshing": "Refreshing..."
   },
 
   "destructionReports": {

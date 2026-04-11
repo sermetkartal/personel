@@ -16,6 +16,7 @@ import {
   Settings,
   Activity,
   Lock,
+  FileArchive,
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
@@ -81,6 +82,12 @@ function buildNavItems(locale: string): NavItem[] {
       icon: Trash2,
       href: `/${locale}/destruction-reports`,
       requiredAction: "view:destruction-reports",
+    },
+    {
+      key: "evidence",
+      icon: FileArchive,
+      href: `/${locale}/evidence`,
+      requiredAction: "view:evidence",
     },
     {
       key: "audit",
