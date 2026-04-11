@@ -191,6 +191,11 @@ personel/
 │   │   └── src/components/
 │   │       └── onboarding/first-login-modal.tsx  ← mandatory audited acknowledgement
 │   │
+│   ├── ml-classifier/              ← Phase 2.3 Python service (Llama 3.2 3B + fallback, ADR 0017)
+│   ├── ocr-service/                ← Phase 2.8 Python service (Tesseract + PaddleOCR, KVKK redaction)
+│   ├── uba-detector/               ← Phase 2.6 Python service (isolation forest, ADR compliance)
+│   ├── livrec-service/             ← Phase 2.8 Go service (live view recording, ADR 0019)
+│   ├── mobile-admin/               ← Phase 2.4 React Native + Expo (5 screens: home, live view approvals, DSR queue, silence, profile)
 │   └── qa/                         ← QA framework (51 files)
 │       ├── cmd/simulator/          ← 10K-agent traffic generator
 │       ├── cmd/audit-redteam/      ← keystroke admin-blindness red team (Phase 1 exit #9)
@@ -283,20 +288,108 @@ personel/
 
 ### Faz 1 Reality Check (2026-04-11)
 
-Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay: bu commit'in mesajına bak.
+Phase 1 kodları build edilemiyordu. 36 gerçek hata bulunup düzeltildi. Detay: commit 2b601cc.
 
-### Faz 2 (Planlanan, Faz 1 pilot sonrası)
+### Faz 2 (2026-04-11 — actively in progress, scaffold phase)
 
-- macOS + Linux agent
-- Canlı izleme WebRTC recording (ADR 0012)
-- OCR on screenshots
-- ML-based category classifier (yerel LLM — Llama 3.1 8B+)
-- UBA / insider threat detection
-- HRIS entegrasyonları (BambooHR, Workday, Personio, BordroPlus, Logo)
+**Phase 2.0 — Forward-compat gap closures** (commit 55e4f15):
+  - Migration 0023: users table HRIS fields (hris_id, department, manager_user_id, etc)
+  - Generalized GET /v1/system/module-state (replaces dlp-state-only)
+  - EventMeta proto tag reservation (6 fields for category/confidence/sensitivity/hris/ocr)
+  - AgentError::Unsupported variant + personel-os stub cleanup
+
+**Phase 2.1 — macOS + Linux agent scaffolds** (commit b31f1c0):
+  - personel-os-macos crate: Endpoint Security Framework bridge, ScreenCaptureKit,
+    TCC, Network Extension, IOHIDManager, launchd plist generator, Keychain
+  - personel-os-linux crate: fanotify, libbpf-rs eBPF loader, X11/Wayland dual
+    adapters (Wayland permanently Unsupported per ADR 0016), systemd notify
+  - Both compile on all 3 OSes via target_os stubs
+
+**Phase 2.2 — personel-platform facade** (commit 9dad897):
+  - Compile-time target_os dispatch between windows/macos/linux backends
+  - Only unifies truly common surfaces (input::foreground_window_info,
+    service::is_service_context); specialized platform APIs remain direct
+  - personel-collectors + personel-agent now depend on facade
+
+**Phase 2.3 — ML category classifier** (commit 15cd77d):
+  - apps/ml-classifier/ Python FastAPI + Llama 3.2 3B Instruct (llama-cpp-python)
+  - FallbackClassifier with 50+ Turkish + international rules
+  - /v1/classify + /v1/classify/batch + readyz health
+  - Strict JSON output, ADR 0017 confidence threshold (0.70 → unknown)
+  - Multi-stage Dockerfile, distroless-like hardening, net_ml isolated network
+
+**Phase 2.3b — Go regex fallback classifier** (commit bee92bc):
+  - apps/gateway/internal/enricher/classifier.go + ml_client.go
+  - Turkish business software rules (Logo Tiger, Mikro, Netsis, Paraşüt, BordroPlus)
+  - 50ms timeout on ML service with graceful fallback; 27 test cases passing
+
+**Phase 2.4 — Mobile admin app** (commit bee92bc):
+  - apps/mobile-admin/ Expo 52 + React Native 0.76 + TypeScript strict
+  - 5 screens: sign-in, home, live view approvals, DSR queue, silence
+  - OIDC PKCE via expo-auth-session, zustand+MMKV session, expo-notifications
+  - Push payloads PII-free per ADR 0019 (type + count + deep_link only)
+  - EAS profiles: development, preview, production
+
+**Phase 2.5 — HRIS connector framework** (commit bee92bc):
+  - apps/api/internal/hris/ + 2 adapter scaffolds (BambooHR, Logo Tiger)
+  - Compile-time Factory registry (ADR 0018 security: no runtime plugins)
+  - Employee canonical type mapping to Phase 2.0 users columns
+  - sync.Orchestrator with TestConnection + startup auth paging + polling loop
+  - ChangeKind events for webhook-driven adapters; fallback polling for Logo Tiger
+
+**Phase 2.6 — UBA / insider threat detector** (commit 15cd77d):
+  - apps/uba-detector/ Python service using scikit-learn isolation forest
+  - 7 features: off_hours, app_diversity, data_egress, screenshot_rate,
+    file_access_rate, policy_violations, new_host_ratio
+  - Turkish TRT UTC+3 business hour awareness
+  - KVKK m.11/g advisory-only disclaimer enforced in every response
+  - 6 ClickHouse materialized views defined (DDL ready for DBA provisioning)
+
+**Phase 2.7 — SIEM exporter framework** (commit 15cd77d):
+  - apps/api/internal/siem/ + 2 adapter scaffolds (Splunk HEC, Microsoft Sentinel)
+  - In-process Bus with per-exporter bounded buffers (non-blocking publish;
+    drops under backpressure; audit chain is authoritative per ADR 0014)
+  - OCSF schema alignment with class_uid + severity_id
+  - 10 EventType taxonomy covering audit, login, DSR, live view, DLP, tamper, silence
+
+**Phase 2.8 — OCR service + live view recording** (commit fc1c7e0 partial):
+  - apps/ocr-service/ Python Tesseract + PaddleOCR with Turkish + English
+  - KVKK m.6 redaction: TCKN (official algorithm), IBAN, credit card (Luhn),
+    Turkish phone, email → replaced with [TAG] before response encoding
+  - apps/livrec-service/ Go service (still building at this CLAUDE.md update;
+    will be in next commit): per-session WebM recording with independent LVMK
+    Vault key hierarchy, dual-control playback, 30-day retention, DPO-only export
+
+**Phase 2.9 — Mobile BFF endpoints on admin API** (commit 05e920a):
+  - apps/api/internal/mobile/ with 5 endpoints under /v1/mobile/*
+  - Decided against separate mobile-bff service (operational simplicity)
+  - Push token registration with pgcrypto-sealed storage, sha256 hash logged
+
+**Phase 2.10 — Real mobile summary aggregation** (commit fc1c7e0):
+  - Migration 0024: mobile_push_tokens table with RLS + tenant isolation
+  - Real DSR/liveview/silence/dlp delegation in mobile.Service.GetSummary
+  - Fault-tolerant: per-query failures degrade individually, not the summary
+
+### Faz 2 remaining work (future commits)
+
+- Real Phase 2 implementations (all current work is scaffolds):
+  * BambooHR + Logo Tiger real API calls (Phase 2.11)
+  * Splunk HEC + Sentinel DCR real publishing (Phase 2.11)
+  * Llama GGUF model download + real inference benchmarking (Phase 2.12)
+  * Tesseract OCR real extraction pipeline (Phase 2.12)
+  * UBA ClickHouse real feature extraction (Phase 2.12, requires DBA writes)
+  * Live view recording WebM chunking (Phase 2.12)
+  * Mobile recent audit entries endpoint + module-state integration
+- macOS + Linux agent real ETW/Endpoint Security / eBPF implementations
+- Canlı izleme WebRTC recording (ADR 0019)
+- OCR on screenshots (apps/ocr-service)
+- ML-based category classifier (apps/ml-classifier)
+- UBA / insider threat detection (apps/uba-detector)
+- HRIS entegrasyonları: adapter framework ready, real calls Phase 2.11
 - SCIM provisioning
-- Mobile admin app (React Native/Expo)
-- SIEM entegrasyonları (Splunk, Sentinel, Elastic Security)
-- Windows minifilter driver (forensic DLP)
+- Mobile admin app (apps/mobile-admin — real implementations needed)
+- SIEM entegrasyonları: framework ready, real calls Phase 2.11
+- Windows minifilter driver (forensic DLP) — Phase 3
 
 ### Faz 3 (SaaS + sertifikasyon)
 

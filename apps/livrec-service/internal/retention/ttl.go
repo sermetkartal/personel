@@ -166,10 +166,11 @@ func (s *TTLScheduler) deleteSession(ctx context.Context, sess ExpiredSession) e
 }
 
 // isNotFound returns true if the error represents a MinIO 404 (object not found).
-// Conservative: if unsure, returns false so the outer error propagates.
+// The MinIO Go SDK returns an error with "NoSuchKey" in its code for missing objects.
 func isNotFound(err error) bool {
 	if err == nil {
 		return false
 	}
-	return err == sql.ErrNoRows
+	return strings.Contains(err.Error(), "NoSuchKey") ||
+		strings.Contains(err.Error(), "does not exist")
 }

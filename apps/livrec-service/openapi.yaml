@@ -1,0 +1,279 @@
+openapi: "3.1.0"
+info:
+  title: livrec-service API
+  version: "1.0.0"
+  description: |
+    Live View Recording Service — ADR 0019, Phase 2.8.
+    Receives encrypted WebM chunks, stores them in MinIO under LVMK,
+    and exposes dual-control SSE playback and DPO-only forensic export.
+  contact:
+    name: Personel Platform Team
+
+servers:
+  - url: http://localhost:8095
+    description: Local development (livrec profile)
+
+paths:
+  /v1/record/chunk:
+    post:
+      summary: Upload an encrypted WebM chunk
+      description: |
+        Called by the LiveKit egress shim (internal service). Accepts one
+        AES-256-GCM encrypted WebM chunk per request. Chunk index must be
+        strictly monotonic within a session (out-of-order rejected with 409).
+      operationId: uploadChunk
+      security:
+        - InternalBearer: []
+      parameters:
+        - name: X-Session-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-Chunk-Index
+          in: header
+          required: true
+          schema:
+            type: integer
+            minimum: 0
+        - name: X-Chunk-Hash
+          in: header
+          required: true
+          description: Hex-encoded SHA-256 of the plaintext chunk (before encryption)
+          schema:
+            type: string
+            pattern: "^[0-9a-f]{64}$"
+        - name: X-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+              description: AES-256-GCM ciphertext (nonce prepended, max 1 MiB)
+      responses:
+        "204":
+          description: Chunk accepted and stored
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: Chunk index out of order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Chunk exceeds 1 MiB limit
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /v1/record/{session_id}/stream:
+    get:
+      summary: Stream encrypted chunks via SSE for playback
+      description: |
+        Browser-facing SSE endpoint. Requires dual-control HR approval (same
+        flow as live view initiation). First event delivers the wrapped session
+        DEK (event: dek); subsequent events deliver individual encrypted chunks
+        (event: chunk); final event signals completion (event: end).
+
+        The browser decrypts chunks in WebCrypto with the delivered DEK.
+        The DEK is never persisted to disk. No download path exists.
+      operationId: streamRecording
+      security:
+        - OIDCProxy: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-User-ID
+          in: header
+          required: true
+          schema:
+            type: string
+        - name: X-Tenant-ID
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: X-User-Role
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: SSE stream of recording chunks
+          content:
+            text/event-stream:
+              schema:
+                type: string
+                description: |
+                  SSE events:
+                  - event: dek / data: {base64 wrapped DEK}
+                  - event: chunk / data: {chunk_index} {base64 ciphertext}
+                  - event: end / data: {total_chunk_count}
+                  - event: error / data: {error_message}
+        "403":
+          description: Dual-control approval missing or expired
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /v1/record/{session_id}/export:
+    post:
+      summary: DPO-only forensic export
+      description: |
+        Produces a chain-of-custody ZIP package containing plaintext recording,
+        signed manifest, audit chain excerpt, and control-plane signature.
+        DPO role required (enforced by X-User-Role header validation).
+        Export is logged to the audit chain.
+      operationId: exportRecording
+      security:
+        - OIDCProxy: []
+      parameters:
+        - name: session_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportRequest"
+      responses:
+        "200":
+          description: ZIP archive with chain-of-custody package
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+          headers:
+            X-Package-SHA256:
+              schema:
+                type: string
+              description: Hex SHA-256 of the ZIP for integrity verification
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "403":
+          description: DPO role required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is alive
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ok
+
+  /readyz:
+    get:
+      summary: Readiness probe
+      operationId: readyz
+      responses:
+        "200":
+          description: Service is ready to accept traffic
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: ready
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      operationId: metrics
+      responses:
+        "200":
+          description: Prometheus text format metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    InternalBearer:
+      type: http
+      scheme: bearer
+      description: Internal service-to-service token (ADMIN_API_INTERNAL_TOKEN)
+    OIDCProxy:
+      type: apiKey
+      in: header
+      name: X-User-ID
+      description: |
+        Headers injected by the trusted reverse proxy after Keycloak OIDC validation:
+        X-User-ID, X-Tenant-ID, X-User-Role
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        status:
+          type: integer
+        error:
+          type: string
+        message:
+          type: string
+
+    ExportRequest:
+      type: object
+      required:
+        - reason_code
+      properties:
+        reason_code:
+          type: string
+          description: Mandatory legal justification code for the export (e.g. KVKK-m11-request, labor-court-order)
+          example: "KVKK-m11-request"
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"

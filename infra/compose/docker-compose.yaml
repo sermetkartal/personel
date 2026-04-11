@@ -1385,4 +1385,89 @@ services:
       com.personel.tier: ml
       com.personel.phase: "2.6"
       com.personel.profile: uba
+
+  # ===========================================================================
+  # LIVREC-SERVICE — Live View Recording (ADR 0019, Phase 2.8)
+  # Profile: livrec — off by default.
+  # Per ADR 0019 §Scope: this is a per-session toggle AND a per-deployment
+  # toggle. Enabling requires: DPO opt-in ceremony, LVMK creation, Secret ID
+  # issuance to live-view-recorder AppRole (infra/scripts/livrec-enable.sh).
+  #
+  # KVKK: recordings increase sensitivity. See apps/livrec-service/README.md
+  # for the mandatory KVKK disclosure statement.
+  # ===========================================================================
+  livrec-service:
+    build:
+      context: ../../apps/livrec-service
+      dockerfile: Dockerfile
+    image: personel/livrec-service:latest
+    container_name: personel-livrec
+    restart: unless-stopped
+    profiles:
+      - livrec
+    ports:
+      - "127.0.0.1:${LIVREC_PORT:-8095}:8080"
+    environment:
+      # Vault — live-view-recorder AppRole (LVMK paths only, never TMK)
+      VAULT_ADDR: "https://personel-vault:8200"
+      VAULT_CACERT: /etc/personel/tls/ca.crt
+      VAULT_ROLE_ID: ${LIVREC_VAULT_ROLE_ID}
+      VAULT_SECRET_ID: ${LIVREC_VAULT_SECRET_ID}
+      VAULT_LVMK_PATH: "transit/derive/lvmk"
+      VAULT_SIGNER_PATH: "transit/sign/control-plane-signer"
+      VAULT_RENEW_INTERVAL: "5m"
+      # MinIO
+      MINIO_ENDPOINT: "personel-minio:9000"
+      MINIO_ACCESS_KEY: ${LIVREC_MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${LIVREC_MINIO_SECRET_KEY}
+      MINIO_BUCKET: "live-view-recordings"
+      MINIO_USE_TLS: "false"
+      # Admin API — internal service-to-service token
+      ADMIN_API_BASE_URL: "http://personel-api:8080"
+      ADMIN_API_INTERNAL_TOKEN: ${LIVREC_INTERNAL_TOKEN}
+      # Retention
+      LIVREC_RETENTION_DAYS: "30"
+      # Observability
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://personel-otel-collector:4318"
+      OTEL_SERVICE_NAME: "livrec-service"
+    volumes:
+      - tls-certs:/etc/personel/tls:ro
+    networks:
+      - data
+      - app
+      - vault-net
+      - monitoring
+    depends_on:
+      vault:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz | grep -q ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${LIVREC_CPUS:-2}"
+          memory: "${LIVREC_MEM:-2g}"
+        reservations:
+          cpus: "0.5"
+          memory: 256m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: livrec-service
+      com.personel.tier: app
+      com.personel.phase: "2.8"
+      com.personel.profile: livrec
+      com.personel.adr: "0019"
       com.personel.kvkk: "advisory-only"
