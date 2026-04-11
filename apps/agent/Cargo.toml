@@ -13,6 +13,8 @@ members = [
     "crates/personel-updater",
     "crates/personel-livestream",
     "crates/personel-os",
+    "crates/personel-os-macos",
+    "crates/personel-os-linux",
     "crates/personel-tests",
 ]
 

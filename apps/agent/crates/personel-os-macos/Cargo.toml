@@ -1,0 +1,45 @@
+[package]
+name    = "personel-os-macos"
+version = "0.1.0"
+edition.workspace    = true
+rust-version.workspace = true
+description = "macOS OS-abstraction layer for the Personel endpoint agent (Phase 2.1 scaffold)"
+
+# This crate is the macOS counterpart to `personel-os` (Windows). It provides
+# the same collector API surface but backed by macOS system frameworks:
+# IOHIDManager, ScreenCaptureKit, Endpoint Security Framework, Network
+# Extension, and Keychain. Phase 2.1 ships type-correct stubs; real
+# implementations follow in Phases 2.2–2.4.
+#
+# On non-macOS targets every public function returns
+# `AgentError::Unsupported { os: "<os>", component: "..." }` so the workspace
+# compiles cleanly on Linux and Windows during development.
+#
+# personel-os-macos is the ONLY new Phase 2 crate allowed to use unsafe code
+# (Objective-C / CoreFoundation FFI). All unsafe blocks carry a SAFETY comment.
+
+[dependencies]
+personel-core = { path = "../personel-core" }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+tokio         = { workspace = true }
+zeroize       = { workspace = true }
+serde         = { workspace = true }
+
+# ── macOS-only dependencies ──────────────────────────────────────────────────
+# These are gated on `cfg(target_os = "macos")` so the crate compiles on
+# Linux and Windows without any system-framework headers.
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# cocoa: Objective-C bindings for AppKit / Foundation (NSWorkspace, NSEvent).
+cocoa = "0.25"
+# core-foundation: CFString, CFRunLoop, CFDictionary used by IOHIDManager and
+# other CF-based APIs.
+core-foundation = "0.9"
+# security-framework: safe Rust wrapper around Security.framework for Keychain
+# (SecItem) and AuthorizationCopyRights (TCC capability checking).
+security-framework = "2"
+# objc: low-level Objective-C message send (`msg_send!` macro). Required by
+# cocoa 0.25 and used directly in a few places where cocoa does not expose a
+# binding.
+objc = "0.2"

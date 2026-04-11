@@ -1,0 +1,56 @@
+[package]
+name    = "personel-os-linux"
+version = "0.1.0"
+edition.workspace   = true
+rust-version.workspace = true
+description = "Linux OS abstraction layer for the Personel endpoint agent (Phase 2.1 scaffold)."
+
+# This crate mirrors the public surface of personel-os but targets Linux APIs:
+# fanotify for filesystem events, eBPF (libbpf-rs) for process/network
+# tracepoints, libinput for keystroke metadata, and X11/Wayland dual adapters
+# for screen capture and window title collection.
+#
+# Like personel-os, this is the only Linux crate allowed to use unsafe code
+# where FFI demands it. All unsafe is contained here; callers set
+# #![deny(unsafe_code)].
+
+# ── Cross-platform (always present) ──────────────────────────────────────────
+[dependencies]
+personel-core = { path = "../personel-core" }
+thiserror     = { workspace = true }
+tracing       = { workspace = true }
+tokio         = { workspace = true }
+zeroize       = { workspace = true }
+
+# ── Linux-only dependencies ───────────────────────────────────────────────────
+# All OS-specific crates are gated behind cfg(target_os = "linux") so the crate
+# compiles cleanly on macOS and Windows (stub path only).
+[target.'cfg(target_os = "linux")'.dependencies]
+# libbpf-rs: safe Rust bindings to libbpf for loading CO-RE eBPF programs.
+# Phase 2.2 will add real .bpf.c programs; Phase 2.1 stubs the load() paths.
+libbpf-rs = "0.23"
+
+# nix: safe POSIX/Linux syscall wrappers. Features scoped to what we actually
+# need: fanotify for filesystem event monitoring, poll for event loops,
+# mount for inotify fallback path.
+nix = { version = "0.28", features = ["fanotify", "poll", "mount"] }
+
+# x11rb: pure-Rust X11/XCB client. Enabled via the `x11` feature flag so
+# teams that target Wayland-only environments do not pull this in.
+x11rb = { version = "0.13", optional = true }
+
+# wayland-client: Wayland protocol client. Enabled via `wayland` feature.
+# Phase 2.2 will use this + the xdg-portal protocol for ScreenCast.
+wayland-client = { version = "0.31", optional = true }
+
+# systemd-journal-logger: writes log records to the systemd journal so
+# `journalctl -u personel-agent` surfaces structured log output naturally.
+systemd-journal-logger = "2"
+
+# ── Features ─────────────────────────────────────────────────────────────────
+[features]
+default = []
+# Enable X11 adapter (XShm capture, _NET_ACTIVE_WINDOW, XRecord for DLP).
+x11 = ["dep:x11rb"]
+# Enable Wayland adapter (org.freedesktop.portal.ScreenCast, wl_data_device).
+wayland = ["dep:wayland-client"]
