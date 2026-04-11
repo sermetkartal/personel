@@ -112,6 +112,13 @@ const (
 	// KindComplianceAttestation is a formal attestation (KVKK VERBİS
 	// renewal, GDPR Art. 30 register update).
 	KindComplianceAttestation ItemKind = "compliance_attestation"
+
+	// KindPrivilegedAccessSession is a closed HR-dual-control live view
+	// session. Evidence recorded after termination captures requester,
+	// approver, terminator, target endpoint, justification, and actual
+	// duration. Supports CC6.1 (logical access controls) and CC6.3 (access
+	// removal: the session terminated at or before its hard cap).
+	KindPrivilegedAccessSession ItemKind = "privileged_access_session"
 )
 
 // Item is a single evidence record. Immutable once written to Postgres.

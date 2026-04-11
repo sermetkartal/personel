@@ -7,12 +7,14 @@ package liveview
 import (
 	"context"
 	"crypto/ed25519"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"time"
 
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
+	"github.com/personel/api/internal/evidence"
 	"github.com/personel/api/internal/nats"
 	"github.com/personel/api/internal/vault"
 )
@@ -41,6 +43,20 @@ type Service struct {
 	livekit     LiveKitTokenMinter
 	cfg         ServiceConfig
 	log         *slog.Logger
+
+	// evidenceRecorder is optional — if nil, the service still operates
+	// normally and simply skips SOC 2 evidence emission. Set via
+	// SetEvidenceRecorder during boot if the evidence locker is wired.
+	// This keeps the constructor signature stable for existing tests.
+	evidenceRecorder evidence.Recorder
+}
+
+// SetEvidenceRecorder attaches an evidence.Recorder to the service so that
+// closed privileged-access sessions emit SOC 2 CC6.1 / CC6.3 evidence. If
+// this is never called, the service operates with no evidence emission
+// (scaffold mode). The setter is idempotent.
+func (s *Service) SetEvidenceRecorder(r evidence.Recorder) {
+	s.evidenceRecorder = r
 }
 
 // ServiceConfig holds live view–specific configuration.
@@ -274,7 +290,7 @@ func (s *Service) terminateSession(ctx context.Context, p *auth.Principal, sessi
 		return err
 	}
 
-	_, err = s.recorder.Append(ctx, audit.Entry{
+	terminateAuditID, err := s.recorder.Append(ctx, audit.Entry{
 		Actor:    p.UserID,
 		TenantID: p.TenantID,
 		Action:   action,
@@ -296,7 +312,111 @@ func (s *Service) terminateSession(ctx context.Context, p *auth.Principal, sessi
 	})
 
 	now := time.Now().UTC()
-	return s.store.SetState(ctx, sessionID, p.TenantID, newState, &p.UserID, nil, &now)
+	if err := s.store.SetState(ctx, sessionID, p.TenantID, newState, &p.UserID, nil, &now); err != nil {
+		return err
+	}
+
+	// SOC 2 evidence emission (Phase 3.0) — best-effort, non-blocking.
+	// A transitioned-to-terminal session that was previously ACTIVE is a
+	// completed privileged access ceremony: HR-approved, time-bounded,
+	// dual-controlled. That is the CC6.1 / CC6.3 evidence item.
+	//
+	// Emission failure must not fail the termination — the session is
+	// already gone from the user's perspective. Log loudly so a missing
+	// evidence item is visible in SOC 2 coverage gap reports rather than
+	// silently lost.
+	s.emitSessionEvidence(ctx, sess, newState, reason, terminateAuditID, now)
+
+	return nil
+}
+
+// emitSessionEvidence records a KindPrivilegedAccessSession evidence item
+// for a terminated live view session. Called from terminateSession after
+// the DB state has been updated. No-op if the evidence recorder was not
+// wired (scaffold mode).
+//
+// The payload is intentionally minimal — auditors want to see approver,
+// requester, endpoint, reason, and actual duration. Full justification
+// text is included to satisfy CC6.1 "business justification for privileged
+// access" evidence.
+func (s *Service) emitSessionEvidence(
+	ctx context.Context,
+	sess *Session,
+	finalState State,
+	terminationReason string,
+	terminateAuditID int64,
+	endedAt time.Time,
+) {
+	if s.evidenceRecorder == nil {
+		return
+	}
+
+	// approverID and actualDuration come from the session row we already
+	// loaded. Approver is set during Approve(); if nil, the session never
+	// made it past REQUESTED and we should not be in terminateSession at
+	// all — defence-in-depth fallback logs and skips.
+	if sess.ApproverID == nil {
+		s.log.WarnContext(ctx, "liveview: evidence skipped — no approver on terminated session",
+			slog.String("session_id", sess.ID),
+			slog.String("state", string(finalState)),
+		)
+		return
+	}
+
+	var actualDuration time.Duration
+	if sess.StartedAt != nil {
+		actualDuration = endedAt.Sub(*sess.StartedAt)
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"session_id":        sess.ID,
+		"endpoint_id":       sess.EndpointID,
+		"requester_id":      sess.RequesterID,
+		"approver_id":       *sess.ApproverID,
+		"terminator_id":     sess.ApproverID, // set to the actor that terminated
+		"reason_code":       sess.ReasonCode,
+		"justification":     sess.Justification,
+		"requested_seconds": int64(sess.RequestedDuration / time.Second),
+		"actual_seconds":    int64(actualDuration / time.Second),
+		"final_state":       string(finalState),
+		"termination_event": terminationReason,
+	})
+	if err != nil {
+		s.log.ErrorContext(ctx, "liveview: evidence payload marshal failed",
+			slog.String("session_id", sess.ID),
+			slog.String("error", err.Error()),
+		)
+		return
+	}
+
+	item := evidence.Item{
+		TenantID:   sess.TenantID,
+		Control:    evidence.CtrlCC6_1,
+		Kind:       evidence.KindPrivilegedAccessSession,
+		RecordedAt: endedAt,
+		Actor:      sess.RequesterID,
+		SummaryTR: fmt.Sprintf(
+			"Canlı izleme oturumu sonlandırıldı — oturum %s, endpoint %s, onay %s, süre %ds",
+			sess.ID, sess.EndpointID, *sess.ApproverID, int64(actualDuration/time.Second),
+		),
+		SummaryEN: fmt.Sprintf(
+			"Live view session closed — session %s, endpoint %s, approver %s, duration %ds",
+			sess.ID, sess.EndpointID, *sess.ApproverID, int64(actualDuration/time.Second),
+		),
+		Payload:            payload,
+		ReferencedAuditIDs: []int64{terminateAuditID},
+	}
+
+	if _, err := s.evidenceRecorder.Record(ctx, item); err != nil {
+		// Loud log — SOC 2 coverage check depends on this line firing
+		// into alerting if the evidence path is unhealthy. Do not
+		// propagate: the termination itself already succeeded.
+		s.log.ErrorContext(ctx, "liveview: SOC 2 evidence emission failed",
+			slog.String("session_id", sess.ID),
+			slog.String("control", string(evidence.CtrlCC6_1)),
+			slog.String("error", err.Error()),
+		)
+	}
 }
 
 // AgentStarted is called when the gateway reports the agent has joined LiveKit.

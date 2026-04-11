@@ -228,19 +228,36 @@ func main() {
 	// The evidence Store requires a WORM sink; if MinIO was unavailable at
 	// startup wormSink is nil and evidence.Record() will refuse writes so
 	// we never produce auditor-facing evidence without an integrity anchor.
+	//
+	// The Signer is the same vault.Client already used for audit checkpoint
+	// signing — its Sign(ctx, payload) method satisfies evidence.Signer by
+	// interface shape. Sharing the control-plane signing key between audit
+	// checkpoints and evidence items gives auditors a single key-rotation
+	// history to audit against both artifact families.
 	var evidenceStore *evidence.Store
 	var evidenceRecorder *evidence.RecorderImpl
+	// Compile-time assertion: vault.Client must satisfy evidence.Signer.
+	// If either side's Sign signature drifts, this errors at build time
+	// rather than at first Record() call under load.
+	var _ evidence.Signer = (*vaultclient.Client)(nil)
 	if wormSink != nil {
 		evidenceStore = evidence.NewStore(pool, wormSink)
-		// Phase 3.0 will switch the signer to a real Vault transit call;
-		// the noop signer produces a loud placeholder signature so scaffold
-		// mode never accidentally presents fake evidence as admissible.
-		evidenceRecorder = evidence.NewRecorder(evidenceStore, evidence.NewNoopSigner(), log)
-		log.Info("evidence locker ready (noop signer until Phase 3.0 Vault transit wiring)")
+		evidenceRecorder = evidence.NewRecorder(evidenceStore, vc, log)
+		log.Info("evidence locker ready",
+			slog.String("signer", "vault:control-plane"),
+			slog.String("worm_bucket", audit.WORMBucket),
+		)
+
+		// Wire the evidence recorder into domain collectors. Each
+		// collector attaches via a setter so the constructor signature
+		// stays stable for existing tests. Add a new SetEvidenceRecorder
+		// call here for every future collector (CC7.1 change mgmt, CC9.1
+		// BCP runs, etc.).
+		lvSvc.SetEvidenceRecorder(evidenceRecorder)
 	} else {
 		log.Warn("evidence locker disabled: WORM sink unavailable; domain collectors must handle nil Recorder")
 	}
-	_ = evidenceRecorder // consumed when collectors wire in Phase 3.0
+	_ = evidenceStore // referenced via the recorder; retained for future direct queries
 
 	// --- 10. Mobile BFF service (Phase 2.9) ---
 	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
