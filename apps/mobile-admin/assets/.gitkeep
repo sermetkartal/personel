@@ -1,0 +1,4 @@
+# Asset placeholders — real icon.png, splash.png, adaptive-icon.png
+# are NOT committed. EAS Build will fail until you provide real assets.
+# Use EAS's asset generation or supply your own 1024x1024 icon.png,
+# 1284x2778 splash.png, and 1024x1024 adaptive-icon.png.

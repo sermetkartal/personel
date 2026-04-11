@@ -38,6 +38,7 @@ import (
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	minioclient "github.com/personel/api/internal/minio"
+	"github.com/personel/api/internal/mobile"
 	natsclient "github.com/personel/api/internal/nats"
 	"github.com/personel/api/internal/observability"
 	"github.com/personel/api/internal/policy"
@@ -222,13 +223,16 @@ func main() {
 	auditVerifier := audit.NewVerifier(pool, vc, verifierSink, wormSink, recorder, log)
 	go runAuditVerifierJob(ctx, auditVerifier, tenantIDs, log)
 
-	// --- 10. Prometheus metrics ---
+	// --- 10. Mobile BFF service (Phase 2.9) ---
+	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
+
+	// --- 11. Prometheus metrics ---
 	reg := observability.NewRegistry()
 	reg.MustRegister(prometheus.NewGoCollector())
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
 	met := httpserver.NewMetrics(reg)
 
-	// --- 11. Chi router + HTTP server ---
+	// --- 12. Chi router + HTTP server ---
 	handler := httpserver.BuildRouter(&httpserver.Services{
 		Cfg:          cfg,
 		Verifier:     verifier,
@@ -246,6 +250,7 @@ func main() {
 		Transparency: transSvc,
 		Silence:      silenceSvc,
 		DLPState:     dlpStateSvc,
+		Mobile:       mobileSvc,
 		Log:          log,
 	}, met)
 

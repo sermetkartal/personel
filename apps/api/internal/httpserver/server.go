@@ -22,6 +22,7 @@ import (
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
+	"github.com/personel/api/internal/mobile"
 	"github.com/personel/api/internal/policy"
 	"github.com/personel/api/internal/reports"
 	"github.com/personel/api/internal/screenshots"
@@ -49,6 +50,7 @@ type Services struct {
 	Transparency *transparency.Service
 	Silence      *silence.Service
 	DLPState     *dlpstate.Service
+	Mobile       *mobile.Service
 	Log          *slog.Logger
 }
 
@@ -264,6 +266,21 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			// POST /v1/system/dlp-bootstrap-keys — dlp-admin only (invoked by dlp-enable.sh)
 			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
 				Post("/dlp-bootstrap-keys", dlpstate.BootstrapPEDEKsHandler(svc.DLPState))
+		})
+
+		// --- Mobile BFF endpoints (Phase 2.9) ---
+		// Consumed exclusively by apps/mobile-admin (React Native). Gated
+		// on roles that make sense in an on-call admin context.
+		r.Route("/mobile", func(r chi.Router) {
+			r.Use(auth.RequireRole(
+				auth.RoleAdmin, auth.RoleManager, auth.RoleHR, auth.RoleDPO,
+				auth.RoleInvestigator, auth.RoleAuditor,
+			))
+			r.Get("/summary", mobile.GetSummaryHandler(svc.Mobile))
+			r.Post("/push-tokens", mobile.RegisterPushTokenHandler(svc.Mobile))
+			r.Get("/live-view/pending", mobile.ListPendingLiveViewHandler(svc.Mobile))
+			r.Get("/dsr/queue", mobile.ListDSRQueueHandler(svc.Mobile))
+			r.Get("/silence", mobile.ListSilenceHandler(svc.Mobile))
 
 			// POST /v1/system/dlp-transition — atomic state transition; writes
 			// audit entry, updates dlp_state, derives banner state (ADR 0013).
