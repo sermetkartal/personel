@@ -224,8 +224,37 @@
   },
 
   "employees": {
-    "title": "Çalışanlar",
-    "subtitle": "Çalışan kayıtlarını görüntüleyin",
+    "title": "Çalışan İzleme",
+    "subtitle": "Tüm çalışanların bugünkü aktivite özeti",
+    "stats": {
+      "activeNow": "Şu an aktif",
+      "totalActive": "Toplam aktif",
+      "totalIdle": "Toplam boşta",
+      "screenshots": "Ekran görüntüsü",
+      "avgScore": "Ort. üretkenlik"
+    },
+    "search": {
+      "placeholder": "İsim, e-posta veya departman ara..."
+    },
+    "filter": {
+      "allDepartments": "Tüm departmanlar"
+    },
+    "col": {
+      "employee": "Çalışan",
+      "department": "Departman",
+      "activeToday": "Bugün (Aktif / Boşta)",
+      "topApps": "En Çok Kullanılan",
+      "screenshots": "Ekran",
+      "score": "Skor",
+      "status": "Durum"
+    },
+    "empty": {
+      "noData": "Bugün için veri bulunamadı. Seed script'i henüz çalıştırılmadı olabilir.",
+      "noMatch": "Filtreye uyan çalışan bulunamadı."
+    },
+    "overview": {
+      "day": "Gözlem günü: {day}"
+    },
     "detail": {
       "title": "Çalışan Detayı",
       "endpoints": "Bağlı Uç Noktalar",

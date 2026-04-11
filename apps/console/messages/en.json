@@ -224,8 +224,37 @@
   },
 
   "employees": {
-    "title": "Employees",
-    "subtitle": "View employee records",
+    "title": "Employee Monitoring",
+    "subtitle": "Today's activity rollup for every employee",
+    "stats": {
+      "activeNow": "Active now",
+      "totalActive": "Total active",
+      "totalIdle": "Total idle",
+      "screenshots": "Screenshots",
+      "avgScore": "Avg score"
+    },
+    "search": {
+      "placeholder": "Search name, email or department..."
+    },
+    "filter": {
+      "allDepartments": "All departments"
+    },
+    "col": {
+      "employee": "Employee",
+      "department": "Department",
+      "activeToday": "Today (Active / Idle)",
+      "topApps": "Top apps",
+      "screenshots": "Screens",
+      "score": "Score",
+      "status": "Status"
+    },
+    "empty": {
+      "noData": "No data for today. The seed script may not have run.",
+      "noMatch": "No employees match the filter."
+    },
+    "overview": {
+      "day": "Observation day: {day}"
+    },
     "detail": {
       "title": "Employee Detail",
       "endpoints": "Associated Endpoints",

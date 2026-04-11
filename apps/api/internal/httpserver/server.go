@@ -13,6 +13,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/personel/api/internal/accessreview"
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
@@ -62,6 +64,7 @@ type Services struct {
 	AccessReview  *accessreview.Service
 	Incident      *incident.Service
 	BCP           *bcp.Service
+	DBPool        *pgxpool.Pool
 	Log           *slog.Logger
 }
 
@@ -136,6 +139,20 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 				r.Post("/disable", user.DisableHandler(svc.User))
 			})
 		})
+
+		// --- Employee monitoring overview (Phase 2 preview) ---
+		// GET /v1/employees/overview — one row per employee with today's
+		// active/idle minutes, top apps, productivity score. Consumed
+		// by /tr/employees console page.
+		if svc.DBPool != nil {
+			r.Route("/employees", func(r chi.Router) {
+				r.Use(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleManager, auth.RoleHR,
+					auth.RoleDPO, auth.RoleInvestigator, auth.RoleAuditor,
+				))
+				r.Get("/overview", user.EmployeesOverviewHandler(svc.DBPool))
+			})
+		}
 
 		// --- Endpoints (agent fleet) ---
 		r.Route("/endpoints", func(r chi.Router) {

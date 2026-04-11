@@ -321,6 +321,7 @@ func main() {
 		AccessReview: accessReviewSvc,
 		Incident:     incidentSvc,
 		BCP:          bcpSvc,
+		DBPool:       pool,
 		Log:          log,
 	}, met)
 
