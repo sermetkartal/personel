@@ -1,0 +1,8 @@
+# Model files are downloaded at runtime via docker-entrypoint.sh or pre-staged
+# by install.sh from a signed tar.zst bundle.
+#
+# Do NOT commit GGUF model files to this repository.
+# The .gitignore in apps/ml-classifier/ excludes *.gguf, *.bin, and *.pt files.
+#
+# ADR 0017: Model distribution and signing is a Phase 2 devops-engineer task.
+# See bench/README.md for the benchmark harness instructions.

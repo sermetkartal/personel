@@ -1,0 +1,170 @@
+{
+  "_comment": "30+ classify examples for FallbackClassifier tests. Covers Turkish business apps, international tools, distractions, and personal apps.",
+  "examples": [
+    {
+      "input": {"app_name": "Logo Tiger 3", "window_title": "Logo Tiger - Fatura Modulu", "url": null},
+      "expected_category": "work",
+      "notes": "Turkish ERP - Logo Tiger"
+    },
+    {
+      "input": {"app_name": "Mikro Gold", "window_title": "Mikro Gold ERP - Stok Takip", "url": null},
+      "expected_category": "work",
+      "notes": "Turkish ERP - Mikro Gold"
+    },
+    {
+      "input": {"app_name": "Netsis", "window_title": "Netsis ERP - Muhasebe Modulu", "url": null},
+      "expected_category": "work",
+      "notes": "Turkish ERP - Netsis"
+    },
+    {
+      "input": {"app_name": "BordroPlus", "window_title": "BordroPlus - Bordro Hazirlama", "url": null},
+      "expected_category": "work",
+      "notes": "Turkish payroll software - BordroPlus"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Parasut - Fatura Listesi", "url": "parasut.com"},
+      "expected_category": "work",
+      "notes": "Turkish cloud accounting - Parasut"
+    },
+    {
+      "input": {"app_name": "Microsoft Excel", "window_title": "2026-Q1-Butce.xlsx - Microsoft Excel", "url": null},
+      "expected_category": "work",
+      "notes": "MS Excel - work document"
+    },
+    {
+      "input": {"app_name": "excel.exe", "window_title": "Satis Raporu Q4.xlsx", "url": null},
+      "expected_category": "work",
+      "notes": "Excel by exe name"
+    },
+    {
+      "input": {"app_name": "WINWORD.EXE", "window_title": "Proje Teklifi - Microsoft Word", "url": null},
+      "expected_category": "work",
+      "notes": "MS Word - work document"
+    },
+    {
+      "input": {"app_name": "Outlook", "window_title": "Gelen Kutusu - Outlook", "url": null},
+      "expected_category": "work",
+      "notes": "Microsoft Outlook"
+    },
+    {
+      "input": {"app_name": "Microsoft Teams", "window_title": "Muhendislik # genel - Teams", "url": null},
+      "expected_category": "work",
+      "notes": "Microsoft Teams"
+    },
+    {
+      "input": {"app_name": "Slack", "window_title": "# engineering - Personel", "url": null},
+      "expected_category": "work",
+      "notes": "Slack workspace"
+    },
+    {
+      "input": {"app_name": "Zoom", "window_title": "Sprint Retrospective - Zoom Meeting", "url": null},
+      "expected_category": "work",
+      "notes": "Zoom meeting"
+    },
+    {
+      "input": {"app_name": "Code - Insiders", "window_title": "classifier.py - Visual Studio Code", "url": null},
+      "expected_category": "work",
+      "notes": "VS Code (Insiders build)"
+    },
+    {
+      "input": {"app_name": "PyCharm", "window_title": "personel-ml [~/projects/personel-ml]", "url": null},
+      "expected_category": "work",
+      "notes": "JetBrains PyCharm IDE"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "github.com/personel/personel - Pull Requests", "url": "github.com"},
+      "expected_category": "work",
+      "notes": "GitHub in browser"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Stack Overflow - asyncio Python", "url": "stackoverflow.com"},
+      "expected_category": "work",
+      "notes": "Stack Overflow - developer reference"
+    },
+    {
+      "input": {"app_name": "Figma", "window_title": "Admin Dashboard v3 - Figma", "url": "figma.com"},
+      "expected_category": "work",
+      "notes": "Figma design tool"
+    },
+    {
+      "input": {"app_name": "Postman", "window_title": "Personel API - /v1/classify - Postman", "url": null},
+      "expected_category": "work",
+      "notes": "Postman API testing"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Jira - PRSNL-421 - Implement ML classifier", "url": "atlassian.net"},
+      "expected_category": "work",
+      "notes": "Jira issue tracking"
+    },
+    {
+      "input": {"app_name": "YouTube", "window_title": "YouTube - Trending", "url": "youtube.com"},
+      "expected_category": "distraction",
+      "notes": "YouTube - video streaming"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Netflix - Ana Sayfa", "url": "netflix.com"},
+      "expected_category": "distraction",
+      "notes": "Netflix in browser"
+    },
+    {
+      "input": {"app_name": "Instagram", "window_title": "Instagram - Kesfet", "url": "instagram.com"},
+      "expected_category": "distraction",
+      "notes": "Instagram social media"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Twitter / X - Anasayfa", "url": "x.com"},
+      "expected_category": "distraction",
+      "notes": "Twitter/X"
+    },
+    {
+      "input": {"app_name": "TikTok", "window_title": "TikTok - For You", "url": "tiktok.com"},
+      "expected_category": "distraction",
+      "notes": "TikTok short video"
+    },
+    {
+      "input": {"app_name": "Steam", "window_title": "Steam", "url": null},
+      "expected_category": "distraction",
+      "notes": "Steam gaming platform"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Reddit - r/programming", "url": "reddit.com"},
+      "expected_category": "distraction",
+      "notes": "Reddit"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Is Bankasi - Internet Bankaciligi", "url": "isbank.com.tr"},
+      "expected_category": "personal",
+      "notes": "Turkish bank - Is Bankasi"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "GarantiBBVA - Hesabim", "url": "garantibbva.com.tr"},
+      "expected_category": "personal",
+      "notes": "Turkish bank - Garanti BBVA"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Trendyol - Kadin Giyim", "url": "trendyol.com"},
+      "expected_category": "personal",
+      "notes": "Turkish e-commerce - Trendyol"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Hepsiburada - Elektronik", "url": "hepsiburada.com"},
+      "expected_category": "personal",
+      "notes": "Turkish e-commerce - Hepsiburada"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Amazon.com.tr - Arama: laptop", "url": "amazon.com.tr"},
+      "expected_category": "personal",
+      "notes": "Amazon Turkey"
+    },
+    {
+      "input": {"app_name": "notepad.exe", "window_title": "Yeni Metin Belgesi - Notepad", "url": null},
+      "expected_category": "unknown",
+      "notes": "Blank notepad - insufficient context"
+    },
+    {
+      "input": {"app_name": "chrome.exe", "window_title": "Yeni Sekme - Google Chrome", "url": null},
+      "expected_category": "unknown",
+      "notes": "Empty new tab - no context"
+    }
+  ]
+}
