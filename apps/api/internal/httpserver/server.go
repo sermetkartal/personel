@@ -271,6 +271,16 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			// effects (Vault Secret ID, container start/stop) have completed.
 			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
 				Post("/dlp-transition", dlpstate.TransitionHandler(svc.DLPState))
+
+			// GET /v1/system/module-state — forward-compat generalization
+			// of dlp-state. Phase 1 returns DLP real state + Phase 2 module
+			// placeholders (OCR, ML, live view recording, HRIS). Portal and
+			// console should prefer this endpoint over /dlp-state for new
+			// code. Readable by all authenticated roles.
+			r.With(auth.RequireRole(
+				auth.RoleAdmin, auth.RoleManager, auth.RoleHR, auth.RoleDPO,
+				auth.RoleInvestigator, auth.RoleAuditor, auth.RoleEmployee, auth.RoleDLPAdmin,
+			)).Get("/module-state", dlpstate.GetModuleStateHandler(svc.DLPState))
 		})
 	})
 

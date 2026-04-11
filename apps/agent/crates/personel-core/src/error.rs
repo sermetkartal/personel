@@ -69,6 +69,19 @@ pub enum AgentError {
     #[error("DPAPI error: {0}")]
     Dpapi(String),
 
+    // ── Platform ──────────────────────────────────────────────────────────
+    /// A function is not supported on the current operating system. Used
+    /// primarily by personel-os non-Windows stubs to signal "compile-time
+    /// available, runtime not implemented" to callers during Phase 2
+    /// macOS/Linux agent development.
+    #[error("operation unsupported on this platform: {component} ({os})")]
+    Unsupported {
+        /// Short OS identifier, e.g. "macos", "linux", "windows".
+        os: &'static str,
+        /// Short component identifier, e.g. "etw", "dpapi", "dxgi_capture".
+        component: &'static str,
+    },
+
     // ── Collectors ────────────────────────────────────────────────────────
     /// A collector could not start because a required OS API was unavailable.
     #[error("collector '{name}' failed to start: {reason}")]

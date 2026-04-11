@@ -75,4 +75,51 @@ message EventMeta {
   uint64 seq = 10;                  // per-endpoint monotonic
   PiiClass pii = 11;
   RetentionClass retention = 12;
+
+  // --- Phase 2 enrichment slots (forward-compat reservation) -----------
+  // These tags are claimed NOW so Phase 2 enricher changes (ML category
+  // classifier, OCR output, sensitivity guard flag lifting, HRIS user
+  // resolution) don't need a breaking schema bump. Phase 1 servers ignore
+  // unknown fields; agents never emit them. The enricher in Phase 2 will
+  // populate these server-side before the ClickHouse insert.
+  //
+  // DO NOT re-use these tag numbers for other purposes.
+
+  // ML category classifier result (ADR 0017). One of: work, personal,
+  // distraction, unknown. Empty string = not yet classified.
+  string category = 13;
+
+  // ML classifier confidence [0.0, 1.0]. Phase 2 uses 0.70 threshold to
+  // decide "unknown" fallback.
+  float category_confidence = 14;
+
+  // Sensitivity-guard flag set by Phase 1 enricher; lifted here for
+  // ClickHouse column routing. Phase 1 already routes via prefix; Phase 2
+  // may also filter downstream queries on this.
+  bool sensitive_flagged = 15;
+
+  // HRIS-resolved user attributes; the enricher joins endpoint_id →
+  // users.hris_id for filtering in reports and DSR scoping.
+  string hris_department = 16;
+  string hris_manager_user_id = 17;
+
+  // OCR language hint for Phase 2 OCR pipeline (ADR pending). Empty if
+  // OCR is not enabled for this tenant.
+  string ocr_language = 18;
+
+  // Reserved block for future enrichment. Claimed so nothing else grabs
+  // these tag numbers.
+  reserved 19 to 30;
+  reserved "reserved_phase_2_enrichment_19",
+           "reserved_phase_2_enrichment_20",
+           "reserved_phase_2_enrichment_21",
+           "reserved_phase_2_enrichment_22",
+           "reserved_phase_2_enrichment_23",
+           "reserved_phase_2_enrichment_24",
+           "reserved_phase_2_enrichment_25",
+           "reserved_phase_2_enrichment_26",
+           "reserved_phase_2_enrichment_27",
+           "reserved_phase_2_enrichment_28",
+           "reserved_phase_2_enrichment_29",
+           "reserved_phase_2_enrichment_30";
 }

@@ -2,11 +2,21 @@
 //!
 //! These modules provide the same public API as their `windows::` counterparts
 //! so the workspace compiles on macOS/Linux for developer ergonomics. Every
-//! function returns an error; the agent cannot run on non-Windows platforms
-//! in Phase 1.
+//! function returns `AgentError::Unsupported { os, component }`. Phase 2 will
+//! replace these stubs with real macOS (Endpoint Security Framework,
+//! ScreenCaptureKit, Network Extension) and Linux (fanotify, eBPF,
+//! X11/Wayland) implementations — see ADRs 0015 and 0016.
 
 use personel_core::error::{AgentError, Result};
 use zeroize::Zeroizing;
+
+/// The current OS identifier used in `Unsupported` errors.
+#[cfg(target_os = "macos")]
+const OS: &str = "macos";
+#[cfg(target_os = "linux")]
+const OS: &str = "linux";
+#[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+const OS: &str = "other";
 
 // ── input ─────────────────────────────────────────────────────────────────────
 
@@ -21,7 +31,7 @@ pub mod input {
         pub title: String,
         /// Process ID.
         pub pid: u32,
-        /// HWND value.
+        /// HWND value (placeholder on non-Windows).
         pub hwnd: usize,
     }
 
@@ -29,11 +39,11 @@ pub mod input {
     ///
     /// # Errors
     ///
-    /// Always returns an error on non-Windows platforms.
+    /// Always returns `AgentError::Unsupported` on non-Windows platforms.
     pub fn last_input_idle_ms() -> Result<u64> {
-        Err(AgentError::CollectorStart {
-            name: "idle",
-            reason: "GetLastInputInfo is Windows-only".into(),
+        Err(AgentError::Unsupported {
+            os: OS,
+            component: "input::last_input_idle_ms",
         })
     }
 
@@ -41,11 +51,11 @@ pub mod input {
     ///
     /// # Errors
     ///
-    /// Always returns an error on non-Windows platforms.
+    /// Always returns `AgentError::Unsupported` on non-Windows platforms.
     pub fn foreground_window_info() -> Result<ForegroundWindowInfo> {
-        Err(AgentError::CollectorStart {
-            name: "window_title",
-            reason: "GetForegroundWindow is Windows-only".into(),
+        Err(AgentError::Unsupported {
+            os: OS,
+            component: "input::foreground_window_info",
         })
     }
 }
@@ -60,18 +70,18 @@ pub mod dpapi {
     ///
     /// # Errors
     ///
-    /// Always returns an error.
+    /// Always returns `AgentError::Unsupported`.
     pub fn protect(_plaintext: &[u8]) -> Result<Vec<u8>> {
-        Err(AgentError::Dpapi("DPAPI is Windows-only".into()))
+        Err(AgentError::Unsupported { os: OS, component: "dpapi::protect" })
     }
 
     /// Unseals a blob — always errors on non-Windows.
     ///
     /// # Errors
     ///
-    /// Always returns an error.
+    /// Always returns `AgentError::Unsupported`.
     pub fn unprotect(_sealed: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
-        Err(AgentError::Dpapi("DPAPI is Windows-only".into()))
+        Err(AgentError::Unsupported { os: OS, component: "dpapi::unprotect" })
     }
 }
 
@@ -111,12 +121,9 @@ pub mod etw {
         ///
         /// # Errors
         ///
-        /// Always returns an error.
+        /// Always returns `AgentError::Unsupported`.
         pub fn start(_name: &str) -> Result<Self> {
-            Err(AgentError::CollectorStart {
-                name: "etw",
-                reason: "ETW is Windows-only".into(),
-            })
+            Err(AgentError::Unsupported { os: OS, component: "etw::EtwSession::start" })
         }
     }
 }
@@ -147,24 +154,18 @@ pub mod capture {
         ///
         /// # Errors
         ///
-        /// Always returns an error.
+        /// Always returns `AgentError::Unsupported`.
         pub fn open(_monitor: u32) -> Result<Self> {
-            Err(AgentError::CollectorStart {
-                name: "screen",
-                reason: "DXGI is Windows-only".into(),
-            })
+            Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::open" })
         }
 
         /// Always errors.
         ///
         /// # Errors
         ///
-        /// Always returns an error.
+        /// Always returns `AgentError::Unsupported`.
         pub fn capture_frame(&self) -> Result<CapturedFrame> {
-            Err(AgentError::CollectorStart {
-                name: "screen",
-                reason: "DXGI is Windows-only".into(),
-            })
+            Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::capture_frame" })
         }
     }
 }
@@ -180,9 +181,9 @@ pub mod service {
     ///
     /// # Errors
     ///
-    /// Always returns an error.
+    /// Always returns `AgentError::Unsupported`.
     pub fn run_as_service(_shutdown_tx: oneshot::Sender<()>) -> Result<()> {
-        Err(AgentError::Internal("Windows service is not available on this platform".into()))
+        Err(AgentError::Unsupported { os: OS, component: "service::run_as_service" })
     }
 
     /// Returns false on non-Windows.
