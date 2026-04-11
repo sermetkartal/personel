@@ -13,15 +13,18 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"github.com/personel/api/internal/accessreview"
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/backup"
+	"github.com/personel/api/internal/bcp"
 	"github.com/personel/api/internal/config"
 	"github.com/personel/api/internal/destruction"
 	"github.com/personel/api/internal/dlpstate"
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/evidence"
+	"github.com/personel/api/internal/incident"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	"github.com/personel/api/internal/mobile"
@@ -53,10 +56,13 @@ type Services struct {
 	Silence      *silence.Service
 	DLPState     *dlpstate.Service
 	Mobile       *mobile.Service
-	Evidence     *evidence.Store
-	EvidencePack *evidence.PackBuilder
-	Backup       *backup.Service
-	Log          *slog.Logger
+	Evidence      *evidence.Store
+	EvidencePack  *evidence.PackBuilder
+	Backup        *backup.Service
+	AccessReview  *accessreview.Service
+	Incident      *incident.Service
+	BCP           *bcp.Service
+	Log           *slog.Logger
 }
 
 // Metrics holds the Prometheus collectors registered at server construction.
@@ -289,6 +295,27 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			if svc.Backup != nil {
 				r.With(auth.RequireRole(auth.RoleAdmin)).
 					Post("/backup-runs", backup.RecordRunHandler(svc.Backup))
+			}
+
+			// POST /v1/system/access-reviews — DPO/Admin submits the
+			// outcome of a quarterly/semi-annual access review. CC6.3.
+			if svc.AccessReview != nil {
+				r.With(auth.RequireRole(auth.RoleDPO, auth.RoleAdmin)).
+					Post("/access-reviews", accessreview.RecordReviewHandler(svc.AccessReview))
+			}
+
+			// POST /v1/system/incident-closures — DPO/Admin submits a
+			// closed incident with post-incident review. CC7.3.
+			if svc.Incident != nil {
+				r.With(auth.RequireRole(auth.RoleDPO, auth.RoleAdmin)).
+					Post("/incident-closures", incident.RecordClosureHandler(svc.Incident))
+			}
+
+			// POST /v1/system/bcp-drills — Admin submits the result of
+			// a BCP / DR live drill or tabletop exercise. CC9.1.
+			if svc.BCP != nil {
+				r.With(auth.RequireRole(auth.RoleAdmin)).
+					Post("/bcp-drills", bcp.RecordDrillHandler(svc.BCP))
 			}
 
 			// GET /v1/system/evidence-coverage?period=YYYY-MM — SOC 2

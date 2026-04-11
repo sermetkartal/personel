@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.4 — Faz 3.0.3 (console UI + runbook + backup collector) — 2026-04-11
+> Versiyon: 1.5 — Faz 3.0.4 (tüm 9 beklenen kontrol wired + key rotation + e2e) — 2026-04-11
 
 ---
 
@@ -413,6 +413,45 @@ follows the same shape:
   4. Swallow errors, log loudly, cite the relevant audit log ID(s)
   5. Wire in `cmd/api/main.go` under the `if wormSink != nil` block
 
+**Phase 3.0.4 — Coverage closure: CC6.3 + CC7.3 + CC9.1 + rotation test + e2e**:
+  - **Integration test** `apps/api/test/integration/evidence_test.go`: real
+    Postgres testcontainer + in-memory WORM fake; exercises dual-write,
+    migration 0025 RLS, CountByControl, ListByPeriod with control filter,
+    and PackBuilder end-to-end (verifies ZIP shape, per-item + manifest
+    signatures, key version file, WORM key scheme). Three scenarios:
+    happy path (3 items, 3 controls), nil-WORM rejection, RLS tenant
+    isolation (A's items invisible to B under distinct session vars).
+  - **CC6.3 collector** `apps/api/internal/accessreview/`: `RecordReview`
+    validates scope, single-vs-dual-control reviewer rules, tallies
+    retained/revoked/reduced decisions. Seven scopes including
+    `vault_root` + `break_glass` mandate `second_reviewer_id`. Emits
+    `KindAccessReview` on CC6.3. `POST /v1/system/access-reviews`
+    DPO/Admin-gated.
+  - **CC7.3 collector** `apps/api/internal/incident/`: `RecordClosure`
+    captures 5-tier severity, detection → containment → closure
+    lifecycle, KVKK 72h + GDPR Art. 33 notification compliance
+    booleans (late notification still recorded), root cause, and
+    remediation action list. Emits `KindIncidentReport` on CC7.3.
+    `POST /v1/system/incident-closures` DPO/Admin-gated.
+  - **CC9.1 collector** `apps/api/internal/bcp/`: `RecordDrill` captures
+    live-vs-tabletop type, scenario tag, per-tier RTO target vs actual
+    with `met_rto` flag, drill duration, facilitator, lessons learned.
+    Emits `KindBackupRestoreTest` on CC9.1.
+    `POST /v1/system/bcp-drills` admin-gated.
+  - **Vault key rotation verification** `apps/api/internal/evidence/verify.go`
+    + 5 unit tests: `evidence.Verifier` interface + `VerifyItem` function
+    that re-canonicalises + calls Verify. Tests use a `keyedSigner`
+    mimicking Vault transit key history: sign with v1, rotate to v2 + v3,
+    verify both old v1-signed item AND new v3-signed item, verify
+    tampered payload fails, verify missing key version fails loudly.
+    This is the 5-year-retention invariant: signatures must survive
+    rotation.
+  - New audit actions: `access_review.completed`, `incident.closed`,
+    `bcp_drill.completed`.
+  - `evidence.expectedControls()` comments updated to reflect all 9
+    controls now have wired collectors — no ❌ gaps remain in the
+    expected set.
+
 **Phase 3.0.3 — Console UI + runbook + backup collector**:
   - `/tr/evidence` console sayfası: coverage matrix tablosu + gap uyarı
     kartı + DPO rol gated "Paketi İndir (ZIP)" butonu + dönem seçici
@@ -470,14 +509,19 @@ follows the same shape:
 | Control | Status | Collector |
 |---|---|---|
 | CC6.1 | ✅ wired | `liveview.Service.terminateSession` |
-| CC6.3 | ❌ gap | access review (Phase 3.0.3+) |
+| CC6.3 | ✅ wired | `accessreview.Service.RecordReview` (Phase 3.0.4) |
 | CC7.1 | ✅ indirect | policy push (shared with CC8.1) |
-| CC7.3 | ❌ gap | UBA/silence incident (Phase 3.0.3+) |
+| CC7.3 | ✅ wired | `incident.Service.RecordClosure` (Phase 3.0.4) |
 | CC8.1 | ✅ wired | `policy.Service.Push` |
-| CC9.1 | ❌ gap | BCP drill (Phase 3.0.3+) |
+| CC9.1 | ✅ wired | `bcp.Service.RecordDrill` (Phase 3.0.4) |
 | A1.2 | ✅ wired | `backup.Service.RecordRun` (Phase 3.0.3) |
 | P5.1 | ✅ secondary | DSR respond (tag) |
 | P7.1 | ✅ wired | `dsr.Service.Respond` |
+
+**All 9 expected controls now have wired collectors.** Phase 3.0 data plane
+is complete; the observation window can begin producing full-coverage
+evidence for every control in the SOC 2 Type II Trust Services Criteria
+that Personel commits to.
 
 ### Faz 2 remaining work (future commits)
 

@@ -59,6 +59,23 @@ const (
 	ActionBackupRun Action = "backup.run"
 )
 
+// --- Access review / Incident / BCP (Phase 3.0 — CC6.3 / CC7.3 / CC9.1) ---
+const (
+	// ActionAccessReviewCompleted is emitted when a DPO or manager
+	// submits the outcome of a quarterly or semi-annual access review.
+	ActionAccessReviewCompleted Action = "access_review.completed"
+
+	// ActionIncidentClosed is emitted when a security incident is
+	// closed with a post-incident review. Input to the incident.Service
+	// evidence collector for CC7.3.
+	ActionIncidentClosed Action = "incident.closed"
+
+	// ActionBCPDrillCompleted is emitted after a BCP / DR drill
+	// (tabletop or live) is complete. Input to the bcp.Service
+	// evidence collector for CC9.1.
+	ActionBCPDrillCompleted Action = "bcp_drill.completed"
+)
+
 // --- Endpoint fleet ---
 const (
 	ActionEndpointEnrolled Action = "endpoint.enrolled"
@@ -206,6 +223,9 @@ var AllActions = []Action{
 	ActionPolicyDeleted,
 	ActionPolicyPushed,
 	ActionBackupRun,
+	ActionAccessReviewCompleted,
+	ActionIncidentClosed,
+	ActionBCPDrillCompleted,
 	ActionEndpointEnrolled,
 	ActionEndpointRevoked,
 	ActionEndpointDeleted,

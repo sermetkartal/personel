@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/dsr"
 )
 
@@ -189,7 +188,7 @@ func TestDSR_List(t *testing.T) {
 // TestDSR_SLATick verifies the SLA tick transitions states correctly.
 func TestDSR_SLATick(t *testing.T) {
 	pool := testDB(t)
-	log := testLogger(t)
+	_ = testLogger(t)
 	ctx := context.Background()
 
 	tenantID := seedTenant(t, pool, "dsr-sla")

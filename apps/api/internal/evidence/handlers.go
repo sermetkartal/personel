@@ -203,11 +203,11 @@ func splitCSV(s string) []string {
 func expectedControls() []ControlID {
 	return []ControlID{
 		CtrlCC6_1, // privileged access (liveview collector)
-		CtrlCC6_3, // access removal (access review — not yet)
+		CtrlCC6_3, // access removal (accessreview.Service.RecordReview)
 		CtrlCC7_1, // configuration management (policy collector, shared with CC8.1)
-		CtrlCC7_3, // incident detection (UBA/silence — not yet)
+		CtrlCC7_3, // incident detection (incident.Service.RecordClosure)
 		CtrlCC8_1, // change management (policy collector)
-		CtrlCC9_1, // business continuity (BCP drill — not yet)
+		CtrlCC9_1, // business continuity (bcp.Service.RecordDrill)
 		CtrlA1_2,  // backup + recovery (backup.Service.RecordRun)
 		CtrlP5_1,  // choice + consent (DSR collector secondary)
 		CtrlP7_1,  // use + retention (DSR collector primary)

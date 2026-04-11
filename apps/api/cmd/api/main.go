@@ -26,9 +26,11 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/personel/api/internal/accessreview"
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/backup"
+	"github.com/personel/api/internal/bcp"
 	clickhouseclient "github.com/personel/api/internal/clickhouse"
 	"github.com/personel/api/internal/config"
 	"github.com/personel/api/internal/destruction"
@@ -37,6 +39,7 @@ import (
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/evidence"
 	"github.com/personel/api/internal/httpserver"
+	"github.com/personel/api/internal/incident"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	minioclient "github.com/personel/api/internal/minio"
@@ -264,10 +267,13 @@ func main() {
 	}
 	_ = evidenceStore // referenced via the recorder; retained for future direct queries
 
-	// backup.Service is constructed unconditionally; if evidenceRecorder
-	// is nil the service still writes the audit entry for the backup run
-	// but skips the A1.2 evidence emission. Scaffold mode stays useful.
+	// Phase 3.0.4 collector services — constructed unconditionally.
+	// When evidenceRecorder is nil they still write audit entries; the
+	// SOC 2 evidence emission is the only thing skipped in scaffold mode.
 	backupSvc := backup.NewService(recorder, evidenceRecorder, log)
+	accessReviewSvc := accessreview.NewService(recorder, evidenceRecorder, log)
+	incidentSvc := incident.NewService(recorder, evidenceRecorder, log)
+	bcpSvc := bcp.NewService(recorder, evidenceRecorder, log)
 
 	// --- 10. Mobile BFF service (Phase 2.9) ---
 	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
@@ -300,6 +306,9 @@ func main() {
 		Evidence:     evidenceStore,
 		EvidencePack: evidencePackBuilder,
 		Backup:       backupSvc,
+		AccessReview: accessReviewSvc,
+		Incident:     incidentSvc,
+		BCP:          bcpSvc,
 		Log:          log,
 	}, met)
 
