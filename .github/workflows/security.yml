@@ -1,0 +1,325 @@
+name: Security
+
+on:
+  push:
+    branches: ["main", "master", "develop"]
+  pull_request:
+    branches: ["main", "master", "develop"]
+  # Weekly full scan regardless of pushes.
+  schedule:
+    - cron: "0 3 * * 1"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  # ---------------------------------------------------------------------------
+  # govulncheck — Go module vulnerability scanning
+  # ---------------------------------------------------------------------------
+  govulncheck-gateway:
+    name: govulncheck (gateway)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: apps/gateway/go.sum
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: govulncheck
+        working-directory: apps/gateway
+        run: govulncheck ./...
+
+  govulncheck-api:
+    name: govulncheck (api)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: apps/api/go.sum
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: govulncheck
+        working-directory: apps/api
+        run: govulncheck ./...
+
+  govulncheck-qa:
+    name: govulncheck (qa)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: true
+          cache-dependency-path: apps/qa/go.sum
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: govulncheck
+        working-directory: apps/qa
+        run: govulncheck ./...
+
+  # ---------------------------------------------------------------------------
+  # cargo-audit — Rust workspace vulnerability scanning
+  # ---------------------------------------------------------------------------
+  cargo-audit:
+    name: cargo-audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: "1.88"
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: ${{ runner.os }}-cargo-audit-${{ hashFiles('apps/agent/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-audit-
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: cargo audit
+        working-directory: apps/agent
+        run: cargo audit
+
+  # ---------------------------------------------------------------------------
+  # pnpm-audit — Node.js vulnerability scanning
+  # Fail on high/critical; medium findings are allowed per project policy.
+  # ---------------------------------------------------------------------------
+  pnpm-audit-console:
+    name: pnpm audit (console)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: apps/console/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: apps/console
+        run: pnpm install --frozen-lockfile
+      - name: pnpm audit (fail on high/critical only)
+        working-directory: apps/console
+        run: pnpm audit --audit-level high
+
+  pnpm-audit-portal:
+    name: pnpm audit (portal)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: apps/portal/pnpm-lock.yaml
+      - name: Install dependencies
+        working-directory: apps/portal
+        run: pnpm install --frozen-lockfile
+      - name: pnpm audit (fail on high/critical only)
+        working-directory: apps/portal
+        run: pnpm audit --audit-level high
+
+  # ---------------------------------------------------------------------------
+  # CodeQL — Static analysis for Go and TypeScript
+  # Uploads SARIF results to GitHub Security tab.
+  # ---------------------------------------------------------------------------
+  codeql-go:
+    name: CodeQL (Go)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache: false
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          queries: security-extended
+      - name: Build Go modules for CodeQL analysis
+        run: |
+          (cd apps/gateway && go build ./...)
+          (cd apps/api && go build ./...)
+          (cd apps/qa && go build ./...)
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
+
+  codeql-typescript:
+    name: CodeQL (TypeScript)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: |
+            apps/console/pnpm-lock.yaml
+            apps/portal/pnpm-lock.yaml
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: typescript
+          queries: security-extended
+      - name: Install console dependencies
+        working-directory: apps/console
+        run: pnpm install --frozen-lockfile
+      - name: Install portal dependencies
+        working-directory: apps/portal
+        run: pnpm install --frozen-lockfile
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:typescript"
+
+  # ---------------------------------------------------------------------------
+  # Trivy — Dockerfile scanning for known CVEs.
+  # One job per Dockerfile to keep results granular in the Security tab.
+  # exit-code 0 means findings are reported but do not block the PR.
+  # ---------------------------------------------------------------------------
+  trivy-api:
+    name: Trivy (api Dockerfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: infra/compose/api/Dockerfile
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-api"
+
+  trivy-gateway:
+    name: Trivy (gateway Dockerfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: infra/compose/gateway/Dockerfile
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-gateway"
+
+  trivy-dlp:
+    name: Trivy (dlp Dockerfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: infra/compose/dlp/Dockerfile
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-dlp"
+
+  trivy-console:
+    name: Trivy (console Dockerfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: infra/compose/console/Dockerfile
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-console"
+
+  trivy-portal:
+    name: Trivy (portal Dockerfile)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.24.0
+        with:
+          scan-type: config
+          scan-ref: infra/compose/portal/Dockerfile
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
+          category: "trivy-portal"

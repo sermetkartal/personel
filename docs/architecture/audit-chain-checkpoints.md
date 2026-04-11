@@ -82,9 +82,64 @@ Checkpoint signatures use a dedicated key:
 - One additional Vault key to manage (the control-plane signing key). Operational overhead is small.
 - If the checkpoint job fails silently, chain integrity can degrade undetected; we mitigate with monitoring alarms on job runtime, job freshness (`MAX(created_at)` per tenant), and random-sample monitor.
 
+## WORM Sink — MinIO Object Lock (Phase 1 Polish)
+
+> Added in Phase 1 Polish sprint. Resolves the open concern from `docs/security/security-architecture-decisions.md` SD-8 and `CLAUDE.md §10`.
+
+The "Profile C — Customer object store with object-lock" from the original external sink design is now the **default and mandatory** Phase 1 sink, implemented using the on-stack MinIO instance rather than relying on the customer to provide a separate bucket.
+
+### Why MinIO Object Lock over the other Profile options
+
+The `docs/adr/0014-worm-audit-sink.md` ADR documents the full rationale. In summary:
+
+- Profile A (WORM volume) and chattr+a are software-enforced; root can bypass them.
+- Profile B (Customer SIEM) requires the customer to operate and secure a SIEM, creating a dependency outside Personel's control.
+- MinIO Object Lock Compliance Mode is a protocol-level guarantee. Even the MinIO root account cannot delete or modify a Compliance-locked object before its retention period expires.
+
+### Architecture Addition
+
+```
+audit.audit_log (Postgres)
+        │
+        │ nightly at 03:30 (personel-audit-verifier.timer)
+        ▼
+audit.audit_checkpoint (Postgres)
+        │
+        │ same job writes WORM checkpoint
+        ▼
+audit-worm bucket (MinIO — Object Lock COMPLIANCE, 5-year retention)
+        │
+        │ nightly at 04:00 (personel-worm-verifier.timer)
+        │ reads back WORM object and compares LastHash
+        ▼
+Divergence? → WORMDivergenceError → P0 alert → worm-audit-recovery.md
+```
+
+### Key Properties of the WORM Sink
+
+- Bucket: `audit-worm`, created at install time by `infra/compose/minio/worm-bucket-init.sh`
+- Object Lock mode: `COMPLIANCE` (no bypass even for root)
+- Default retention: 1826 days (5 years + 1 day buffer)
+- Object key scheme: `checkpoints/{tenant_id}/{YYYY-MM-DD}.json`
+- Service account: `audit-sink` (PutObject + GetObject only; no DeleteObject)
+- Implementation: `apps/api/internal/audit/worm.go` (`WORMSink` type)
+- Cross-validation: `apps/api/internal/audit/verifier.go` (`CrossValidateWORM`)
+- Systemd: `infra/systemd/personel-worm-verifier.service` + `.timer`
+- Recovery runbook: `docs/security/runbooks/worm-audit-recovery.md`
+
+### Consequences for Tamper-Evidence Claim
+
+With the WORM sink in place, the tamper-evidence guarantee is strengthened:
+
+- A DBA who disables Postgres triggers and rewrites history will produce a Postgres chain whose head hash differs from the WORM checkpoint written at 03:30. The 04:00 cross-validation will detect this within 24 hours.
+- The WORM object's `RetainUntilDate` in S3 object metadata provides independently verifiable proof of when the checkpoint was written. No party with access to the Personel system can alter this.
+- Legal defensibility: the WORM object + its S3 metadata + the divergence report constitutes forensic evidence admissible in KVKK proceedings. See `docs/security/runbooks/admin-audit-immutability.md §8` for the evidence pack template.
+
 ## Related
 
 - `docs/security/runbooks/admin-audit-immutability.md`
+- `docs/security/runbooks/worm-audit-recovery.md` (new — Phase 1 Polish)
+- `docs/adr/0014-worm-audit-sink.md` (new — Phase 1 Polish)
 - `docs/architecture/live-view-protocol.md` §Audit Hash Chain
 - `docs/architecture/bounded-contexts.md` §Cross-Cutting Concerns
 - `docs/architecture/data-retention-matrix.md` (5-year retention for audit entries)

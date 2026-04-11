@@ -69,9 +69,11 @@ const config: Config = {
         },
       },
       fontFamily: {
-        // Inter self-hosted — no CDN, no tracking
+        // Inter via next/font (self-hosted at build time; see
+        // src/app/layout.tsx). The CSS variable is set there; Tailwind
+        // picks it up here as the `font-sans` class.
         sans: [
-          "Inter",
+          "var(--font-inter)",
           "ui-sans-serif",
           "system-ui",
           "-apple-system",

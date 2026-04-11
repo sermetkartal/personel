@@ -1,0 +1,71 @@
+# =============================================================================
+# Personel Platform — WORM Audit Cross-Validation Service
+#
+# Reads yesterday's checkpoint from MinIO Object Lock and compares its
+# LastHash to the live Postgres chain tail for the same day.
+#
+# A mismatch (WORMDivergenceError) means Postgres was modified after the WORM
+# write — a P0 incident. See docs/security/runbooks/worm-audit-recovery.md.
+#
+# Runs nightly at 04:00 local via personel-worm-verifier.timer, AFTER
+# personel-audit-verifier.timer (03:30) has written the WORM checkpoint.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform — WORM Audit Chain Cross-Validation
+Documentation=file:///opt/personel/docs/security/runbooks/worm-audit-recovery.md
+After=personel-audit-verifier.service personel-compose.service
+Requires=docker.service
+PartOf=personel.target
+
+# If the normal verifier failed, skip the WORM cross-check for today.
+# The cross-check is only meaningful once a WORM checkpoint has been written.
+ConditionPathExists=/var/lib/node_exporter/textfile_collector/personel_audit.prom
+
+[Service]
+Type=oneshot
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra
+EnvironmentFile=/opt/personel/infra/compose/.env
+
+# Run the WORM cross-validator via the API container's CLI tool.
+# The tool exits 0 on success, 2 on WORMDivergenceError (P0), 1 on other errors.
+ExecStart=/usr/bin/docker compose \
+  -f /opt/personel/infra/compose/docker-compose.yaml \
+  exec -T api \
+  /personel-api audit worm-verify \
+    --tenant-id "${PERSONEL_TENANT_ID}" \
+    --day "$(date --date='yesterday' +%%Y-%%m-%%d)"
+
+TimeoutStartSec=600
+
+# On success: record result and timestamp for Prometheus.
+ExecStartPost=/bin/sh -c \
+  'echo "personel_worm_verify_last_ts $(date +%%s)" > /var/lib/node_exporter/textfile_collector/personel_worm.prom && \
+   echo "personel_worm_verify_last_success 1" >> /var/lib/node_exporter/textfile_collector/personel_worm.prom'
+
+# On failure: record 0 and emit an alert payload.
+# The Prometheus alert rule personel_worm_verify_last_success == 0 will fire
+# and page the security on-call channel.
+ExecStopPost=/bin/sh -c \
+  'if [ "$$SERVICE_RESULT" != "success" ]; then \
+     echo "personel_worm_verify_last_success 0" > /var/lib/node_exporter/textfile_collector/personel_worm.prom; \
+     logger -t personel-worm-verifier -p auth.crit \
+       "WORM DIVERGENCE DETECTED for tenant ${PERSONEL_TENANT_ID} day $(date --date=yesterday +%%Y-%%m-%%d) — P0 incident — see worm-audit-recovery.md"; \
+   fi'
+
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-worm-verifier
+
+# Security hardening — this service only needs to run docker commands.
+NoNewPrivileges=yes
+ProtectSystem=strict
+PrivateTmp=yes
+
+[Install]
+WantedBy=personel.target

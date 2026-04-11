@@ -65,6 +65,10 @@ type MinIOConfig struct {
 	BucketDSR         string `koanf:"bucket_dsr"`
 	BucketDestruction string `koanf:"bucket_destruction"`
 	PresignTTL        time.Duration `koanf:"presign_ttl"` // default 60s
+	// Audit WORM sink (ADR 0014) — separate service account with PutObject +
+	// GetObject only. No DeleteObject, no bypass-governance-retention.
+	AuditSinkAccessKey string `koanf:"audit_sink_access_key"`
+	AuditSinkSecretKey string `koanf:"audit_sink_secret_key"`
 }
 
 type NATSConfig struct {

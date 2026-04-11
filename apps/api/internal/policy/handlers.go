@@ -3,6 +3,7 @@ package policy
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -116,6 +117,12 @@ func PushHandler(svc *Service) http.HandlerFunc {
 		var body reqBody
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		if err := svc.Push(r.Context(), p, id, p.TenantID, body.EndpointID); err != nil {
+			if errors.Is(err, ErrInvalidInvariantDLPKeystroke) {
+				httpx.WriteValidationError(w, r, map[string]string{
+					"keystroke.content_enabled": httpx.TRString("err.policy_invariant_dlp"),
+				})
+				return
+			}
 			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			return
 		}

@@ -1,0 +1,14 @@
+{
+  "ignorePatterns": [
+    { "pattern": "^http://localhost" },
+    { "pattern": "^https://github\\.com/sermetkartal/personel/actions" },
+    { "pattern": "^https://vault\\.personel\\.internal" },
+    { "pattern": "^https://personel\\.example\\.com" },
+    { "pattern": "^https://ci\\.personel\\.internal" },
+    { "pattern": "^file://" }
+  ],
+  "retryOn429": true,
+  "retryCount": 2,
+  "fallbackRetryDelay": "5s",
+  "aliveStatusCodes": [200, 206]
+}

@@ -31,6 +31,7 @@ import (
 	clickhouseclient "github.com/personel/api/internal/clickhouse"
 	"github.com/personel/api/internal/config"
 	"github.com/personel/api/internal/destruction"
+	"github.com/personel/api/internal/dlpstate"
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/httpserver"
@@ -192,14 +193,33 @@ func main() {
 
 	transSvc := transparency.NewService(pool, lvSvc, log)
 
+	// DLP state service — uses a stub Vault bootstrap client since the real
+	// dlp-bootstrap AppRole is invoked by dlp-enable.sh with its own token.
+	// TODO(devops): provision the dlp-bootstrap AppRole and pass its raw Vault
+	// client here when enabling DLP in production.
+	dlpStateStore := dlpstate.NewStore(pool)
+	dlpBootstrapVault := dlpstate.NewVaultBootstrapClient(nil) // stub until provisioned
+	dlpStateSvc := dlpstate.NewService(dlpStateStore, dlpBootstrapVault, recorder, log)
+
 	silenceSvc := silence.NewService(ch, pool, recorder, log)
 
 	destGen := destruction.NewGenerator(pool, ch, mc, vc, recorder, log)
 	destSvc := destruction.NewService(destGen)
 
-	// --- Audit verifier (nightly cron) ---
+	// --- Audit verifier (nightly cron) + WORM sink (ADR 0014) ---
 	verifierSink := &noopExternalSink{}
-	auditVerifier := audit.NewVerifier(pool, vc, verifierSink, recorder, log)
+	wormSink, err := audit.NewWORMSink(audit.WORMSinkConfig{
+		Endpoint:        cfg.MinIO.Endpoint,
+		AccessKeyID:     cfg.MinIO.AuditSinkAccessKey,
+		SecretAccessKey: cfg.MinIO.AuditSinkSecretKey,
+		UseSSL:          cfg.MinIO.UseSSL,
+	}, log)
+	if err != nil {
+		log.Warn("WORM sink unavailable at startup; audit verifier will run without cross-validation",
+			slog.String("error", err.Error()))
+		wormSink = nil
+	}
+	auditVerifier := audit.NewVerifier(pool, vc, verifierSink, wormSink, recorder, log)
 	go runAuditVerifierJob(ctx, auditVerifier, tenantIDs, log)
 
 	// --- 10. Prometheus metrics ---
@@ -225,6 +245,7 @@ func main() {
 		Screenshots:  screenshotsSvc,
 		Transparency: transSvc,
 		Silence:      silenceSvc,
+		DLPState:     dlpStateSvc,
 		Log:          log,
 	}, met)
 

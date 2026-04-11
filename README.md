@@ -7,6 +7,7 @@
 
 KVKK-native · On-prem-first · Kriptografik Çalışan Gizliliği · Türkçe-first
 
+![CI](https://github.com/sermetkartal/personel/actions/workflows/ci.yml/badge.svg)
 ![Phase](https://img.shields.io/badge/phase-1%20%E2%80%94%20implementation-green)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 ![Language](https://img.shields.io/badge/rust-1.88-orange)

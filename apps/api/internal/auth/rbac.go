@@ -17,6 +17,10 @@ const (
 	RoleInvestigator Role = "investigator"
 	RoleAuditor     Role = "auditor"
 	RoleEmployee    Role = "employee"
+	// RoleDLPAdmin is a privileged service-account role used exclusively for
+	// the POST /v1/system/dlp-bootstrap-keys endpoint. It is issued as a
+	// Vault-backed short-lived token by dlp-enable.sh.
+	RoleDLPAdmin    Role = "dlp-admin"
 )
 
 // parseRole maps a raw string from Keycloak to a typed Role.
@@ -36,6 +40,8 @@ func parseRole(s string) (Role, bool) {
 		return RoleAuditor, true
 	case string(RoleEmployee):
 		return RoleEmployee, true
+	case string(RoleDLPAdmin):
+		return RoleDLPAdmin, true
 	default:
 		return "", false
 	}
@@ -58,8 +64,9 @@ const (
 	ResourceDestruction Resource = "destruction_report"
 	ResourceEmployee    Resource = "employee"
 	ResourceDLPMatch    Resource = "dlp_match"
-	ResourceMyData      Resource = "my_data" // employee self-service
+	ResourceMyData      Resource = "my_data"   // employee self-service
 	ResourceSilence     Resource = "silence"
+	ResourceDLPState    Resource = "dlp_state" // read: all roles; bootstrap: dlp-admin only
 )
 
 // Op constants for permission checks.
@@ -247,6 +254,26 @@ func can(role Role, op Op, resource Resource) bool {
 		}
 		// Employees can submit DSRs.
 		if resource == ResourceDSR && op == OpRequest {
+			return true
+		}
+		// Employees can read the DLP state (portal banner).
+		if resource == ResourceDLPState && op == OpRead {
+			return true
+		}
+
+	case RoleDLPAdmin:
+		// dlp-admin is a privileged service-account role; it can only write
+		// to the DLP bootstrap endpoint. It cannot access any other resource.
+		if resource == ResourceDLPState {
+			return true
+		}
+	}
+
+	// All roles that are not RoleEmployee and not RoleDLPAdmin may read DLP state.
+	// (Admin, Manager, HR, DPO, Investigator, Auditor)
+	if resource == ResourceDLPState && op == OpRead {
+		switch role {
+		case RoleAdmin, RoleManager, RoleHR, RoleDPO, RoleInvestigator, RoleAuditor:
 			return true
 		}
 	}

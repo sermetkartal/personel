@@ -155,6 +155,14 @@ const (
 // --- Transparency ---
 const (
 	ActionTransparencyHistoryVisibilityChanged Action = "transparency.history_visibility_changed"
+	ActionFirstLoginAcknowledged               Action = "transparency.first_login_acknowledged"
+	ActionTransparencyDSRDetailViewed          Action = "transparency.dsr_detail_viewed"
+)
+
+// --- DLP PE-DEK bootstrap (ADR 0013 A2) ---
+const (
+	ActionDLPPEDEKBootstrapped    Action = "dlp.pe_dek_bootstrapped"
+	ActionDLPPEDEKBootstrapBatch  Action = "dlp.pe_dek_bootstrap_batch"
 )
 
 // --- Silence / agent health ---
@@ -235,6 +243,10 @@ var AllActions = []Action{
 	ActionAuditChainVerified,
 	ActionAuditChainBroken,
 	ActionTransparencyHistoryVisibilityChanged,
+	ActionFirstLoginAcknowledged,
+	ActionTransparencyDSRDetailViewed,
+	ActionDLPPEDEKBootstrapped,
+	ActionDLPPEDEKBootstrapBatch,
 	ActionAgentSilenceAcknowledged,
 }
 

@@ -374,6 +374,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  # WORM audit bucket initialization (runs once, exits)
+  # Creates the audit-worm bucket with S3 Object Lock in Compliance Mode.
+  # See docs/adr/0014-worm-audit-sink.md and infra/compose/minio/worm-bucket-init.sh.
+  minio-worm-init:
+    image: minio/mc:RELEASE.2024-04-18T16-45-29Z
+    container_name: personel-minio-worm-init
+    restart: "no"
+    volumes:
+      - ./minio/worm-bucket-init.sh:/worm-bucket-init.sh:ro
+    entrypoint: ["/bin/sh", "/worm-bucket-init.sh"]
+    environment:
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      # audit-sink service account — write-only to audit-worm; no delete
+      AUDIT_SINK_ACCESS_KEY: ${MINIO_AUDIT_SINK_ACCESS_KEY}
+      AUDIT_SINK_SECRET_KEY: ${MINIO_AUDIT_SINK_SECRET_KEY}
+    networks:
+      - data
+    depends_on:
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      com.personel.service: minio-worm-init
+      com.personel.tier: security
+
   # ===========================================================================
   # OPENSEARCH — Full-Text Search and Audit Search
   # ===========================================================================

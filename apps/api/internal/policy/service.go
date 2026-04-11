@@ -117,11 +117,24 @@ func (s *Service) Delete(ctx context.Context, p *auth.Principal, id, tenantID st
 	return s.store.Delete(ctx, id, tenantID)
 }
 
-// Push signs and publishes a policy to all endpoints of the tenant.
+// Push validates bundle invariants, signs, and publishes a policy to one or
+// all endpoints of the tenant. Rejects with ErrInvalidInvariantDLPKeystroke
+// (HTTP 422) when the bundle violates the ADR 0013 A5 structural invariant.
 func (s *Service) Push(ctx context.Context, p *auth.Principal, id, tenantID, endpointID string) error {
 	pol, err := s.store.Get(ctx, id, tenantID)
 	if err != nil {
 		return err
+	}
+
+	// --- ADR 0013 A5: validate bundle invariants before Vault sign call ---
+	var inv BundleInvariants
+	if err := json.Unmarshal(pol.Rules, &inv); err != nil {
+		return fmt.Errorf("policy: push: unmarshal invariants: %w", err)
+	}
+	if fieldErrs, err := ValidateBundle(&inv); err != nil {
+		return err // typed error (ErrInvalidInvariantDLPKeystroke or similar)
+	} else if len(fieldErrs) > 0 {
+		return fmt.Errorf("policy: push: invariant violations: %v", fieldErrs)
 	}
 
 	_, err = s.recorder.Append(ctx, audit.Entry{

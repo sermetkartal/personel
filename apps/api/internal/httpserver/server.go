@@ -16,10 +16,11 @@ import (
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/config"
+	"github.com/personel/api/internal/destruction"
+	"github.com/personel/api/internal/dlpstate"
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/legalhold"
-	"github.com/personel/api/internal/destruction"
 	"github.com/personel/api/internal/liveview"
 	"github.com/personel/api/internal/policy"
 	"github.com/personel/api/internal/reports"
@@ -47,6 +48,7 @@ type Services struct {
 	Screenshots  *screenshots.Service
 	Transparency *transparency.Service
 	Silence      *silence.Service
+	DLPState     *dlpstate.Service
 	Log          *slog.Logger
 }
 
@@ -245,6 +247,23 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			r.Get("/live-view-history", transparency.MyLiveViewHistoryHandler(svc.Transparency))
 			r.Post("/dsr", transparency.SubmitDSRHandler(svc.DSR))
 			r.Get("/dsr", transparency.MyDSRHandler(svc.DSR))
+			// GET /v1/me/dsr/{id} — employee DSR detail (scoped to own DSRs)
+			r.Get("/dsr/{id}", transparency.MyDSRDetailHandler(svc.DSR))
+			// POST /v1/me/acknowledge-notification — KVKK m.10 first-login acknowledgement
+			r.Post("/acknowledge-notification", transparency.AcknowledgeNotificationHandler(svc.Transparency))
+		})
+
+		// --- System endpoints ---
+		r.Route("/system", func(r chi.Router) {
+			// GET /v1/system/dlp-state — readable by all roles (portal banner, console badge)
+			r.With(auth.RequireRole(
+				auth.RoleAdmin, auth.RoleManager, auth.RoleHR, auth.RoleDPO,
+				auth.RoleInvestigator, auth.RoleAuditor, auth.RoleEmployee, auth.RoleDLPAdmin,
+			)).Get("/dlp-state", dlpstate.GetDLPStateHandler(svc.DLPState))
+
+			// POST /v1/system/dlp-bootstrap-keys — dlp-admin only (invoked by dlp-enable.sh)
+			r.With(auth.RequireRole(auth.RoleDLPAdmin)).
+				Post("/dlp-bootstrap-keys", dlpstate.BootstrapPEDEKsHandler(svc.DLPState))
 		})
 	})
 

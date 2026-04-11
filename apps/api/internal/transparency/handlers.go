@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/httpx"
@@ -117,6 +119,81 @@ func MyDSRHandler(dsrSvc *dsr.Service) http.HandlerFunc {
 		}
 
 		httpx.WriteJSON(w, http.StatusOK, map[string]any{"items": own})
+	}
+}
+
+// AcknowledgeNotificationHandler — POST /v1/me/acknowledge-notification
+//
+// Writes an audited "Anladım" acknowledgement for the employee transparency
+// first-login modal. Legally required per KVKK m.10.
+// Idempotent: if the employee already acknowledged this aydinlatma_version,
+// returns 200 with the existing audit_id; otherwise 201.
+func AcknowledgeNotificationHandler(svc *Service) http.HandlerFunc {
+	type reqBody struct {
+		NotificationType  string `json:"notification_type"`
+		AydinlatmaVersion string `json:"aydinlatma_version"`
+		Locale            string `json:"locale"`
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := auth.PrincipalFromContext(r.Context())
+		var body reqBody
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			httpx.WriteError(w, r, http.StatusBadRequest, httpx.ProblemTypeValidation, "Bad Request", "err.validation")
+			return
+		}
+		if body.NotificationType == "" {
+			body.NotificationType = "first_login_disclosure"
+		}
+		if body.AydinlatmaVersion == "" {
+			body.AydinlatmaVersion = "1.0"
+		}
+		if body.Locale == "" {
+			body.Locale = "tr"
+		}
+
+		rec := audit.FromContext(r.Context())
+		result, err := svc.AcknowledgeNotification(r.Context(), rec, AcknowledgeInput{
+			UserID:            p.UserID,
+			TenantID:          p.TenantID,
+			NotificationType:  body.NotificationType,
+			AydinlatmaVersion: body.AydinlatmaVersion,
+			Locale:            body.Locale,
+		})
+		if err != nil {
+			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+			return
+		}
+
+		status := http.StatusCreated
+		if result.AlreadyDone {
+			status = http.StatusOK
+		}
+		httpx.WriteJSON(w, status, map[string]any{
+			"acknowledged_at": result.AcknowledgedAt,
+			"audit_id":        result.AuditID,
+		})
+	}
+}
+
+// MyDSRDetailHandler — GET /v1/me/dsr/{id}
+//
+// Returns a single DSR owned by the calling employee. Returns 404 (not 403)
+// when the DSR does not exist or belongs to a different user, to prevent
+// information leakage about other users' DSR IDs.
+func MyDSRDetailHandler(dsrSvc *dsr.Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := auth.PrincipalFromContext(r.Context())
+		id := chi.URLParam(r, "id")
+
+		// Delegates to GetScoped which enforces owner check server-side.
+		req, err := dsrSvc.GetScoped(r.Context(), p.TenantID, p.UserID, id)
+		if err != nil || req == nil {
+			// Always 404 — never 403, to prevent enumeration.
+			httpx.WriteError(w, r, http.StatusNotFound, httpx.ProblemTypeNotFound, "Not Found", "err.not_found")
+			return
+		}
+
+		httpx.WriteJSON(w, http.StatusOK, req)
 	}
 }
 

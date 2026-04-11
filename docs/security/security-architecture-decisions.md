@@ -84,7 +84,9 @@
 
 **Rationale**: aligns with the architect's explicit direction. A separate ledger DB would add an operational component with its own compromise model. Hash chain + external checkpoint provides tamper-evidence sufficient for KVKK defensibility, at the honest cost of being detection-only, not prevention. Blockchain is rejected for on-prem: nowhere to publish.
 
-**Candidate ADR**: No, implements existing architect decision.
+**Candidate ADR**: **SHIPPED as `docs/adr/0014-worm-audit-sink.md` (Phase 1 Polish)**.
+
+**RESOLVED (Phase 1 Polish — 2026-04-10)**: The external checkpoint sink has been implemented as MinIO S3 Object Lock in Compliance Mode (`audit-worm` bucket). This is more than the original SD-8 planned for: it uses the on-stack MinIO instance (no new dependency) and provides protocol-level immutability that file-based options cannot. See ADR 0014 for full rationale. Implementation: `apps/api/internal/audit/worm.go`, `infra/compose/minio/worm-bucket-init.sh`, `infra/systemd/personel-worm-verifier.service`.
 
 ## SD-9 — Audit checkpoint signing uses the control-plane signing key
 
@@ -144,7 +146,7 @@ These are questions I am NOT unilaterally overriding. They are flagged for the a
 2. **DLP on a dedicated host**: **RESOLVED (Phase 0 revision round).** A tiered model was adopted: Profile 1 (Hardened Container) for Phase 1 pilot with an enumerated non-negotiable control list; Profile 2 (Dedicated Host) as Phase 2 default and mandatory for regulated customers. See `docs/architecture/dlp-deployment-profiles.md` and `kvkk-framework.md` §10.4.
 3. **HSM-backed Vault unseal (Phase 2)**: Still open — flagged to product for Phase 2 budget.
 4. **Reproducible builds**: Still open — deferred to Phase 2 release engineering work.
-5. **Audit checkpoint sink**: **PARTIALLY RESOLVED.** `docs/architecture/audit-chain-checkpoints.md` now specifies three customer-selectable sink profiles (WORM volume, Customer SIEM, Object-locked S3) with explicit trade-offs. High-assurance customers can combine profiles.
+5. **Audit checkpoint sink**: **FULLY RESOLVED (Phase 1 Polish — 2026-04-10).** MinIO Object Lock Compliance Mode is implemented as the mandatory WORM sink. `docs/adr/0014-worm-audit-sink.md` documents the decision. The `audit-worm` bucket is created by `infra/compose/minio/worm-bucket-init.sh` (run via the `minio-worm-init` Docker Compose service). The nightly cross-validation runs via `infra/systemd/personel-worm-verifier.service` + `.timer` at 04:00 local. `apps/api/internal/audit/worm.go` implements the `WORMSink`. `apps/api/internal/audit/verifier.go` has been updated to write WORM checkpoints and to perform `CrossValidateWORM` cross-checks. Recovery runbook: `docs/security/runbooks/worm-audit-recovery.md`. The DBA trigger-bypass risk that was blocking legal review is now mitigated: a post-checkpoint Postgres modification is detectable within 24 hours, with WORM-locked forensic evidence.
 6. **NATS JetStream encryption at rest**: Still open — devops-engineer to confirm disk-level encryption is in the install baseline.
 7. **Watchdog termination by SeDebugPrivilege**: **RESOLVED (Phase 0 revision round).** `docs/security/threat-model.md` now contains Flow 7 "Employee-Initiated Agent Disable" with heartbeat monitoring, gap classification, and DPO alerting. `anti-tamper.md` cross-references it.
 8. **Live view session recording retention**: **RESOLVED (Phase 0 revision round).** ADR 0012 "Live View Recording (Phase 2 Design Envelope)" and `live-view-protocol.md` §Phase 2 Recording specify an independent LVMK hierarchy, 30-day default retention, dual-control playback, and DPO-only export. Phase 1 remains no-recording.

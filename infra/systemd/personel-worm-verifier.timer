@@ -1,0 +1,23 @@
+# =============================================================================
+# Personel Platform — WORM Audit Cross-Validation Timer
+#
+# Fires personel-worm-verifier.service nightly at 04:00 local time, after
+# personel-audit-verifier.timer (03:30) has written the daily checkpoint and
+# WORM object. The 30-minute gap gives the normal verifier time to complete
+# before the cross-check reads back the WORM object.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Daily WORM Audit Cross-Validation Timer
+Documentation=file:///opt/personel/docs/security/runbooks/worm-audit-recovery.md
+PartOf=personel.target
+
+[Timer]
+# 04:00 local time — 30 minutes after personel-audit-verifier.timer (03:30).
+OnCalendar=*-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=60
+Unit=personel-worm-verifier.service
+
+[Install]
+WantedBy=personel.target

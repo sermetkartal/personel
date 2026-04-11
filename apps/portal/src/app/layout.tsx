@@ -1,5 +1,15 @@
 import type { Metadata } from "next";
+import { Inter } from "next/font/google";
 import "./globals.css";
+
+// Inter via next/font — downloaded and self-hosted at build time, no runtime
+// CDN calls, no tracking. Exposes --font-inter CSS variable consumed by
+// tailwind's fontFamily.sans config.
+const inter = Inter({
+  subsets: ["latin", "latin-ext"],
+  display: "swap",
+  variable: "--font-inter",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -20,12 +30,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }): JSX.Element {
   return (
-    <html suppressHydrationWarning>
+    <html suppressHydrationWarning className={inter.variable}>
       <head>
-        {/* No external scripts, no analytics, no third-party fonts */}
+        {/* No external scripts, no analytics, no third-party fonts at runtime */}
         <meta name="referrer" content="strict-origin-when-cross-origin" />
       </head>
-      <body>{children}</body>
+      <body className="font-sans">{children}</body>
     </html>
   );
 }

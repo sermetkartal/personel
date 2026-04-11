@@ -56,6 +56,10 @@ var trStrings = map[string]string{
 	"err.dsr_sla_overdue":            "Bu başvurunun yasal süresi (30 gün) dolmuştur.",
 	"err.legalhold_max_duration":     "Yasal saklama süresi en fazla 2 yıl olabilir.",
 	"err.liveview_cap":               "Canlı izleme süresi en fazla 60 dakika olabilir.",
+	"err.dlp_state_unavailable":      "DLP durum bilgisi şu an kullanılamıyor. Lütfen yöneticinize bildirin.",
+	"err.bootstrap_failed":           "PE-DEK oluşturma işlemi başarısız oldu. Vault bağlantısını kontrol edin.",
+	"err.policy_invariant_dlp":       "Politika geçersiz: keystroke içerik kaydı, DLP etkinleştirilmeden açılamaz.",
+	"err.acknowledge_failed":         "Bildirim onayı kaydedilemedi. Lütfen tekrar deneyin.",
 }
 
 // TRString returns the Turkish user-facing string for a code key.

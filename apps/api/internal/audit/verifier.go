@@ -1,8 +1,15 @@
 // Package audit — nightly chain verifier and daily checkpoint writer.
 //
 // Runs as a cron-style job (02:30 local via systemd timer) per the runbook.
-// On success writes to audit.audit_checkpoint.
+// On success writes to audit.audit_checkpoint and to the WORM sink.
 // On failure raises a P0 alert and halts further verifier runs.
+//
+// WORM cross-validation (CrossValidateWORM) is called by a separate
+// personel-worm-verifier.timer at 04:00 local — after the normal verifier and
+// checkpoint write have completed. It reads back the previous day's checkpoint
+// from MinIO Object Lock and compares its LastHash against the live Postgres
+// chain head. A WORMDivergenceError proves Postgres was modified after the
+// WORM write and constitutes a P0 incident. See docs/adr/0014-worm-audit-sink.md.
 package audit
 
 import (
@@ -16,6 +23,25 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// WORMDivergenceError is returned when CrossValidateWORM detects that the
+// Postgres chain head differs from the WORM-locked checkpoint. This means
+// Postgres was tampered with after the checkpoint was written to MinIO Object
+// Lock — a P0 incident requiring immediate forensic response per
+// docs/security/runbooks/worm-audit-recovery.md.
+type WORMDivergenceError struct {
+	TenantID         string
+	Day              string
+	WORMLastHash     string
+	PostgresLastHash string
+}
+
+func (e *WORMDivergenceError) Error() string {
+	return fmt.Sprintf(
+		"WORM DIVERGENCE tenant=%s day=%s: worm_hash=%s postgres_hash=%s — audit chain may have been tampered",
+		e.TenantID, e.Day, e.WORMLastHash, e.PostgresLastHash,
+	)
+}
 
 const batchSize = 50_000
 
@@ -32,16 +58,22 @@ type ExternalSink interface {
 
 // Verifier runs the nightly full-chain verification and checkpoint writing.
 type Verifier struct {
-	pool    *pgxpool.Pool
-	signer  CheckpointSigner
-	sink    ExternalSink
-	log     *slog.Logger
+	pool     *pgxpool.Pool
+	signer   CheckpointSigner
+	sink     ExternalSink
+	worm     *WORMSink // optional; nil skips WORM writes with a warning
+	log      *slog.Logger
 	recorder *Recorder
 }
 
-// NewVerifier creates a Verifier.
-func NewVerifier(pool *pgxpool.Pool, signer CheckpointSigner, sink ExternalSink, rec *Recorder, log *slog.Logger) *Verifier {
-	return &Verifier{pool: pool, signer: signer, sink: sink, recorder: rec, log: log}
+// NewVerifier creates a Verifier. worm may be nil; in that case WORM writes
+// are skipped and a warning is emitted. All production deployments must pass
+// a non-nil WORMSink — a nil sink is only acceptable in test environments.
+func NewVerifier(pool *pgxpool.Pool, signer CheckpointSigner, sink ExternalSink, worm *WORMSink, rec *Recorder, log *slog.Logger) *Verifier {
+	if worm == nil {
+		log.Warn("audit/verifier: WORMSink is nil — WORM checkpoint writes are DISABLED; this is not acceptable in production")
+	}
+	return &Verifier{pool: pool, signer: signer, sink: sink, worm: worm, recorder: rec, log: log}
 }
 
 // dbRow is a raw audit row fetched for verification.
@@ -186,6 +218,37 @@ func (v *Verifier) RunForTenant(ctx context.Context, tenantID string) error {
 		)
 	}
 
+	// Write to WORM sink (MinIO Object Lock). Non-fatal: Postgres checkpoint is
+	// the primary record. WORM failure fires a Prometheus alert via textfile
+	// collector; the on-call engineer must reconcile within 24h.
+	if v.worm != nil {
+		wormRec := CheckpointRecord{
+			SchemaVersion: 1,
+			TenantID:      tenantID,
+			Day:           today.Format("2006-01-02"),
+			LastID:        lastVerifiedID,
+			LastHash:      hex.EncodeToString(prevHash),
+			EntryCount:    count,
+			VerifiedAt:    time.Now().UTC().Format(time.RFC3339),
+			Verifier:      keyID,
+		}
+		if wormErr := v.worm.WriteCheckpoint(ctx, wormRec); wormErr != nil {
+			v.log.Error("audit verifier: WORM sink write failed — checkpoint not in Object Lock; reconcile within 24h",
+				slog.String("tenant_id", tenantID),
+				slog.String("day", wormRec.Day),
+				slog.Any("error", wormErr),
+			)
+		} else {
+			v.log.Info("audit verifier: WORM checkpoint written",
+				slog.String("tenant_id", tenantID),
+				slog.String("day", wormRec.Day),
+				slog.String("bucket", WORMBucket),
+			)
+		}
+	} else {
+		v.log.Warn("audit verifier: WORM sink not configured — skipping Object Lock write")
+	}
+
 	// Audit the verification itself.
 	_, _ = v.recorder.AppendSystem(ctx, tenantID, ActionAuditChainVerified, fmt.Sprintf("checkpoint:%s", today.Format("2006-01-02")), map[string]any{
 		"count":   count,
@@ -198,6 +261,78 @@ func (v *Verifier) RunForTenant(ctx context.Context, tenantID string) error {
 		slog.String("tenant_id", tenantID),
 		slog.Int64("count", count),
 		slog.Duration("elapsed", time.Since(start)),
+	)
+	return nil
+}
+
+// CrossValidateWORM reads the previous day's checkpoint from the WORM bucket
+// and compares its LastHash to the live Postgres chain tail for the same day.
+//
+// Called nightly by personel-worm-verifier.timer at 04:00 local — after
+// personel-audit-verifier.timer at 03:30 has completed its run and written the
+// WORM checkpoint.
+//
+// Returns a WORMDivergenceError if the hashes differ — this is evidence of
+// post-checkpoint tampering and is a P0 incident. Returns nil on success.
+// Returns nil (with a warning) if the WORM sink is unconfigured or if no
+// checkpoint exists for the requested day (which may legitimately happen if
+// yesterday had zero audit events).
+func (v *Verifier) CrossValidateWORM(ctx context.Context, tenantID, day string) error {
+	if v.worm == nil {
+		v.log.WarnContext(ctx, "audit/verifier: WORM sink not configured; skipping cross-validation")
+		return nil
+	}
+
+	wormRec, err := v.worm.ReadCheckpoint(ctx, tenantID, day)
+	if err != nil {
+		if _, notFound := err.(*ErrCheckpointNotFound); notFound {
+			v.log.WarnContext(ctx, "audit/verifier: no WORM checkpoint found for day; cannot cross-validate",
+				slog.String("tenant_id", tenantID),
+				slog.String("day", day),
+			)
+			return nil
+		}
+		return fmt.Errorf("audit/verifier: failed to read WORM checkpoint tenant=%s day=%s: %w", tenantID, day, err)
+	}
+
+	// Query the Postgres chain tail for the same day.
+	var pgHeadHash []byte
+	err = v.pool.QueryRow(ctx, `
+		SELECT hash
+		FROM audit.audit_log
+		WHERE tenant_id = $1::uuid
+		  AND ts >= $2::date
+		  AND ts <  ($2::date + interval '1 day')
+		ORDER BY id DESC
+		LIMIT 1
+	`, tenantID, day).Scan(&pgHeadHash)
+	if err != nil {
+		return fmt.Errorf("audit/verifier: failed to query Postgres chain tail tenant=%s day=%s: %w", tenantID, day, err)
+	}
+
+	pgHeadHashHex := hex.EncodeToString(pgHeadHash)
+
+	if pgHeadHashHex != wormRec.LastHash {
+		divErr := &WORMDivergenceError{
+			TenantID:         tenantID,
+			Day:              day,
+			WORMLastHash:     wormRec.LastHash,
+			PostgresLastHash: pgHeadHashHex,
+		}
+		v.log.Error("WORM DIVERGENCE DETECTED — P0 INCIDENT — see runbook worm-audit-recovery.md",
+			slog.String("tenant_id", tenantID),
+			slog.String("day", day),
+			slog.String("worm_hash", wormRec.LastHash),
+			slog.String("postgres_hash", pgHeadHashHex),
+		)
+		v.alertChainBroken(ctx, tenantID, 0, fmt.Sprintf("WORM divergence on day %s", day))
+		return divErr
+	}
+
+	v.log.Info("audit/verifier: WORM cross-validation passed",
+		slog.String("tenant_id", tenantID),
+		slog.String("day", day),
+		slog.String("hash", pgHeadHashHex),
 	)
 	return nil
 }

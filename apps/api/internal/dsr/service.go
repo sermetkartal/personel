@@ -159,6 +159,31 @@ func (s *Service) Get(ctx context.Context, tenantID, id string) (*Request, error
 	return s.store.Get(ctx, id, tenantID)
 }
 
+// GetScoped returns a DSR only if it belongs to the given employeeUserID.
+// Returns (nil, nil) when the DSR is not found or belongs to a different user.
+// The caller should treat a nil result as a 404 — never expose a 403 distinction
+// to prevent information leakage about other users' DSR IDs.
+func (s *Service) GetScoped(ctx context.Context, tenantID, employeeUserID, id string) (*Request, error) {
+	req, err := s.store.Get(ctx, id, tenantID)
+	if err != nil {
+		// Treat not-found as nil (caller surfaces 404).
+		return nil, nil //nolint:nilerr
+	}
+	if req == nil || req.EmployeeUserID != employeeUserID {
+		return nil, nil
+	}
+
+	_, _ = s.recorder.Append(ctx, audit.Entry{
+		Actor:    employeeUserID,
+		TenantID: tenantID,
+		Action:   audit.ActionTransparencyDSRDetailViewed,
+		Target:   fmt.Sprintf("dsr:%s", id),
+		Details:  map[string]any{"employee_user_id": employeeUserID},
+	})
+
+	return req, nil
+}
+
 // List returns DSRs, optionally filtered by state.
 func (s *Service) List(ctx context.Context, tenantID string, states []State) ([]*Request, error) {
 	return s.store.List(ctx, tenantID, states)
