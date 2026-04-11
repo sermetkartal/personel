@@ -13,18 +13,13 @@ Design contract (ADR 0017):
 
 from __future__ import annotations
 
-import json
 import re
 import time
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
 import structlog
 
 from personel_ml.schemas import BackendLiteral, ClassifyItem, ClassifyResult
-
-if TYPE_CHECKING:
-    pass
 
 logger = structlog.get_logger(__name__)
 

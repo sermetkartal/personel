@@ -42,6 +42,13 @@ networks:
   monitoring:
     driver: bridge
     internal: true
+  # Phase 2.3 — ML inference isolation (ADR 0017)
+  # No default route; iptables egress-block verified at install time by preflight.sh.
+  # Only the ml-classifier container is peered here. llama-server has no direct
+  # network peers outside this segment.
+  net_ml:
+    driver: bridge
+    internal: true
 
 volumes:
   postgres-data:
@@ -98,6 +105,16 @@ volumes:
       type: none
       o: bind
       device: ${GRAFANA_DATA_DIR:-/var/lib/personel/grafana/data}
+  # Phase 2.3 — GGUF model storage (ADR 0017)
+  # Persistent across container restarts. First start populated by
+  # docker-entrypoint.sh or pre-staged by install.sh (signed tar.zst bundle).
+  # ~2 GB for Llama 3.2 3B q4_k_m.
+  ml-models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${ML_MODELS_DIR:-/var/lib/personel/ml/models}
   tls-certs:
     driver: local
     driver_opts:
@@ -1083,3 +1100,91 @@ services:
     labels:
       com.personel.service: grafana
       com.personel.tier: observability
+
+  # ===========================================================================
+  # ML CLASSIFIER — Local LLM Category Classifier (Phase 2.3)
+  # ADR 0017: Llama 3.2 3B Instruct via llama.cpp, CPU-only, no cloud egress.
+  #
+  # NETWORK ISOLATION:
+  #   - net_ml  : internal only; no default route; egress blocked by preflight.sh
+  #   - data    : allows enricher to reach the classifier on port 8080
+  # The service is NOT connected to vault-net, dlp-isolated, public, or app.
+  #
+  # ACTIVATION:
+  #   docker compose --profile ml up -d ml-classifier
+  # Off by default (profile: ml). Operator enables after customer opt-in ceremony
+  # analogous to the DLP opt-in pattern (ADR 0013 / ADR 0017).
+  #
+  # FIRST-RUN MODEL DOWNLOAD:
+  #   docker-entrypoint.sh downloads the GGUF model (~2 GB) on first start if
+  #   the ml-models volume is empty. For air-gapped installs, pre-stage the
+  #   model via install.sh before starting the container.
+  # ===========================================================================
+  ml-classifier:
+    build:
+      context: ../../apps/ml-classifier
+      dockerfile: Dockerfile
+      args:
+        PERSONEL_VERSION: ${PERSONEL_VERSION:-0.1.0}
+    image: personel/ml-classifier:${PERSONEL_VERSION:-0.1.0}
+    container_name: personel-ml-classifier
+    restart: unless-stopped
+    profiles:
+      - ml
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,mode=0700,size=64m,noexec,nosuid,nodev
+    volumes:
+      # Model volume — persistent GGUF storage; populated at first start
+      - ml-models:/models:rw
+    environment:
+      PERSONEL_ML_MODEL_PATH: ${PERSONEL_ML_MODEL_PATH:-/models/llama-3.2-3b.Q4_K_M.gguf}
+      PERSONEL_ML_MODEL_VERSION: ${PERSONEL_ML_MODEL_VERSION:-llama-3.2-3b-q4_k_m}
+      PERSONEL_ML_N_THREADS: ${PERSONEL_ML_N_THREADS:-0}
+      PERSONEL_ML_N_CTX: ${PERSONEL_ML_N_CTX:-2048}
+      PERSONEL_ML_N_GPU_LAYERS: ${PERSONEL_ML_N_GPU_LAYERS:-0}
+      PERSONEL_ML_CONFIDENCE_THRESHOLD: ${PERSONEL_ML_CONFIDENCE_THRESHOLD:-0.70}
+      PERSONEL_ML_BATCH_MAX_ITEMS: ${PERSONEL_ML_BATCH_MAX_ITEMS:-32}
+      PERSONEL_ML_LOG_LEVEL: ${ML_LOG_LEVEL:-info}
+      PERSONEL_ML_BIND_HOST: "0.0.0.0"
+      PERSONEL_ML_BIND_PORT: "8080"
+      # Set to 'true' for air-gapped installs where model is pre-staged
+      PERSONEL_ML_SKIP_MODEL_DOWNLOAD: ${PERSONEL_ML_SKIP_MODEL_DOWNLOAD:-false}
+    networks:
+      - net_ml
+      - data
+      - monitoring
+    # ml-classifier is fully standalone — no dependency on other Phase 1 services
+    # at start time. It degrades gracefully if the model is missing.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          # 4 CPU cores for llama.cpp inference (16-core Xeon baseline per ADR 0017)
+          cpus: "${ML_CLASSIFIER_CPUS:-4}"
+          # 6 GB: ~2 GB model + ~3 GB llama.cpp working set + 1 GB headroom
+          memory: "${ML_CLASSIFIER_MEM:-6g}"
+        reservations:
+          cpus: "1"
+          memory: 3g
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: ml-classifier
+      com.personel.tier: ml
+      com.personel.adr: "0017"
+      com.personel.phase: "2.3"
+      com.personel.profile: ml

@@ -108,19 +108,25 @@ def mock_llama_result() -> ClassifyResult:
 
 @pytest.fixture
 def app_with_fallback(test_settings: Settings) -> Generator:
-    """FastAPI app with FallbackClassifier injected (no model needed)."""
+    """FastAPI app with FallbackClassifier injected (no model needed).
+
+    Uses TestClient with lifespan=False to skip the startup event that would
+    attempt to load the GGUF model. The classifier is injected directly into
+    app.state before the client is constructed.
+    """
     from personel_ml.main import create_app
 
     application = create_app()
 
-    # Bypass lifespan; manually set classifier
     fallback = FallbackClassifier(
         confidence_threshold=test_settings.confidence_threshold,
         model_version="fallback-test",
     )
     application.state.classifier = fallback
 
-    with TestClient(application, raise_server_exceptions=True) as client:
+    # lifespan=False prevents the startup/shutdown events from running,
+    # so no model loading is attempted.
+    with TestClient(application, raise_server_exceptions=True, lifespan="off") as client:
         yield client
 
 
@@ -139,5 +145,5 @@ def app_with_mock_llama(mock_llama_result: ClassifyResult) -> Generator:
 
     application.state.classifier = mock_classifier
 
-    with TestClient(application, raise_server_exceptions=True) as client:
+    with TestClient(application, raise_server_exceptions=True, lifespan="off") as client:
         yield client

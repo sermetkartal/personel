@@ -156,10 +156,8 @@ async def classify_batch(
             logger.warning("batch.item_error", app_name=item.app_name, error=str(exc))
             errors += 1
             # Return unknown for failed items rather than aborting the batch
-            from personel_ml.schemas import ClassifyResult as CR
-
             results.append(
-                CR(
+                ClassifyResult(
                     category="unknown",
                     confidence=0.0,
                     backend=classifier.backend,
