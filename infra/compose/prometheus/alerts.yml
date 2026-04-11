@@ -387,3 +387,44 @@ groups:
             DLP service unavailability means keystroke blobs are accumulating
             in NATS and MinIO unmatched. SLO: 99%, budget 7.2h/month.
             Encrypted blobs are safe; matching will resume on restart.
+
+  # ---------------------------------------------------------------------------
+  # SOC 2 EVIDENCE COVERAGE (Phase 3.0 — ADR 0023)
+  # Every expected TSC control should produce at least one evidence item
+  # over a 24h / 7d window under normal operation. Persistent zero
+  # coverage pages the DPO so manual procedures can backfill before the
+  # Type II observation window closes.
+  # ---------------------------------------------------------------------------
+  - name: soc2.evidence
+    interval: 300s
+    rules:
+
+      - alert: SOC2EvidenceCoverageGap
+        expr: |
+          max_over_time(personel_evidence_items_total[24h]) == 0
+        for: 1h
+        labels:
+          severity: warning
+          category: compliance
+        annotations:
+          summary: "SOC 2 evidence gap: {{ $labels.control }} / tenant {{ $labels.tenant_id }}"
+          description: |
+            No evidence items in the last 24h for control {{ $labels.control }}
+            (period {{ $labels.period }}). Review /tr/evidence dashboard and
+            run the corresponding manual procedure to backfill.
+          runbook: "runbooks/soc2-evidence-pack-retrieval.md"
+
+      - alert: SOC2EvidenceCoverageCritical
+        expr: |
+          max_over_time(personel_evidence_items_total[7d]) == 0
+        for: 6h
+        labels:
+          severity: critical
+          category: compliance
+        annotations:
+          summary: "SOC 2 CRITICAL gap: {{ $labels.control }} / tenant {{ $labels.tenant_id }}"
+          description: |
+            No evidence in 7 days for control {{ $labels.control }}. This is
+            a blocking CC7.1 failure that will disqualify the current Type II
+            observation window. Escalate to DPO + CTO immediately.
+          runbook: "runbooks/soc2-evidence-pack-retrieval.md"

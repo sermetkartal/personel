@@ -6,8 +6,10 @@
 package vault
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
+	"fmt"
 	"log/slog"
 	"os"
 
@@ -48,5 +50,19 @@ func signStub(payload []byte) []byte {
 
 // overrideSignWithControlKey is called by SignWithControlKey when stubMode is true.
 func (c *Client) overrideSignWithControlKey(_ context.Context, payload []byte) ([]byte, string, error) {
-	return signStub(payload), "stub-key-v1", nil
+	return signStub(payload), "stub-key:v1", nil
+}
+
+// overrideVerify is called by Verify when stubMode is true. Recomputes
+// the deterministic stub signature and compares byte-for-byte. Only
+// accepts "stub-key:v1" since the stub never rotates.
+func (c *Client) overrideVerify(_ context.Context, payload, signature []byte, keyVersion string) error {
+	if keyVersion != "stub-key:v1" {
+		return fmt.Errorf("vault stub: unknown key version %q", keyVersion)
+	}
+	want := signStub(payload)
+	if !bytes.Equal(want, signature) {
+		return fmt.Errorf("vault stub: signature mismatch")
+	}
+	return nil
 }

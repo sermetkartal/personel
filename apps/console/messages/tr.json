@@ -562,7 +562,11 @@
     "statusCovered": "Kapsanıyor",
     "statusGap": "Eksik",
     "emptyState": "Bu dönem için kanıt bulunamadı",
-    "refreshing": "Güncelleniyor..."
+    "refreshing": "Güncelleniyor...",
+    "matrixHeading": "Mevcut Dönem Kapsama Matrisi",
+    "historyHeading": "Son 12 Ay Kapsama Geçmişi",
+    "historyHint": "Sarı hücreler o ay için kanıt üretilmediğini gösterir (gap). Yeşil tonlar kanıt yoğunluğuna göre koyulaşır.",
+    "historyLoading": "Geçmiş yükleniyor..."
   },
 
   "destructionReports": {

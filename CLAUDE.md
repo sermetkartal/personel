@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.5 — Faz 3.0.4 (tüm 9 beklenen kontrol wired + key rotation + e2e) — 2026-04-11
+> Versiyon: 1.6 — Faz 3.0.5 (Vault verify + tests + Prometheus + UI history) — 2026-04-11
 
 ---
 
@@ -412,6 +412,37 @@ follows the same shape:
   3. Emit in the post-success path of the relevant method
   4. Swallow errors, log loudly, cite the relevant audit log ID(s)
   5. Wire in `cmd/api/main.go` under the `if wormSink != nil` block
+
+**Phase 3.0.5 — Production hardening (Vault verify + tests + Prometheus + UI history)**:
+  - `vault.Client.Verify` real implementation: parses `name:vN` combined
+    key version, reconstructs Vault's `vault:vN:<base64>` wire format,
+    calls `transit/verify/{key}`, checks `valid:true`. Stub client also
+    implements `overrideVerify` for in-process tests. Compile-time
+    assertion `var _ evidence.Verifier = (*vaultclient.Client)(nil)` in
+    main.go catches drift at build time.
+  - Unit tests for `parseKeyVersion` (10 cases covering embedded colons,
+    malformed input, v0 rejection) + stub Sign→Verify round-trip +
+    tamper detection + unknown version rejection.
+  - `accessreview.Service`, `incident.Service`, `bcp.Service` now have
+    unit test coverage: validation rejection matrix, dual-control
+    enforcement (vault_root + break_glass require distinct second
+    reviewer), tally helpers, payload shape snapshot, 72h KVKK compliance
+    calculation, tier_results preservation.
+  - Prometheus gauge `personel_evidence_items_total{tenant_id,control,period}`:
+    implements `prometheus.Collector`; runs a single GROUP BY per tenant
+    at scrape time (no background refresh, no staleness). Registered in
+    `main.go` alongside Go + process collectors; tenant list sourced
+    from the same list the audit verifier uses.
+  - Two new alert rules in `infra/compose/prometheus/alerts.yml`:
+    * `SOC2EvidenceCoverageGap` (warning) — 24h zero window fires after 1h
+    * `SOC2EvidenceCoverageCritical` (critical) — 7d zero window fires after 6h
+  - `infra/runbooks/soc2-manual-evidence-submission.md`: Turkish DPO
+    runbook with curl + JSON templates for all four manual-submit
+    endpoints (access-reviews, incident-closures, bcp-drills, backup-runs).
+  - Console `/tr/evidence` page: added **12-month coverage history
+    heatmap** below the current-period matrix. Uses `useQueries` to
+    fetch all 12 months in parallel; `heatClass()` maps count → Tailwind
+    shade (amber gap / green intensities). Tooltips per cell.
 
 **Phase 3.0.4 — Coverage closure: CC6.3 + CC7.3 + CC9.1 + rotation test + e2e**:
   - **Integration test** `apps/api/test/integration/evidence_test.go`: real

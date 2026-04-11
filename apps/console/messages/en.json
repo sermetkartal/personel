@@ -562,7 +562,11 @@
     "statusCovered": "Covered",
     "statusGap": "Gap",
     "emptyState": "No evidence found for this period",
-    "refreshing": "Refreshing..."
+    "refreshing": "Refreshing...",
+    "matrixHeading": "Current Period Coverage Matrix",
+    "historyHeading": "Last 12 Months Coverage History",
+    "historyHint": "Amber cells indicate no evidence was produced for that month (gap). Green shades intensify with evidence density.",
+    "historyLoading": "Loading history..."
   },
 
   "destructionReports": {

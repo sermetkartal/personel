@@ -14,6 +14,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -143,6 +144,79 @@ func (c *Client) SignWithControlKey(ctx context.Context, payload []byte) ([]byte
 	}
 
 	return sigBytes, fmt.Sprintf("%s:%s", c.controlPlaneSigningKey, keyVersion), nil
+}
+
+// Verify checks a signature produced by Sign against the Vault transit
+// verify endpoint. Satisfies the evidence.Verifier interface — the same
+// key history that retains v1 after a rotation to v2/v3 is what makes
+// this viable for the 5-year evidence retention window.
+//
+// keyVersion is the combined identifier Sign returned, e.g.
+// "control-plane-signing:v3". This function parses out the key name and
+// version, reconstructs Vault's "vault:v3:<base64>" wire format, and
+// calls transit/verify/{keyName}. Returns nil on a valid signature or a
+// descriptive error on any failure (mismatch, unknown version, network).
+//
+// Operators MUST NOT set min_decryption_version past any version that
+// may still have live evidence items, or this endpoint will fail for
+// those items and the SOC 2 chain breaks.
+func (c *Client) Verify(ctx context.Context, payload, signature []byte, keyVersion string) error {
+	if c.stubMode {
+		return c.overrideVerify(ctx, payload, signature, keyVersion)
+	}
+
+	keyName, versionNum, err := parseKeyVersion(keyVersion)
+	if err != nil {
+		return fmt.Errorf("vault: verify: %w", err)
+	}
+
+	input := base64.StdEncoding.EncodeToString(payload)
+	sigWire := fmt.Sprintf("vault:v%d:%s", versionNum, base64.StdEncoding.EncodeToString(signature))
+	path := fmt.Sprintf("transit/verify/%s", keyName)
+
+	secret, err := c.raw.Logical().WriteWithContext(ctx, path, map[string]interface{}{
+		"input":                input,
+		"signature":            sigWire,
+		"prehashed":            false,
+		"signature_algorithm":  "pkcs1v15",
+		"marshaling_algorithm": "asn1",
+	})
+	if err != nil {
+		return fmt.Errorf("vault: verify %q: %w", keyVersion, err)
+	}
+	if secret == nil || secret.Data == nil {
+		return fmt.Errorf("vault: verify %q returned nil data", keyVersion)
+	}
+
+	valid, ok := secret.Data["valid"].(bool)
+	if !ok {
+		return fmt.Errorf("vault: verify %q returned unexpected response shape", keyVersion)
+	}
+	if !valid {
+		return fmt.Errorf("vault: verify %q: signature invalid", keyVersion)
+	}
+	return nil
+}
+
+// parseKeyVersion splits "name:vN" into ("name", N). The combined format
+// is what Sign returns so call sites can pass it back to Verify verbatim.
+func parseKeyVersion(s string) (string, int, error) {
+	// Last colon is the separator to allow key names that contain ':'
+	// (unusual but Vault does not forbid them).
+	i := strings.LastIndex(s, ":")
+	if i <= 0 || i == len(s)-1 {
+		return "", 0, fmt.Errorf("invalid key version format %q (want name:vN)", s)
+	}
+	name := s[:i]
+	ver := s[i+1:]
+	if len(ver) < 2 || ver[0] != 'v' {
+		return "", 0, fmt.Errorf("invalid key version format %q (want name:vN)", s)
+	}
+	var n int
+	if _, err := fmt.Sscanf(ver[1:], "%d", &n); err != nil || n <= 0 {
+		return "", 0, fmt.Errorf("invalid key version number in %q", s)
+	}
+	return name, n, nil
 }
 
 // IssueEnrollmentSecretID issues a single-use enrollment Secret ID for an agent.

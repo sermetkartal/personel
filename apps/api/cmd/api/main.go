@@ -241,10 +241,12 @@ func main() {
 	var evidenceStore *evidence.Store
 	var evidenceRecorder *evidence.RecorderImpl
 	var evidencePackBuilder *evidence.PackBuilder
-	// Compile-time assertion: vault.Client must satisfy evidence.Signer.
-	// If either side's Sign signature drifts, this errors at build time
-	// rather than at first Record() call under load.
+	// Compile-time assertion: vault.Client must satisfy evidence.Signer
+	// AND evidence.Verifier. If either side's method signature drifts,
+	// this errors at build time rather than at first Record() or at
+	// first auditor pack-verify call under load.
 	var _ evidence.Signer = (*vaultclient.Client)(nil)
+	var _ evidence.Verifier = (*vaultclient.Client)(nil)
 	if wormSink != nil {
 		evidenceStore = evidence.NewStore(pool, wormSink)
 		evidenceRecorder = evidence.NewRecorder(evidenceStore, vc, log)
@@ -282,6 +284,16 @@ func main() {
 	reg := observability.NewRegistry()
 	reg.MustRegister(prometheus.NewGoCollector())
 	reg.MustRegister(prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}))
+
+	// Evidence coverage collector — computes per-tenant × per-control
+	// gauge values at scrape time from live Postgres. Populated with the
+	// tenant list seen by the audit verifier (same source of truth for
+	// "who are we running for"). Alert rule in infra/compose/prometheus
+	// catches any 24h zero-coverage window.
+	coverageCollector := evidence.NewCoverageCollector(pool, log)
+	coverageCollector.SetTenants(tenantIDs)
+	reg.MustRegister(coverageCollector)
+
 	met := httpserver.NewMetrics(reg)
 
 	// --- 12. Chi router + HTTP server ---
