@@ -1,12 +1,16 @@
 # =============================================================================
-# Personel Transparency Portal — Next.js 14 Production Build
+# Personel Transparency Portal — Next.js 15 Production Build
+#
+# Build context: repository root. Package manager: pnpm.
 # =============================================================================
 
 FROM node:20-alpine AS deps
 
+RUN corepack enable
+
 WORKDIR /app
-COPY ../../apps/portal/package.json ../../apps/portal/package-lock.json* ./
-RUN npm ci --only=production
+COPY apps/portal/package.json apps/portal/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod=false
 
 FROM node:20-alpine AS builder
 
@@ -14,16 +18,18 @@ ARG PERSONEL_VERSION=0.1.0
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_TENANT_ID
 
+RUN corepack enable
+
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY ../../apps/portal/ .
+COPY apps/portal/ .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_TENANT_ID=${NEXT_PUBLIC_TENANT_ID}
 ENV PORT=3001
 
-RUN npm run build
+RUN pnpm build
 
 FROM node:20-alpine AS runner
 

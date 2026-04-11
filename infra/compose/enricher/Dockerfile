@@ -1,17 +1,21 @@
 # =============================================================================
 # Personel Event Enricher — ClickHouse writer, OpenSearch indexer, Audit appender
+#
+# Note: the enricher is a sibling binary inside the gateway module
+# (apps/gateway/cmd/enricher), not a standalone module. Build context
+# must be the repository root so we can COPY apps/gateway/...
 # =============================================================================
 
-FROM golang:1.22-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 ARG PERSONEL_VERSION=0.1.0
 ENV CGO_ENABLED=0 GOOS=linux GOARCH=amd64
 
 WORKDIR /build
-COPY ../../apps/enricher/go.mod ../../apps/enricher/go.sum ./
+# Same caveat as gateway/Dockerfile: local replace directive requires
+# the full tree before go mod download.
+COPY apps/gateway/ .
 RUN go mod download
-
-COPY ../../apps/enricher/ .
 RUN go build \
     -trimpath \
     -ldflags="-s -w -X main.version=${PERSONEL_VERSION}" \

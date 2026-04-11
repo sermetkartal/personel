@@ -1,12 +1,22 @@
 # =============================================================================
-# Personel Admin Console — Next.js 14 Production Build
+# Personel Admin Console — Next.js 15 Production Build
+#
+# Build context: repository root (docker-compose.yaml sets build.context: ../..).
+# Package manager: pnpm (see apps/console/pnpm-lock.yaml). A previous version
+# of this Dockerfile used npm ci which would have silently installed the wrong
+# dependency tree. Fixed 2026-04-11 during the first real Docker build.
 # =============================================================================
 
 FROM node:20-alpine AS deps
 
+# Enable Corepack so pnpm is available without a separate install step.
+# Corepack ships with Node 20 and resolves the pinned pnpm version from
+# package.json "packageManager" field if present.
+RUN corepack enable
+
 WORKDIR /app
-COPY ../../apps/console/package.json ../../apps/console/package-lock.json* ./
-RUN npm ci --only=production
+COPY apps/console/package.json apps/console/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile --prod=false
 
 FROM node:20-alpine AS builder
 
@@ -14,15 +24,17 @@ ARG PERSONEL_VERSION=0.1.0
 ARG NEXT_PUBLIC_API_URL
 ARG NEXT_PUBLIC_TENANT_ID
 
+RUN corepack enable
+
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY ../../apps/console/ .
+COPY apps/console/ .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}
 ENV NEXT_PUBLIC_TENANT_ID=${NEXT_PUBLIC_TENANT_ID}
 
-RUN npm run build
+RUN pnpm build
 
 FROM node:20-alpine AS runner
 
