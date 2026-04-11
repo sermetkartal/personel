@@ -113,8 +113,8 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Look up recording metadata from Postgres.
-	recMeta, err := h.store.GetRecordingMeta(r.Context(), sessionID)
-	if err != nil || recMeta == nil {
+	meta, err := h.store.GetRecordingMeta(r.Context(), sessionID)
+	if err != nil || meta == nil {
 		h.log.Error("recording metadata lookup failed",
 			slog.String("session_id", sessionID),
 			slog.Any("error", err),
@@ -122,7 +122,6 @@ func (h *StreamHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		httpserver.WriteError(w, http.StatusNotFound, "recording not found")
 		return
 	}
-	meta := recMeta
 
 	// Unwrap session DEK for delivery.
 	dekBase64, err := h.dekDelivery.UnwrapForPlayback(r.Context(), meta.TenantID, meta.WrappedDEK)
