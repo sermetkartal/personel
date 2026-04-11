@@ -18,13 +18,13 @@ COPY pyproject.toml ./
 COPY src/ ./src/
 
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir hatchling && \
-    pip install --no-cache-dir --target=/install ".[" \
+    pip install --no-cache-dir \
         "fastapi>=0.115.0" \
         "uvicorn[standard]>=0.32.0" \
         "pydantic>=2.9.0" \
         "pydantic-settings>=2.6.0" \
         "scikit-learn>=1.5.0" \
+        "joblib>=1.4.0" \
         "pandas>=2.2.0" \
         "numpy>=2.1.0" \
         "clickhouse-connect>=0.8.0" \
@@ -32,23 +32,10 @@ RUN pip install --no-cache-dir --upgrade pip && \
         "prometheus-client>=0.21.0" \
         "httpx>=0.27.0" \
         "anyio>=4.6.0" \
-    "]" 2>/dev/null || \
-    pip install --no-cache-dir \
-        "fastapi>=0.115.0" \
-        "uvicorn[standard]>=0.32.0" \
-        "pydantic>=2.9.0" \
-        "pydantic-settings>=2.6.0" \
-        "scikit-learn>=1.5.0" \
-        "pandas>=2.2.0" \
-        "numpy>=2.1.0" \
-        "clickhouse-connect>=0.8.0" \
-        "structlog>=24.4.0" \
-        "prometheus-client>=0.21.0" \
-        "httpx>=0.27.0" \
-        "anyio>=4.6.0"
+        "hatchling"
 
 # Install the package itself
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir --no-deps -e .
 
 # =============================================================================
 FROM python:3.12-slim AS runtime

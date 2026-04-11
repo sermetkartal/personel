@@ -53,28 +53,69 @@ func NewService(
 }
 
 // GetSummary builds the Home screen aggregate for a specific tenant + role.
-// It performs the minimum number of database queries: one per underlying
-// service, in parallel where independent.
+// Uses existing domain service methods where available; partial degradation
+// on individual query failure (the summary returns what it has and logs
+// the rest as warnings — the mobile app gets a usable response even if
+// one dependency is transiently down).
 func (s *Service) GetSummary(ctx context.Context, tenantID, userID string) (*SummaryResponse, error) {
-	// Phase 2.9 scaffold: individual service method calls are Phase 2.10
-	// work. For now, we surface zero counts and an empty audit list so
-	// the mobile app can render its Home screen against a real 200
-	// response instead of a 404.
-	dlpStatus, err := s.dlpState.GetStatus(ctx)
-	if err != nil {
-		// Degrade: state unknown doesn't block the summary.
-		s.log.WarnContext(ctx, "mobile summary: dlp-state failed, falling back to 'unknown'",
-			slog.String("error", err.Error()))
-		dlpStatus = &dlpstate.DLPStatus{State: dlpstate.DLPStateValue("unknown")}
+	resp := &SummaryResponse{
+		RecentAuditEntries: []AuditEntryLite{},
 	}
 
-	return &SummaryResponse{
-		PendingLiveViewCount: 0, // Phase 2.10: s.liveViewSvc.CountPending(ctx, tenantID)
-		PendingDSRCount:      0, // Phase 2.10: s.dsrSvc.CountByStates(ctx, tenantID, openStates)
-		SilenceAlertsLast24h: 0, // Phase 2.10: s.silenceSvc.CountLast24h(ctx, tenantID)
-		RecentAuditEntries:   []AuditEntryLite{},
-		DLPState:             string(dlpStatus.State),
-	}, nil
+	// DLP state (required — ADR 0013 badge visibility).
+	if dlpStatus, err := s.dlpState.GetStatus(ctx); err != nil {
+		s.log.WarnContext(ctx, "mobile summary: dlp-state failed, falling back to 'unknown'",
+			slog.String("error", err.Error()))
+		resp.DLPState = "unknown"
+	} else {
+		resp.DLPState = string(dlpStatus.State)
+	}
+
+	// DSR pending count = open + at_risk + overdue from the existing
+	// DashboardStats aggregate. We reuse Stats because (a) it's already
+	// optimised with FILTER aggregates, (b) it's a single round trip,
+	// and (c) it's the same data the web console DPO dashboard shows.
+	if stats, err := s.dsrSvc.Stats(ctx, tenantID); err != nil {
+		s.log.WarnContext(ctx, "mobile summary: dsr stats failed",
+			slog.String("error", err.Error()))
+	} else {
+		resp.PendingDSRCount = stats.OpenCount + stats.AtRiskCount + stats.OverdueCount
+	}
+
+	// Pending live view = requests in state "requested" (awaiting HR
+	// approval). liveview.Service.ListRequests takes an optional state
+	// filter as a *State. For the mobile summary we only count, so we
+	// list and take len(); the awaiting-approval queue is rarely >20
+	// items, so a direct count query isn't worth the coupling right now.
+	pendingState := liveview.StateRequested
+	if items, err := s.liveViewSvc.ListRequests(ctx, tenantID, &pendingState); err != nil {
+		s.log.WarnContext(ctx, "mobile summary: live view pending failed",
+			slog.String("error", err.Error()))
+	} else {
+		resp.PendingLiveViewCount = len(items)
+	}
+
+	// Silence alerts last 24h. silence.Service.List takes a time range.
+	if gaps, err := s.silenceSvc.List(ctx, tenantID,
+		s.clock().Add(-24*time.Hour), s.clock()); err != nil {
+		s.log.WarnContext(ctx, "mobile summary: silence list failed",
+			slog.String("error", err.Error()))
+	} else {
+		resp.SilenceAlertsLast24h = len(gaps)
+	}
+
+	// RecentAuditEntries remains empty in Phase 2.9 because the audit
+	// package exposes the chain via verification APIs, not user-scoped
+	// reads. Phase 2.10 will add audit.Service.ListRecentForUser with
+	// a proper RBAC-aware query.
+
+	return resp, nil
+}
+
+// clock returns the current wall-clock time. Abstracted as a method so
+// tests can inject a fixed clock without a full clock wrapper type.
+func (s *Service) clock() time.Time {
+	return time.Now().UTC()
 }
 
 // RegisterPushToken stores an FCM/APNs token for the given user + device.

@@ -1188,3 +1188,201 @@ services:
       com.personel.adr: "0017"
       com.personel.phase: "2.3"
       com.personel.profile: ml
+
+  # ===========================================================================
+  # OCR SERVICE — Screenshot Text Extraction (Phase 2.8)
+  #
+  # Receives screenshot blobs from the enricher and returns PII-redacted text.
+  # Indexes output into OpenSearch for full-text forensic search.
+  #
+  # KVKK CRITICAL:
+  #   OCR materially increases the sensitivity surface (screenshot → searchable
+  #   plaintext, same KVKK m.6 risk as the source image).
+  #   This service is OFF by default (profile: ocr).
+  #   Enable only after the same opt-in ceremony as DLP (ADR 0013 pattern):
+  #     1. DPIA amendment signed by customer DPO.
+  #     2. PUT /v1/system/module-state {"module": "ocr", "state": "enabled"}
+  #        (DPO-role only, audit-logged, transparency portal banner triggered).
+  #     3. Start the container:
+  #          docker compose --profile ocr up -d ocr-service
+  #
+  # KVKK INVARIANT enforced in code (redaction.py):
+  #   The service NEVER returns raw TCKN, IBAN, or credit card numbers in
+  #   any response field.  Violations cause HTTP 500 with a generic error.
+  #
+  # NETWORK:
+  #   - net_ml  : ML workload isolation (same segment as ml-classifier)
+  #   - data    : enricher reaches this service on port 8080; OpenSearch write
+  #   - monitoring: Prometheus /metrics
+  #   NOT connected to: public, app, vault-net, dlp-isolated
+  #
+  # RESOURCES: 2 CPU / 4 GB RAM
+  #   Tesseract is CPU-bound but lighter than llama.cpp.  At 1 screenshot/s
+  #   sustained throughput, 2 CPUs provides comfortable headroom.
+  #   Increase OCR_SERVICE_CPUS for higher throughput requirements.
+  #
+  # ACTIVATION:
+  #   docker compose --profile ocr up -d ocr-service
+  # ===========================================================================
+  ocr-service:
+    build:
+      context: ../../apps/ocr-service
+      dockerfile: Dockerfile
+    image: personel/ocr-service:${PERSONEL_VERSION:-0.1.0}
+    container_name: personel-ocr-service
+    restart: unless-stopped
+    profiles:
+      - ocr
+    user: "65532:65532"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp:rw,mode=0700,size=128m,noexec,nosuid,nodev
+    environment:
+      PERSONEL_OCR_BIND_HOST: "0.0.0.0"
+      PERSONEL_OCR_BIND_PORT: "8080"
+      PERSONEL_OCR_DEFAULT_ENGINE: "${OCR_DEFAULT_ENGINE:-tesseract}"
+      PERSONEL_OCR_DEFAULT_LANGUAGES: "${OCR_DEFAULT_LANGUAGES:-tr,en}"
+      PERSONEL_OCR_CONFIDENCE_THRESHOLD: "${OCR_CONFIDENCE_THRESHOLD:-0.30}"
+      PERSONEL_OCR_BATCH_MAX_ITEMS: "${OCR_BATCH_MAX_ITEMS:-16}"
+      PERSONEL_OCR_LOG_LEVEL: "${OCR_LOG_LEVEL:-info}"
+      PERSONEL_OCR_PREPROCESS_GRAYSCALE: "true"
+      PERSONEL_OCR_PREPROCESS_AUTOCONTRAST: "true"
+      PERSONEL_OCR_PREPROCESS_THRESHOLD: "false"
+    networks:
+      - net_ml
+      - data
+      - monitoring
+    # ocr-service is fully standalone — it has no runtime dependency on other
+    # services at startup.  The enricher discovers it via service name resolution.
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          cpus: "${OCR_SERVICE_CPUS:-2}"
+          memory: "${OCR_SERVICE_MEM:-4g}"
+        reservations:
+          cpus: "0.5"
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: ocr-service
+      com.personel.tier: ml
+      com.personel.phase: "2.8"
+      com.personel.profile: ocr
+      com.personel.kvkk.module: ocr
+      com.personel.kvkk.default-state: disabled
+
+  # ===========================================================================
+  # UBA DETECTOR — User Behavior Analytics / Insider Threat Anomaly Detection
+  # Phase 2.6: Isolation Forest on 7 behavioral features from ClickHouse.
+  #
+  # KVKK m.11/g CRITICAL: Outputs are ADVISORY ONLY. This service NEVER
+  # triggers automated disciplinary action or access restriction. Scores
+  # are presented to DPO/Investigator for human review only.
+  #
+  # NETWORK:
+  #   - net_ml : ML workload isolation (same as ml-classifier)
+  #   - data   : reads ClickHouse materialized views (read-only)
+  #   - app    : exposes REST API to admin console
+  #   - monitoring: Prometheus /metrics
+  #
+  # ACTIVATION (off by default — Phase 2 opt-in pattern):
+  #   docker compose --profile uba up -d uba-detector
+  #
+  # PRE-REQUISITES:
+  #   1. Run migration: migrations/0001_uba_materialized_views.sql
+  #   2. DBA provisions personel_uba_ro and personel_uba_writer ClickHouse users
+  #   3. DPO signs UBA activation form (KVKK m.11/g advisory consent)
+  #   4. Transparency portal updated with "Olağandışı davranış tespiti" card
+  # ===========================================================================
+  uba-detector:
+    build:
+      context: ../../apps/uba-detector
+      dockerfile: Dockerfile
+      args:
+        PERSONEL_VERSION: ${PERSONEL_VERSION:-0.1.0}
+    image: personel/uba-detector:${PERSONEL_VERSION:-0.1.0}
+    container_name: personel-uba-detector
+    restart: unless-stopped
+    profiles:
+      - uba
+    user: "1001:1001"
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      # Model persistence (IsolationForest .joblib files)
+      - /tmp/uba-models:rw,mode=0700,size=256m,noexec,nosuid,nodev
+      - /tmp:rw,mode=0700,size=32m,noexec,nosuid,nodev
+    ports:
+      - "127.0.0.1:${UBA_PORT:-8088}:8080"
+    environment:
+      UBA_CLICKHOUSE_HOST: clickhouse
+      UBA_CLICKHOUSE_PORT: "${CLICKHOUSE_HTTP_PORT:-8123}"
+      UBA_CLICKHOUSE_DATABASE: "${CLICKHOUSE_DB:-personel}"
+      UBA_CLICKHOUSE_USER: "${CLICKHOUSE_UBA_RO_USER:-personel_uba_ro}"
+      UBA_CLICKHOUSE_PASSWORD: "${CLICKHOUSE_UBA_RO_PASSWORD}"
+      UBA_CLICKHOUSE_SECURE: "false"
+      UBA_CLICKHOUSE_WRITE_USER: "${CLICKHOUSE_UBA_WRITER_USER:-personel_uba_writer}"
+      UBA_CLICKHOUSE_WRITE_PASSWORD: "${CLICKHOUSE_UBA_WRITER_PASSWORD}"
+      UBA_TENANT_ID: "${PERSONEL_TENANT_ID}"
+      UBA_LOG_LEVEL: "${UBA_LOG_LEVEL:-info}"
+      UBA_PORT: "8080"
+      UBA_METRICS_PORT: "9090"
+      UBA_MODEL_DIR: "/tmp/uba-models"
+      UBA_ISOLATION_FOREST_N_ESTIMATORS: "${UBA_N_ESTIMATORS:-100}"
+      UBA_ISOLATION_FOREST_CONTAMINATION: "${UBA_CONTAMINATION:-0.05}"
+      UBA_SCORE_WINDOW_DAYS: "${UBA_SCORE_WINDOW_DAYS:-7}"
+      UBA_HIGH_SCORE_NOTIFY_THRESHOLD: "${UBA_HIGH_SCORE_THRESHOLD:-0.9}"
+      # Advisory DPO audit feed (empty = log-only)
+      UBA_AUDIT_FEED_URL: "${UBA_AUDIT_FEED_URL:-}"
+      UBA_AUDIT_FEED_TOKEN: "${UBA_AUDIT_FEED_TOKEN:-}"
+    networks:
+      - net_ml
+      - data
+      - app
+      - monitoring
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          # 4 CPU / 4 GB per Phase 2.6 spec
+          cpus: "${UBA_CPUS:-4}"
+          memory: "${UBA_MEM:-4g}"
+        reservations:
+          cpus: "1"
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: uba-detector
+      com.personel.tier: ml
+      com.personel.phase: "2.6"
+      com.personel.profile: uba
+      com.personel.kvkk: "advisory-only"
