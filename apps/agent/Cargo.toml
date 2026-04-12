@@ -103,9 +103,8 @@ windows-service = "0.6"
 # SQLite WAL + agent-managed AES-GCM pages; that would require a custom VFS
 # shim with more code surface and no off-the-shelf audit. SQLCipher has a
 # well-known security audit. Static bundling avoids DLL hijacking.
-# `vendored-openssl` compiles OpenSSL from source so CI/cross-compile
-# environments don't need a pre-installed OpenSSL.
-rusqlite       = { version = "0.31", features = ["bundled-sqlcipher-vendored-openssl"] }
+# CI provides pre-built OpenSSL via OPENSSL_DIR env var.
+rusqlite       = { version = "0.31", features = ["bundled-sqlcipher"] }
 r2d2           = "0.8"
 r2d2_sqlite    = "0.24"
 
