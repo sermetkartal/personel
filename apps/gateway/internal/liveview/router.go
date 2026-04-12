@@ -87,7 +87,7 @@ func (r *Router) SubscribeNATS(ctx context.Context, js jetstream.JetStream) erro
 		Durable:       "gateway-liveview-router",
 		FilterSubject: "live_view.control.>",
 		AckPolicy:     jetstream.AckExplicitPolicy,
-		DeliverPolicy: jetstream.DeliverNewPolicy,
+		DeliverPolicy: jetstream.DeliverAllPolicy,
 	})
 	if err != nil {
 		return fmt.Errorf("liveview router: create NATS consumer: %w", err)

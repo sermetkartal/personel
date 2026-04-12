@@ -15,7 +15,7 @@ http.port: 9200
 
 # Data paths
 path.data: /usr/share/opensearch/data
-path.logs: /var/log/opensearch
+path.logs: /usr/share/opensearch/logs
 
 # Memory locking (prevent swapping of heap)
 bootstrap.memory_lock: true

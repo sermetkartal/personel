@@ -67,7 +67,7 @@ CREATE TABLE IF NOT EXISTS events_raw (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(occurred_at)
 ORDER BY (tenant_id, endpoint_id, occurred_at, event_type)
-TTL occurred_at + INTERVAL 90 DAY DELETE WHERE legal_hold = FALSE
+TTL toDateTime(occurred_at) + INTERVAL 90 DAY DELETE WHERE legal_hold = FALSE
 SETTINGS index_granularity = 8192;
 `
 
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS events_sensitive_window (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(occurred_at)
 ORDER BY (tenant_id, endpoint_id, occurred_at)
-TTL occurred_at + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
+TTL toDateTime(occurred_at) + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
 SETTINGS index_granularity = 8192;
 `
 
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS events_sensitive_clipboard_meta (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(occurred_at)
 ORDER BY (tenant_id, endpoint_id, occurred_at)
-TTL occurred_at + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
+TTL toDateTime(occurred_at) + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
 SETTINGS index_granularity = 8192;
 `
 
@@ -125,7 +125,7 @@ CREATE TABLE IF NOT EXISTS events_sensitive_keystroke_meta (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(occurred_at)
 ORDER BY (tenant_id, endpoint_id, occurred_at)
-TTL occurred_at + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
+TTL toDateTime(occurred_at) + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
 SETTINGS index_granularity = 8192;
 `
 
@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS events_sensitive_file (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(occurred_at)
 ORDER BY (tenant_id, endpoint_id, occurred_at)
-TTL occurred_at + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
+TTL toDateTime(occurred_at) + INTERVAL 15 DAY DELETE WHERE legal_hold = FALSE
 SETTINGS index_granularity = 8192;
 `
 
@@ -167,6 +167,6 @@ CREATE TABLE IF NOT EXISTS agent_heartbeats (
 ) ENGINE = MergeTree()
 PARTITION BY toYYYYMM(occurred_at)
 ORDER BY (tenant_id, endpoint_id, occurred_at)
-TTL occurred_at + INTERVAL 30 DAY DELETE WHERE legal_hold = FALSE
+TTL toDateTime(occurred_at) + INTERVAL 30 DAY DELETE WHERE legal_hold = FALSE
 SETTINGS index_granularity = 8192;
 `
