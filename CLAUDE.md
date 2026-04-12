@@ -892,12 +892,6 @@ Faz 1 Reality Check sonrası kalan açık maddeler — polish sprint için:
 
 ### Backend (Admin API)
 
-- [ ] Eksik endpoint: `GET /v1/system/dlp-state` — ADR 0013 için portal/console tarafından talep ediliyor
-- [ ] Eksik endpoint: `POST /v1/me/acknowledge-notification` — transparency portal first-login modal audit entry için
-- [ ] Eksik endpoint: `GET /v1/me/dsr/{id}` — portal şu an list+filter workaround'u yapıyor
-- [ ] `GET /v1/policy/:id/preview` — ADR 0013 için SensitivityGuard editor preview
-- [ ] DLP bootstrap endpoint: `POST /v1/system/dlp-bootstrap-keys` — ADR 0013 amendment A2
-
 ### Infra
 
 - [ ] `infra/scripts/dlp-enable.sh` — ADR 0013 opt-in ceremony script (write, rollback semantics per A3)
