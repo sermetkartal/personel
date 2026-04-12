@@ -218,13 +218,15 @@ pub fn compute_binary_hash() -> Option<[u8; 32]> {
 /// set. This is non-fatal at runtime; the caller should log and emit a tamper
 /// alert.
 pub fn protect_service_registry_key() -> Result<()> {
+    use windows::Win32::Foundation::PSID;
     use windows::Win32::Security::{
         AllocateAndInitializeSid, FreeSid,
-        PSID, SID_IDENTIFIER_AUTHORITY,
+        SID_IDENTIFIER_AUTHORITY,
         SECURITY_WORLD_SID_AUTHORITY,
-        SECURITY_WORLD_RID,
     };
     use windows::Win32::System::Registry::HKEY;
+    // SECURITY_WORLD_RID = 0 (S-1-1-0 well-known SID, first sub-authority is 0)
+    const SECURITY_WORLD_RID: u32 = 0u32;
 
     const KEY_PATH: &str = "SYSTEM\\CurrentControlSet\\Services\\personel-agent";
     // Generic write rights: KEY_SET_VALUE | KEY_CREATE_SUB_KEY | KEY_CREATE_LINK
@@ -314,18 +316,45 @@ pub fn protect_service_registry_key() -> Result<()> {
 
     // Build a SECURITY_DESCRIPTOR pointing to our new DACL.
     let mut sd = SECURITY_DESCRIPTOR::default();
+    // windows 0.54: InitializeSecurityDescriptor takes PSECURITY_DESCRIPTOR (wrapper struct),
+    // not a raw pointer. Construct it from the address of our stack-allocated descriptor.
     // SAFETY: sd is a stack-allocated struct; SECURITY_DESCRIPTOR_REVISION = 1.
-    unsafe { InitializeSecurityDescriptor(&mut sd as *mut _ as *mut _, SECURITY_DESCRIPTOR_REVISION) }
-        .map_err(|_| personel_core::error::AgentError::TamperDetected { check: "registry_acl_sd" })?;
+    let sd_ptr = windows::Win32::Security::PSECURITY_DESCRIPTOR(
+        &mut sd as *mut _ as *mut _,
+    );
+    if let Err(_) = unsafe { InitializeSecurityDescriptor(sd_ptr, SECURITY_DESCRIPTOR_REVISION) } {
+        unsafe { FreeSid(everyone_sid) };
+        unsafe { RegCloseKey(hkey).ok().ok() };
+        return Err(personel_core::error::AgentError::TamperDetected { check: "registry_acl_sd" });
+    }
 
-    // SAFETY: sd and acl_ptr are both valid; bDaclPresent=true, bDaclDefaulted=false.
-    unsafe { SetSecurityDescriptorDacl(&mut sd as *mut _ as *mut _, true, acl_ptr, false) }
-        .map_err(|_| personel_core::error::AgentError::TamperDetected { check: "registry_acl_setdacl" })?;
+    // windows 0.54: SetSecurityDescriptorDacl also takes PSECURITY_DESCRIPTOR.
+    // bDaclPresent and bDaclDefaulted are generic IntoParam<BOOL> — pass as BOOL directly.
+    // SAFETY: sd and acl_ptr are both valid; bDaclPresent=TRUE, bDaclDefaulted=FALSE.
+    let sd_ptr2 = windows::Win32::Security::PSECURITY_DESCRIPTOR(
+        &mut sd as *mut _ as *mut _,
+    );
+    if let Err(_) = unsafe {
+        SetSecurityDescriptorDacl(
+            sd_ptr2,
+            windows::Win32::Foundation::BOOL(1), // bDaclPresent = TRUE
+            Some(acl_ptr as *const ACL),
+            windows::Win32::Foundation::BOOL(0), // bDaclDefaulted = FALSE
+        )
+    } {
+        unsafe { FreeSid(everyone_sid) };
+        unsafe { RegCloseKey(hkey).ok().ok() };
+        return Err(personel_core::error::AgentError::TamperDetected { check: "registry_acl_setdacl" });
+    }
 
     // Apply the security descriptor to the registry key.
+    // windows 0.54: RegSetKeySecurity returns WIN32_ERROR — call .ok() to convert to Result.
     // SAFETY: hkey is a valid open handle; sd is a valid security descriptor.
+    let sd_ptr3 = windows::Win32::Security::PSECURITY_DESCRIPTOR(
+        &mut sd as *mut _ as *mut _,
+    );
     let set_result = unsafe {
-        RegSetKeySecurity(hkey, DACL_SECURITY_INFORMATION, &mut sd as *mut _ as *mut _)
+        RegSetKeySecurity(hkey, DACL_SECURITY_INFORMATION, sd_ptr3)
     };
 
     // Cleanup regardless of outcome.
@@ -333,7 +362,7 @@ pub fn protect_service_registry_key() -> Result<()> {
     unsafe { FreeSid(everyone_sid) };
     unsafe { RegCloseKey(hkey).ok().ok() };
 
-    set_result.map_err(|_| personel_core::error::AgentError::TamperDetected {
+    set_result.ok().map_err(|_| personel_core::error::AgentError::TamperDetected {
         check: "registry_acl_apply",
     })?;
 

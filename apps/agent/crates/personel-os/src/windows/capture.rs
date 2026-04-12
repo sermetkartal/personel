@@ -36,8 +36,8 @@ use image::ColorType;
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_FLAG,
-    D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_SDK_VERSION, D3D11_TEXTURE2D_DESC,
-    D3D11_USAGE_STAGING,
+    D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION,
+    D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
 use windows::Win32::Graphics::Dxgi::Common::{DXGI_FORMAT_B8G8R8A8_UNORM, DXGI_SAMPLE_DESC};
 use windows::Win32::Graphics::Dxgi::{
@@ -360,8 +360,12 @@ impl DxgiCapture {
         self.context.CopyResource(&staging, &gpu_tex);
 
         // Map for CPU read.
-        let mapped = self.context
-            .Map(&staging, 0, D3D11_MAP_READ, 0)
+        // windows 0.54: Map() returns Result<()> and takes the mapped subresource
+        // as an Option<*mut D3D11_MAPPED_SUBRESOURCE> out-pointer. We pass Some(&mut mapped)
+        // and then read the filled struct after the call succeeds.
+        let mut mapped = D3D11_MAPPED_SUBRESOURCE::default();
+        self.context
+            .Map(&staging, 0, D3D11_MAP_READ, 0, Some(&mut mapped))
             .map_err(|e| AgentError::CollectorRuntime {
                 name: "screen",
                 reason: format!("Map staging texture: {e}"),
