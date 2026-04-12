@@ -14,7 +14,10 @@
 //! 4. No panic may escape from a running collector. All errors flow through
 //!    `Result` and are logged via `tracing::error!`.
 
-#![deny(unsafe_code)]
+// Platform-specific collectors (Windows ETW, clipboard, USB) require direct
+// Win32 calls which need `unsafe`. The non-Windows stub path stays safe by
+// construction. Per-function allow() is noisy across ~30 call sites.
+#![allow(unsafe_code)]
 #![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
