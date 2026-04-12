@@ -2,7 +2,80 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.6 — Faz 3.0.5 (Vault verify + tests + Prometheus + UI history) — 2026-04-11
+> Versiyon: 1.7 — Pilot stack bring-up (Ubuntu 192.168.5.44) + Windows agent MSI build — 2026-04-12
+
+---
+
+## 0. MEVCUT DURUM — Pilot Bring-up (2026-04-12)
+
+### Ubuntu backend sunucusu: 192.168.5.44
+
+**SSH**: `ssh kartal@192.168.5.44` (şifre: `qwer123!!`)
+**Repo path**: `/home/kartal/personel`
+**Full stack durum**: **12/12 servis ayakta** ve sağlıklı.
+
+| Servis | Port | Durum |
+|---|---|---|
+| Vault | 8200 | initialized + unsealed + transit engine + AppRole |
+| Postgres | 5432 | 28 migration complete, RLS aktif |
+| ClickHouse | 8123/9000 | schemas bootstrapped (events_raw + 4 sensitive table) |
+| NATS | 4222 | 5 JetStream stream (events_raw, events_sensitive, live_view_control, agent_health, pki_events) |
+| MinIO | 9000 | 7 bucket (screenshots, audit-worm, evidence, events-blob, screenclips, keystroke-blobs, clipboard-blobs) |
+| OpenSearch | 9200 | starting |
+| Keycloak | 8080 | realm `personel` + 2 client + admin user |
+| API | 8000 | `/healthz` OK, `/readyz` OK (tüm deps bağlı) |
+| Gateway | 9443 | gRPC listening, NATS streams + consumer |
+| Enricher | - | consumer loop started (concurrency 4) |
+| Console | 3000 | Next.js 15, `/tr` redirect working |
+| Portal | 3001 | Next.js 15, `/tr` redirect working |
+
+**Credentials**: Sunucudaki `/home/kartal/personel/infra/compose/.env` dosyasında ve Vault root token `/tmp/vault-init.json` altında. Commit etme — sadece SSH ile sunucudan oku.
+
+Servis user listesi (şifreler .env'de):
+- Postgres: `postgres` (superuser), `app_admin_api`, `personel_enricher`, `personel_gw`, `app_keycloak`
+- ClickHouse: `personel_admin`, `personel_app`, `personel_enricher`
+- Keycloak: `admin` (master + personel realm)
+- MinIO: `minioadmin`
+
+**Bring-up sırasında yapılan fix'ler** (kalıcı olanlar push edilmiştir):
+- `apps/gateway/internal/liveview/router.go`: `DeliverNewPolicy` → `DeliverAllPolicy` (WorkQueue stream uyumsuzluğu)
+- `apps/gateway/internal/clickhouse/schemas.go`: `TTL occurred_at` → `TTL toDateTime(occurred_at)` (DateTime64(9) tip hatası)
+- `infra/compose/opensearch/opensearch.yml`: `path.logs` non-root writable dizine taşındı
+
+**Yerel fix'ler (commit edilmedi — pilot ortama özel)**:
+- Config dosyaları hostname'leri `localhost` → Docker service adları
+- Vault AppRole ID/Secret sunucuya özgü
+- CH users.xml password SHA256 hash'leri env var ile set ediliyor
+- Docker compose `service_healthy` → `service_started` (health check cmd eksiklikleri nedeniyle)
+
+### Windows test istemci: Claude Code kurulumu yapılacak
+
+**Amaç**: MSI agent build + test client üzerinde kurulum + Ubuntu gateway'e bağlantı.
+
+**Yapılacaklar** (Claude Code Windows'ta başladığında):
+1. Build ortamı doğrula: Rust 1.94+, cargo, protoc 34+, git, FireDaemon OpenSSL 3 (C:\Program Files\FireDaemon OpenSSL 3)
+2. Env var'ları confirm et:
+   - `OPENSSL_DIR=C:\Program Files\FireDaemon OpenSSL 3`
+   - `OPENSSL_LIB_DIR=C:\Program Files\FireDaemon OpenSSL 3\lib`
+   - `OPENSSL_INCLUDE_DIR=C:\Program Files\FireDaemon OpenSSL 3\include`
+   - `PROTOC_INCLUDE=C:\personel\proto`
+3. `cd C:\personel && git pull` (en son fix'ler için)
+4. `cd apps\agent && cargo build --release -p personel-agent -p personel-watchdog`
+5. Compile hatası olursa: `cargo build ... 2>&1 | Out-File build.log` → tam hata listesini oku → fix et
+6. Build başarılı olunca: `.\installer\build-msi.ps1` ile MSI üret (WiX 4 kurulu olmalı)
+7. MSI'ı `sc create personel-agent binPath="..."` yerine de kurulabilir (MSI'sız test için)
+8. Agent'ı başlat, gateway (192.168.5.44:9443) bağlantısını doğrula
+9. Event akışını Ubuntu'daki NATS/ClickHouse'da görüntüle
+
+**Önemli**: Windows compile hataları iteratif olarak çıkabilir — her round'da `#[cfg(target_os = "windows")]` bloklarındaki `windows` crate 0.54 API uyumunu kontrol et. Önceden düzelttiğimiz pattern'ler:
+- `.as_bool()` yerine `?` veya `.is_ok()` (BOOL → Result dönüşümü)
+- `Interface::cast::<T>()` için `use windows::core::Interface;`
+- `D3D11_BIND_FLAG(0)` → `0u32` (flag enum → u32)
+- `HANDLE(-1isize)` (not `*mut _`)
+- `SenderPtr` newtype with `unsafe impl Send+Sync` for raw pointer statics
+
+**Kalan known bug'lar** (düzeltilecek):
+- `personel-collectors` crate'inde 32 compile error — tüm fix'ler commit `99c4644`'te olması bekleniyor ama hâlâ hata veriyor. Windows'ta Claude Code başladığında `cargo build` çıktısını tam log olarak oku, her error'u tek tek düzelt.
 
 ---
 
