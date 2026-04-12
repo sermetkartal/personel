@@ -351,6 +351,16 @@
       "eventType": "Olay Türü",
       "count": "Sayı",
       "lastOccurrence": "Son Oluşma"
+    },
+    "error": {
+      "title": "Rapor Yüklenemedi",
+      "forbidden": "Bu raporu görme yetkiniz yok. KVKK kapsamı gereği bazı roller performans metriklerine erişemez.",
+      "notFound": "Rapor kaynağı mevcut değil. Sistem yöneticinize bildirin.",
+      "validation": "Geçersiz tarih aralığı veya parametre.",
+      "server": "Sunucu hatası. Yöneticinize bildirin.",
+      "unknown": "Rapor yüklenemedi.",
+      "retry": "Tekrar denemek için sayfayı yenileyin.",
+      "timestamp": "Hata zamanı"
     }
   },
 

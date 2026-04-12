@@ -3,10 +3,12 @@ package liveview
 
 import (
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/httpx"
 )
@@ -72,11 +74,29 @@ func GetRequestHandler(svc *Service) http.HandlerFunc {
 		id := chi.URLParam(r, "requestID")
 		sess, err := svc.GetSession(r.Context(), p.TenantID, id)
 		if err != nil {
-			httpx.WriteError(w, r, http.StatusNotFound, httpx.ProblemTypeNotFound, "Not Found", "err.not_found")
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpx.WriteError(w, r, http.StatusNotFound, httpx.ProblemTypeNotFound, "Not Found", "err.not_found")
+			} else {
+				slog.Error("liveview: get request failed",
+					slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+					slog.String("session_id", id),
+					slog.String("actor", p.UserID),
+					slog.Any("error", err))
+				httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+			}
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, sess)
 	}
+}
+
+// ApproveResponse is the dedicated response type for the approve endpoint.
+// It deliberately re-exposes AdminToken (the only place it must appear
+// in an API response) while all other handlers use SessionResponse which
+// omits it — preventing accidental token leakage via List/Get responses.
+type ApproveResponse struct {
+	*Session
+	AdminToken string `json:"admin_token"`
 }
 
 // ApproveHandler — POST /v1/live-view/requests/{requestID}/approve (IT Manager or Admin; dual-control)
@@ -100,15 +120,16 @@ func ApproveHandler(svc *Service) http.HandlerFunc {
 					httpx.WriteError(w, r, http.StatusConflict, httpx.ProblemTypeWorkflowState, "Invalid State", "err.workflow_state")
 				} else {
 					slog.Error("liveview: approve failed",
-						slog.String("session_id", id),
 						slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+						slog.String("session_id", id),
+						slog.String("actor", p.UserID),
 						slog.Any("error", err))
 					httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 				}
 			}
 			return
 		}
-		httpx.WriteJSON(w, http.StatusOK, sess)
+		httpx.WriteJSON(w, http.StatusOK, ApproveResponse{Session: sess, AdminToken: sess.AdminToken})
 	}
 }
 
@@ -124,7 +145,21 @@ func RejectHandler(svc *Service) http.HandlerFunc {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 
 		if err := svc.Reject(r.Context(), p, id, body.Notes); err != nil {
-			httpx.WriteError(w, r, http.StatusForbidden, httpx.ProblemTypeForbidden, "Forbidden", "err.forbidden")
+			switch err {
+			case auth.ErrForbidden:
+				httpx.WriteError(w, r, http.StatusForbidden, httpx.ProblemTypeForbidden, "Forbidden", "err.forbidden")
+			default:
+				if isWorkflowErr(err) {
+					httpx.WriteError(w, r, http.StatusConflict, httpx.ProblemTypeWorkflowState, "Invalid State", "err.workflow_state")
+				} else {
+					slog.Error("liveview: reject failed",
+						slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+						slog.String("session_id", id),
+						slog.String("actor", p.UserID),
+						slog.Any("error", err))
+					httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+				}
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -159,7 +194,16 @@ func GetSessionHandler(svc *Service) http.HandlerFunc {
 		id := chi.URLParam(r, "sessionID")
 		sess, err := svc.GetSession(r.Context(), p.TenantID, id)
 		if err != nil {
-			httpx.WriteError(w, r, http.StatusNotFound, httpx.ProblemTypeNotFound, "Not Found", "err.not_found")
+			if errors.Is(err, pgx.ErrNoRows) {
+				httpx.WriteError(w, r, http.StatusNotFound, httpx.ProblemTypeNotFound, "Not Found", "err.not_found")
+			} else {
+				slog.Error("liveview: get session failed",
+					slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+					slog.String("session_id", id),
+					slog.String("actor", p.UserID),
+					slog.Any("error", err))
+				httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+			}
 			return
 		}
 		httpx.WriteJSON(w, http.StatusOK, sess)
@@ -172,7 +216,21 @@ func EndSessionHandler(svc *Service) http.HandlerFunc {
 		p := auth.PrincipalFromContext(r.Context())
 		id := chi.URLParam(r, "sessionID")
 		if err := svc.EndSession(r.Context(), p, id); err != nil {
-			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+			switch err {
+			case auth.ErrForbidden:
+				httpx.WriteError(w, r, http.StatusForbidden, httpx.ProblemTypeForbidden, "Forbidden", "err.forbidden")
+			default:
+				if isWorkflowErr(err) {
+					httpx.WriteError(w, r, http.StatusConflict, httpx.ProblemTypeWorkflowState, "Invalid State", "err.workflow_state")
+				} else {
+					slog.Error("liveview: end session failed",
+						slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+						slog.String("session_id", id),
+						slog.String("actor", p.UserID),
+						slog.Any("error", err))
+					httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+				}
+			}
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -185,14 +243,20 @@ func TerminateHandler(svc *Service) http.HandlerFunc {
 		p := auth.PrincipalFromContext(r.Context())
 		id := chi.URLParam(r, "sessionID")
 		if err := svc.Terminate(r.Context(), p, id); err != nil {
-			if err == auth.ErrForbidden {
+			switch err {
+			case auth.ErrForbidden:
 				httpx.WriteError(w, r, http.StatusForbidden, httpx.ProblemTypeForbidden, "Forbidden", "err.forbidden")
-			} else {
-				slog.Error("liveview: terminate failed",
-					slog.String("session_id", id),
-					slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
-					slog.Any("error", err))
-				httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+			default:
+				if isWorkflowErr(err) {
+					httpx.WriteError(w, r, http.StatusConflict, httpx.ProblemTypeWorkflowState, "Invalid State", "err.workflow_state")
+				} else {
+					slog.Error("liveview: terminate failed",
+						slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+						slog.String("session_id", id),
+						slog.String("actor", p.UserID),
+						slog.Any("error", err))
+					httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
+				}
 			}
 			return
 		}

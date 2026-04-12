@@ -2,7 +2,7 @@
  * ClickHouse analytics report API query functions.
  */
 
-import { apiClient } from "./client";
+import { ApiError, NetworkError, apiClient } from "./client";
 import type {
   AppBlocksReport,
   DateRangeParams,
@@ -10,6 +10,49 @@ import type {
   ProductivityReport,
   TopAppsReport,
 } from "./types";
+
+// ── Typed report fetch error ─────────────────────────────────────────────────
+
+/**
+ * Thrown by report preview helpers when the API returns a non-2xx response
+ * or the network is unavailable. Replaces the silent `.catch(() => null)`
+ * pattern so callers can render explicit error UI instead of misleading
+ * "no data" states (KVKK audit gap fix).
+ */
+export class ReportFetchError extends Error {
+  readonly status: number;
+  readonly code?: string;
+
+  constructor(status: number, message: string, code?: string) {
+    super(message);
+    this.name = "ReportFetchError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
+// ── Internal helper ───────────────────────────────────────────────────────────
+
+/**
+ * Wraps an apiClient call and converts ApiError / NetworkError into
+ * ReportFetchError so page.tsx can distinguish "real error" from "empty data".
+ */
+async function safeReportFetch<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    if (err instanceof ApiError) {
+      // RFC 7807: prefer problem.code (errorId) if present
+      const code = err.problem.code ?? undefined;
+      throw new ReportFetchError(err.status, err.message, code);
+    }
+    if (err instanceof NetworkError) {
+      throw new ReportFetchError(503, "Network request failed — server unreachable");
+    }
+    // Unknown error — re-throw so Next.js error boundary catches it
+    throw err;
+  }
+}
 
 export interface ReportParams extends DateRangeParams {
   endpoint_id?: string;
@@ -110,9 +153,11 @@ export async function getProductivityPreview(
   opts: { token?: string } = {},
 ): Promise<PreviewEnvelope<ProductivityPreviewRow>> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<PreviewEnvelope<ProductivityPreviewRow>>(
-    `/v1/reports-preview/productivity${qs}`,
-    opts,
+  return safeReportFetch(() =>
+    apiClient.get<PreviewEnvelope<ProductivityPreviewRow>>(
+      `/v1/reports-preview/productivity${qs}`,
+      opts,
+    ),
   );
 }
 
@@ -121,9 +166,11 @@ export async function getTopAppsPreview(
   opts: { token?: string } = {},
 ): Promise<PreviewEnvelope<TopAppPreviewRow>> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<PreviewEnvelope<TopAppPreviewRow>>(
-    `/v1/reports-preview/top-apps${qs}`,
-    opts,
+  return safeReportFetch(() =>
+    apiClient.get<PreviewEnvelope<TopAppPreviewRow>>(
+      `/v1/reports-preview/top-apps${qs}`,
+      opts,
+    ),
   );
 }
 
@@ -132,9 +179,11 @@ export async function getIdleActivePreview(
   opts: { token?: string } = {},
 ): Promise<PreviewEnvelope<IdleActivePreviewRow>> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<PreviewEnvelope<IdleActivePreviewRow>>(
-    `/v1/reports-preview/idle-active${qs}`,
-    opts,
+  return safeReportFetch(() =>
+    apiClient.get<PreviewEnvelope<IdleActivePreviewRow>>(
+      `/v1/reports-preview/idle-active${qs}`,
+      opts,
+    ),
   );
 }
 
@@ -143,8 +192,10 @@ export async function getAppBlocksPreview(
   opts: { token?: string } = {},
 ): Promise<PreviewEnvelope<AppBlockPreviewRow>> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<PreviewEnvelope<AppBlockPreviewRow>>(
-    `/v1/reports-preview/app-blocks${qs}`,
-    opts,
+  return safeReportFetch(() =>
+    apiClient.get<PreviewEnvelope<AppBlockPreviewRow>>(
+      `/v1/reports-preview/app-blocks${qs}`,
+      opts,
+    ),
   );
 }

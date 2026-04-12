@@ -179,6 +179,12 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 				r.Patch("/", policy.UpdateHandler(svc.Policy))
 				r.Delete("/", policy.DeleteHandler(svc.Policy))
 				r.Post("/push", policy.PushHandler(svc.Policy))
+				// GET /preview — dry-run validation before sign-and-push.
+				// Readable by Manager, DPO, Auditor in addition to Admin
+				// (parent route uses RequireRole(Admin); we widen with With).
+				r.With(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleManager, auth.RoleDPO, auth.RoleAuditor,
+				)).Get("/preview", policy.PreviewHandler(svc.Policy))
 			})
 		})
 
@@ -273,22 +279,23 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 		// console reports pages can render real numbers before the
 		// ClickHouse event pipeline is live. Swap to /v1/reports/* in
 		// Phase 2 when the roll-up job writes to ClickHouse.
-		if svc.DBPool != nil {
-			r.Route("/reports-preview", func(r chi.Router) {
-				// KVKK m.5/m.6 proportionality: productivity/idle-active are personnel
-				// performance metrics. IT operators have no legitimate need (their role is
-				// device support, not HR analytics) and must not see them. HR explicitly
-				// allowed; DPO/Auditor allowed for compliance oversight.
-				r.Use(auth.RequireRole(
-					auth.RoleAdmin, auth.RoleManager, auth.RoleHR,
-					auth.RoleDPO, auth.RoleAuditor, auth.RoleITManager,
-				))
-				r.Get("/productivity", reportspg.ProductivityHandler(svc.DBPool))
-				r.Get("/top-apps", reportspg.TopAppsHandler(svc.DBPool))
-				r.Get("/idle-active", reportspg.IdleActiveHandler(svc.DBPool))
-				r.Get("/app-blocks", reportspg.AppBlocksHandler(svc.DBPool))
-			})
-		}
+		// DBPool is always non-nil here: cmd/api/main.go calls os.Exit(1)
+		// if pool init fails, so a nil guard would silently skip route mount
+		// and return 404 to the console — a misleading "no data" state.
+		r.Route("/reports-preview", func(r chi.Router) {
+			// KVKK m.5/m.6 proportionality: productivity/idle-active are personnel
+			// performance metrics. IT operators have no legitimate need (their role is
+			// device support, not HR analytics) and must not see them. HR explicitly
+			// allowed; DPO/Auditor allowed for compliance oversight.
+			r.Use(auth.RequireRole(
+				auth.RoleAdmin, auth.RoleManager, auth.RoleHR,
+				auth.RoleDPO, auth.RoleAuditor, auth.RoleITManager,
+			))
+			r.Get("/productivity", reportspg.ProductivityHandler(svc.DBPool))
+			r.Get("/top-apps", reportspg.TopAppsHandler(svc.DBPool))
+			r.Get("/idle-active", reportspg.IdleActiveHandler(svc.DBPool))
+			r.Get("/app-blocks", reportspg.AppBlocksHandler(svc.DBPool))
+		})
 
 		// --- Screenshots (Investigator / DPO only) ---
 		r.Route("/screenshots", func(r chi.Router) {

@@ -24,7 +24,7 @@ type Session struct {
 	State             State          `json:"state"`
 	LiveKitRoom       *string        `json:"-"`
 	LiveKitRoomStr    string         `json:"livekit_room"`
-	AdminToken        string         `json:"admin_token,omitempty"`
+	AdminToken        string         `json:"-"`
 	AgentToken        string         `json:"-"`
 	SigningKeyID      string         `json:"signing_key_id,omitempty"`
 	CreatedAt         time.Time      `json:"created_at"`

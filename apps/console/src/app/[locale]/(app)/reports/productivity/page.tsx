@@ -2,9 +2,10 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { getProductivityPreview } from "@/lib/api/reports";
+import { getProductivityPreview, ReportFetchError } from "@/lib/api/reports";
 import { ProductivityChart } from "./productivity-chart";
 import { ReportEmpty } from "../_components/report-empty";
+import { ReportError } from "../_components/report-error";
 import { BarChart2 } from "lucide-react";
 
 interface PageProps {
@@ -26,10 +27,18 @@ export default async function ProductivityReportPage({
   }
 
   const t = await getTranslations("reports");
-  const data = await getProductivityPreview(
-    {},
-    { token: session.user.access_token },
-  ).catch(() => null);
+
+  let data: Awaited<ReturnType<typeof getProductivityPreview>> | null = null;
+  let fetchError: ReportFetchError | null = null;
+  try {
+    data = await getProductivityPreview({}, { token: session.user.access_token });
+  } catch (e) {
+    if (e instanceof ReportFetchError) {
+      fetchError = e;
+    } else {
+      throw e;
+    }
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -45,7 +54,9 @@ export default async function ProductivityReportPage({
         </div>
       </div>
 
-      {!data || data.items.length === 0 ? (
+      {fetchError ? (
+        <ReportError status={fetchError.status} code={fetchError.code} />
+      ) : !data || data.items.length === 0 ? (
         <ReportEmpty titleKey="emptyTitle" descKey="emptyDesc" />
       ) : (
         <ProductivityChart items={data.items} from={data.from} to={data.to} />

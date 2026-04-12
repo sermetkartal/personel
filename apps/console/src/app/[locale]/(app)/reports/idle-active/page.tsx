@@ -2,9 +2,10 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { getIdleActivePreview } from "@/lib/api/reports";
+import { getIdleActivePreview, ReportFetchError } from "@/lib/api/reports";
 import { IdleActiveChart } from "./idle-active-chart";
 import { ReportEmpty } from "../_components/report-empty";
+import { ReportError } from "../_components/report-error";
 import { Clock } from "lucide-react";
 
 interface PageProps {
@@ -26,10 +27,18 @@ export default async function IdleActiveReportPage({
   }
 
   const t = await getTranslations("reports");
-  const data = await getIdleActivePreview(
-    {},
-    { token: session.user.access_token },
-  ).catch(() => null);
+
+  let data: Awaited<ReturnType<typeof getIdleActivePreview>> | null = null;
+  let fetchError: ReportFetchError | null = null;
+  try {
+    data = await getIdleActivePreview({}, { token: session.user.access_token });
+  } catch (e) {
+    if (e instanceof ReportFetchError) {
+      fetchError = e;
+    } else {
+      throw e;
+    }
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -43,7 +52,9 @@ export default async function IdleActiveReportPage({
         </div>
       </div>
 
-      {!data || data.items.length === 0 ? (
+      {fetchError ? (
+        <ReportError status={fetchError.status} code={fetchError.code} />
+      ) : !data || data.items.length === 0 ? (
         <ReportEmpty titleKey="emptyTitle" descKey="emptyDesc" />
       ) : (
         <IdleActiveChart items={data.items} from={data.from} to={data.to} />

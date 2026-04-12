@@ -2,7 +2,8 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { getAppBlocksPreview } from "@/lib/api/reports";
+import { getAppBlocksPreview, ReportFetchError } from "@/lib/api/reports";
+import { ReportError } from "../_components/report-error";
 import { ShieldOff, Info } from "lucide-react";
 
 interface PageProps {
@@ -24,10 +25,35 @@ export default async function AppBlocksReportPage({
   }
 
   const t = await getTranslations("reports");
-  const data = await getAppBlocksPreview(
-    {},
-    { token: session.user.access_token },
-  ).catch(() => null);
+
+  let data: Awaited<ReturnType<typeof getAppBlocksPreview>> | null = null;
+  let fetchError: ReportFetchError | null = null;
+  try {
+    data = await getAppBlocksPreview({}, { token: session.user.access_token });
+  } catch (e) {
+    if (e instanceof ReportFetchError) {
+      fetchError = e;
+    } else {
+      throw e;
+    }
+  }
+
+  if (fetchError) {
+    return (
+      <div className="space-y-6 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <ShieldOff className="h-6 w-6 text-muted-foreground" />
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {t("appBlocks.title")}
+            </h1>
+            <p className="text-muted-foreground">{t("appBlocks.description")}</p>
+          </div>
+        </div>
+        <ReportError status={fetchError.status} code={fetchError.code} />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

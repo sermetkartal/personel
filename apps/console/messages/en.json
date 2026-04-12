@@ -351,6 +351,16 @@
       "eventType": "Event Type",
       "count": "Count",
       "lastOccurrence": "Last Occurrence"
+    },
+    "error": {
+      "title": "Report Failed to Load",
+      "forbidden": "You do not have permission to view this report. KVKK scope restricts certain roles from accessing performance metrics.",
+      "notFound": "Report source not found. Contact your system administrator.",
+      "validation": "Invalid date range or parameter.",
+      "server": "Server error. Notify your administrator.",
+      "unknown": "Report could not be loaded.",
+      "retry": "Refresh the page to try again.",
+      "timestamp": "Error time"
     }
   },
 

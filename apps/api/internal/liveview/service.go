@@ -346,7 +346,7 @@ func (s *Service) terminateSession(ctx context.Context, p *auth.Principal, sessi
 	// already gone from the user's perspective. Log loudly so a missing
 	// evidence item is visible in SOC 2 coverage gap reports rather than
 	// silently lost.
-	s.emitSessionEvidence(ctx, sess, newState, reason, terminateAuditID, now)
+	s.emitSessionEvidence(ctx, sess, newState, reason, terminateAuditID, now, p.UserID)
 
 	return nil
 }
@@ -367,6 +367,7 @@ func (s *Service) emitSessionEvidence(
 	terminationReason string,
 	terminateAuditID int64,
 	endedAt time.Time,
+	actorUserID string,
 ) {
 	if s.evidenceRecorder == nil {
 		return
@@ -394,7 +395,7 @@ func (s *Service) emitSessionEvidence(
 		"endpoint_id":       sess.EndpointID,
 		"requester_id":      sess.RequesterID,
 		"approver_id":       *sess.ApproverID,
-		"terminator_id":     sess.ApproverID, // set to the actor that terminated
+		"terminator_id":     actorUserID,
 		"reason_code":       sess.ReasonCode,
 		"justification":     sess.Justification,
 		"requested_seconds": int64(sess.RequestedDuration / time.Second),

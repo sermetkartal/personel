@@ -57,7 +57,7 @@ func TestEmitSessionEvidenceHappyPath(t *testing.T) {
 		StartedAt:         &started,
 	}
 
-	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 99, ended)
+	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 99, ended, "dpo-user-99")
 
 	if fake.calls != 1 {
 		t.Fatalf("expected 1 Record call, got %d", fake.calls)
@@ -93,6 +93,16 @@ func TestEmitSessionEvidenceHappyPath(t *testing.T) {
 	if payload["requested_seconds"].(float64) != 900 {
 		t.Errorf("expected requested_seconds=900, got %v", payload["requested_seconds"])
 	}
+	// terminator_id must reflect the actor that called terminateSession
+	// (e.g. DPO), NOT the approver. These differ when a DPO/admin override
+	// is used — the SOC 2 CC6.1 evidence must capture the actual terminator.
+	if payload["terminator_id"] != "dpo-user-99" {
+		t.Errorf("terminator_id should be the actor (dpo-user-99), got %v", payload["terminator_id"])
+	}
+	// Sanity: approver_id must still carry the original approver.
+	if payload["approver_id"] != "hr-user-42" {
+		t.Errorf("approver_id mismatch: %v", payload["approver_id"])
+	}
 }
 
 func TestEmitSessionEvidenceSkipsWhenNoRecorder(t *testing.T) {
@@ -105,7 +115,7 @@ func TestEmitSessionEvidenceSkipsWhenNoRecorder(t *testing.T) {
 		ApproverID:  &approver,
 		RequesterID: "r",
 	}
-	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 1, time.Now())
+	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 1, time.Now(), "actor-1")
 	// No panic = success.
 }
 
@@ -116,7 +126,7 @@ func TestEmitSessionEvidenceSkipsWithoutApprover(t *testing.T) {
 	fake := &fakeEvidenceRecorder{}
 	svc := &Service{log: silentLogger(), evidenceRecorder: fake}
 	sess := &Session{ID: "s", TenantID: "t", RequesterID: "r"} // ApproverID nil
-	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 1, time.Now())
+	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 1, time.Now(), "actor-1")
 	if fake.calls != 0 {
 		t.Fatalf("expected Record to be skipped, got %d calls", fake.calls)
 	}
@@ -138,7 +148,7 @@ func TestEmitSessionEvidenceSwallowsRecorderError(t *testing.T) {
 		StartedAt:   &started,
 	}
 	// Must not panic, must not return (void method), must log internally.
-	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 1, time.Now())
+	svc.emitSessionEvidence(context.Background(), sess, StateEnded, "end", 1, time.Now(), "actor-1")
 	if fake.calls != 1 {
 		t.Fatalf("expected 1 failed Record attempt, got %d", fake.calls)
 	}
