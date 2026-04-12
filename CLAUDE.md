@@ -8,6 +8,31 @@
 
 ## 0. MEVCUT DURUM + 190-MADDE PRODUCTION ROADMAP (2026-04-13)
 
+### 🛑 KRİTİK GÜVENLİK KURALI — EN BÜYÜK LİMİT
+
+> **SADECE iki makinede işlem yap. Başka HİÇBİR sisteme dokunma.**
+>
+> 1. **Windows VM**: `192.168.5.30` (kullanıcı: kartal, hostname: DESKTOP-426U3BG)
+> 2. **Ubuntu backend**: `192.168.5.44` (kullanıcı: kartal, repo: /home/kartal/personel)
+>
+> **YASAK**:
+> - Başka IP/host'a SSH bağlanma
+> - Başka makinede dosya oluşturma/değiştirme/silme
+> - Başka makineye paket kurma
+> - Network tarama, port scan, başka host enumeration
+> - Müşteri ortamı, üretim sunucuları, başka geliştirme makineleri — hiçbiri
+> - Yerel macOS dosya sistemi dışarısında (Mac Code Code session için)
+> - Cloud API'ler (AWS, GCP, Azure) — hiçbiri
+> - DNS query'ler ve hostname lookup'lar bile sadece bu iki IP'ye yönelik olmalı
+>
+> **İstisna**: GitHub.com'a `git push/pull` (sadece sermetkartal/personel repo).
+>
+> **Şüpheye düşersen**: Komut çalıştırma. CLAUDE.md state'e "BLOCKED: <neden>" yaz, sonraki maddeye geç.
+>
+> Bu kural her şeyin üstünde. Roadmap'teki herhangi bir madde bu iki makine dışı bir işlem gerektiriyorsa: madde'yi "AWAITING CUSTOMER ACTION" listesine taşı, sonraki maddeye geç.
+
+---
+
 ### 🎯 GÖREV (otonom çalışacak Claude Code için)
 
 Müşteri 50-100 kişilik bir şirket için **production-ready** UAM platformu istiyor.
