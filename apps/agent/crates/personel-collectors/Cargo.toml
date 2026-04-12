@@ -31,3 +31,4 @@ hex          = { workspace = true }
 # are gated with #[cfg(target_os = "windows")] at the source level.
 [target.'cfg(target_os = "windows")'.dependencies]
 personel-os  = { path = "../personel-os" }
+sha2         = { workspace = true }
