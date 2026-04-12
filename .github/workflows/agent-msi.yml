@@ -21,6 +21,7 @@ jobs:
 
     env:
       INPUT_VERSION: ${{ github.event.inputs.version }}
+      VCPKG_ROOT: C:\vcpkg
 
     steps:
       - uses: actions/checkout@v4
@@ -37,16 +38,19 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             apps/agent/target
-          key: agent-msi-v2-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
+          key: agent-msi-v3-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
 
-      - name: Install OpenSSL (pre-built, for SQLCipher linkage)
+      - name: Install OpenSSL via vcpkg
         run: |
-          choco install openssl --version=3.3.2 -y --no-progress --params "'/DIR:C:\OpenSSL'"
-          echo "OPENSSL_DIR=C:\OpenSSL" >> $env:GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=C:\OpenSSL\lib" >> $env:GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=C:\OpenSSL\include" >> $env:GITHUB_ENV
-          if (-not (Test-Path "C:\OpenSSL\lib")) { throw "OpenSSL lib not found at C:\OpenSSL\lib" }
-          Write-Host "OpenSSL installed at C:\OpenSSL"
+          vcpkg install openssl:x64-windows-static
+          $vcpkgInstalled = "$env:VCPKG_ROOT\installed\x64-windows-static"
+          echo "OPENSSL_DIR=$vcpkgInstalled" >> $env:GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$vcpkgInstalled\lib" >> $env:GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$vcpkgInstalled\include" >> $env:GITHUB_ENV
+          echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
+          if (-not (Test-Path "$vcpkgInstalled\lib")) { throw "vcpkg OpenSSL lib not found" }
+          Write-Host "OpenSSL installed via vcpkg at $vcpkgInstalled"
+          Get-ChildItem "$vcpkgInstalled\lib\*ssl*","$vcpkgInstalled\lib\*crypto*" | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1MB,1)) MB)" }
 
       - name: Install WiX 4
         run: dotnet tool install --global wix --version 4.0.5
