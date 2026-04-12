@@ -21,7 +21,6 @@ jobs:
 
     env:
       INPUT_VERSION: ${{ github.event.inputs.version }}
-      VCPKG_ROOT: C:\vcpkg
 
     steps:
       - uses: actions/checkout@v4
@@ -38,19 +37,22 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             apps/agent/target
-          key: agent-msi-v3-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
+          key: agent-msi-v4-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
 
-      - name: Install OpenSSL via vcpkg
+      - name: Setup OpenSSL (via StrawberryPerl)
         run: |
-          vcpkg install openssl:x64-windows-static
-          $vcpkgInstalled = "$env:VCPKG_ROOT\installed\x64-windows-static"
-          echo "OPENSSL_DIR=$vcpkgInstalled" >> $env:GITHUB_ENV
-          echo "OPENSSL_LIB_DIR=$vcpkgInstalled\lib" >> $env:GITHUB_ENV
-          echo "OPENSSL_INCLUDE_DIR=$vcpkgInstalled\include" >> $env:GITHUB_ENV
+          choco install strawberryperl -y --no-progress
+          # StrawberryPerl bundles OpenSSL at C:\Strawberry\c\
+          $spSsl = "C:\Strawberry\c"
+          if (Test-Path "$spSsl\include\openssl\ssl.h") {
+            Write-Host "StrawberryPerl OpenSSL found at $spSsl"
+          } else {
+            throw "StrawberryPerl OpenSSL headers not found at $spSsl\include\openssl\"
+          }
+          echo "OPENSSL_DIR=$spSsl" >> $env:GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=$spSsl\lib" >> $env:GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=$spSsl\include" >> $env:GITHUB_ENV
           echo "OPENSSL_STATIC=1" >> $env:GITHUB_ENV
-          if (-not (Test-Path "$vcpkgInstalled\lib")) { throw "vcpkg OpenSSL lib not found" }
-          Write-Host "OpenSSL installed via vcpkg at $vcpkgInstalled"
-          Get-ChildItem "$vcpkgInstalled\lib\*ssl*","$vcpkgInstalled\lib\*crypto*" | ForEach-Object { Write-Host "  $($_.Name) ($([math]::Round($_.Length/1MB,1)) MB)" }
 
       - name: Install WiX 4
         run: dotnet tool install --global wix --version 4.0.5
