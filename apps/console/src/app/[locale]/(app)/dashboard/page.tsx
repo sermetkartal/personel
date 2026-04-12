@@ -6,6 +6,8 @@ import { listDSRs } from "@/lib/api/dsr";
 import { listLiveViewRequests } from "@/lib/api/liveview";
 import { listAuditRecords } from "@/lib/api/audit";
 import { getDLPState } from "@/lib/api/dlp-state";
+import { getEmployeesOverview } from "@/lib/api/employees";
+import type { EmployeeOverviewRow } from "@/lib/api/employees";
 import { DashboardClient } from "./dashboard-client";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -21,7 +23,7 @@ async function fetchDashboardData(accessToken: string) {
   // evidence page for the same pattern.
   const opts = { token: accessToken };
 
-  const [endpoints, dsrOpen, dsrAtRisk, dsrOverdue, liveViewPending, recentAudit, dlpState] =
+  const [endpoints, dsrOpen, dsrAtRisk, dsrOverdue, liveViewPending, recentAudit, dlpState, employeesOverview] =
     await Promise.allSettled([
       listEndpoints({ status: "active", page_size: 1 }, opts),
       listDSRs({ state: "open", page_size: 1 }, opts),
@@ -30,7 +32,13 @@ async function fetchDashboardData(accessToken: string) {
       listLiveViewRequests({ state: "REQUESTED", page_size: 10 }, opts),
       listAuditRecords({ page_size: 5 }, opts),
       getDLPState(),
+      getEmployeesOverview(undefined, opts),
     ]);
+
+  const rows: EmployeeOverviewRow[] =
+    employeesOverview.status === "fulfilled" ? employeesOverview.value.items : [];
+
+  const uam = buildUAMWidgets(rows);
 
   return {
     activeEndpointsTotal: endpoints.status === "fulfilled" ? endpoints.value.pagination.total : 0,
@@ -41,6 +49,61 @@ async function fetchDashboardData(accessToken: string) {
     pendingLiveViewItems: liveViewPending.status === "fulfilled" ? liveViewPending.value.items : [],
     recentAuditItems: recentAudit.status === "fulfilled" ? recentAudit.value.items : [],
     dlpState: dlpState.status === "fulfilled" ? dlpState.value : null,
+    uam,
+  };
+}
+
+export interface UAMWidgets {
+  currentlyActive: number;
+  totalEmployees: number;
+  topApps: { name: string; minutes: number; category: string }[];
+  mostIdle: {
+    user_id: string;
+    username: string;
+    department: string;
+    idle_minutes: number;
+    active_minutes: number;
+  }[];
+}
+
+function buildUAMWidgets(rows: EmployeeOverviewRow[]): UAMWidgets {
+  const currentlyActive = rows.filter((r) => r.is_currently_active).length;
+
+  // Aggregate top apps across everyone's daily top_apps. Same name + same
+  // category wins; ties broken by alphabetical order for stability.
+  const appMap = new Map<string, { name: string; minutes: number; category: string }>();
+  for (const r of rows) {
+    for (const app of r.today?.top_apps ?? []) {
+      const key = app.name;
+      const cur = appMap.get(key);
+      if (cur) {
+        cur.minutes += app.minutes;
+      } else {
+        appMap.set(key, { name: app.name, minutes: app.minutes, category: app.category });
+      }
+    }
+  }
+  const topApps = Array.from(appMap.values())
+    .sort((a, b) => b.minutes - a.minutes || a.name.localeCompare(b.name))
+    .slice(0, 5);
+
+  const mostIdle = [...rows]
+    .filter((r) => r.today.idle_minutes > 0)
+    .sort((a, b) => b.today.idle_minutes - a.today.idle_minutes)
+    .slice(0, 5)
+    .map((r) => ({
+      user_id: r.user_id,
+      username: r.username,
+      department: r.department,
+      idle_minutes: r.today.idle_minutes,
+      active_minutes: r.today.active_minutes,
+    }));
+
+  return {
+    currentlyActive,
+    totalEmployees: rows.length,
+    topApps,
+    mostIdle,
   };
 }
 
@@ -57,6 +120,12 @@ export default async function DashboardPage(): Promise<JSX.Element> {
     pendingLiveViewItems: [],
     recentAuditItems: [],
     dlpState: null,
+    uam: {
+      currentlyActive: 0,
+      totalEmployees: 0,
+      topApps: [],
+      mostIdle: [],
+    },
   }));
 
   return (
@@ -76,6 +145,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
           pendingLiveViews={data.pendingLiveViews}
           recentAuditItems={data.recentAuditItems}
           dlpState={data.dlpState}
+          uam={data.uam}
           userRole={session?.user.role ?? "admin"}
         />
       </Suspense>

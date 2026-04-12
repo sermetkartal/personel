@@ -170,6 +170,19 @@
       "newLiveViewRequest": "Canlı İzleme Talebi",
       "viewPendingDsrs": "Bekleyen Talepleri Görüntüle",
       "auditLog": "Denetim İzini Görüntüle"
+    },
+    "uam": {
+      "noData": "Veri yok",
+      "currentlyActive": {
+        "title": "Bugün Aktif Çalışanlar",
+        "desc": "Son 5 dakikada aktivite gösteren"
+      },
+      "topApps": {
+        "title": "En Çok Kullanılan 5 Uygulama"
+      },
+      "mostIdle": {
+        "title": "En Çok Boşta Geçiren"
+      }
     }
   },
 

@@ -170,6 +170,19 @@
       "newLiveViewRequest": "Request Live View",
       "viewPendingDsrs": "View Pending DSRs",
       "auditLog": "View Audit Trail"
+    },
+    "uam": {
+      "noData": "No data",
+      "currentlyActive": {
+        "title": "Active Employees Today",
+        "desc": "Signalled activity in the last 5 minutes"
+      },
+      "topApps": {
+        "title": "Top 5 Applications"
+      },
+      "mostIdle": {
+        "title": "Most Idle Today"
+      }
     }
   },
 

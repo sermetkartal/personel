@@ -11,13 +11,24 @@ import {
   ShieldOff,
   ArrowRight,
   Clock,
+  Activity,
+  AppWindow,
+  Moon,
 } from "lucide-react";
+import type { UAMWidgets } from "./page";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { AuditRecord, DLPStateResponse, Role } from "@/lib/api/types";
 import { formatRelativeTR } from "@/lib/utils";
+
+function formatHoursShort(mins: number): string {
+  if (mins < 60) return `${mins} dk`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return m === 0 ? `${h} sa` : `${h} sa ${m} dk`;
+}
 import { can } from "@/lib/auth/rbac";
 
 interface DashboardClientProps {
@@ -28,6 +39,7 @@ interface DashboardClientProps {
   pendingLiveViews: number;
   recentAuditItems: AuditRecord[];
   dlpState: DLPStateResponse | null;
+  uam: UAMWidgets;
   userRole: Role;
 }
 
@@ -86,9 +98,11 @@ export function DashboardClient({
   pendingLiveViews,
   recentAuditItems,
   dlpState,
+  uam,
   userRole,
 }: DashboardClientProps): JSX.Element {
   const t = useTranslations("dashboard");
+  const tUam = useTranslations("dashboard.uam");
   const tDlp = useTranslations("dlp");
   const tAudit = useTranslations("audit");
   const locale = useLocale();
@@ -194,6 +208,133 @@ export function DashboardClient({
           />
         )}
       </div>
+
+      {/* UAM widgets — "what are employees doing right now" row */}
+      {can(userRole, "view:employees") && (
+        <div className="grid gap-4 md:grid-cols-3">
+          {/* Currently active */}
+          <Link href={`/${locale}/employees`} className="block group">
+            <Card className="transition-shadow group-hover:shadow-md h-full">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">
+                  {tUam("currentlyActive.title")}
+                </CardTitle>
+                <Activity className="h-4 w-4 text-green-600" aria-hidden="true" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-3xl font-bold tabular-nums">
+                  {uam.currentlyActive}
+                  <span className="text-base font-normal text-muted-foreground ml-1">
+                    / {uam.totalEmployees}
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {tUam("currentlyActive.desc")}
+                </p>
+                <div className="mt-3 h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-green-500"
+                    style={{
+                      width: `${
+                        uam.totalEmployees === 0
+                          ? 0
+                          : Math.round((uam.currentlyActive / uam.totalEmployees) * 100)
+                      }%`,
+                    }}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          {/* Top apps */}
+          <Card className="h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {tUam("topApps.title")}
+              </CardTitle>
+              <AppWindow className="h-4 w-4 text-muted-foreground" aria-hidden="true" />
+            </CardHeader>
+            <CardContent>
+              {uam.topApps.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">
+                  {tUam("noData")}
+                </p>
+              ) : (
+                <ul className="space-y-2">
+                  {uam.topApps.map((app) => {
+                    const maxMin = uam.topApps[0]?.minutes ?? 1;
+                    const pct = Math.round((app.minutes / maxMin) * 100);
+                    return (
+                      <li key={app.name} className="text-sm">
+                        <div className="flex items-center justify-between mb-0.5">
+                          <span className="truncate font-medium">{app.name}</span>
+                          <span className="text-xs tabular-nums text-muted-foreground ml-2">
+                            {formatHoursShort(app.minutes)}
+                          </span>
+                        </div>
+                        <div className="h-1 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className={
+                              app.category === "productive"
+                                ? "h-full bg-green-500"
+                                : app.category === "distracting"
+                                  ? "h-full bg-red-500"
+                                  : "h-full bg-muted-foreground/50"
+                            }
+                            style={{ width: `${pct}%` }}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Most idle */}
+          <Card className="h-full">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">
+                {tUam("mostIdle.title")}
+              </CardTitle>
+              <Moon className="h-4 w-4 text-amber-600" aria-hidden="true" />
+            </CardHeader>
+            <CardContent>
+              {uam.mostIdle.length === 0 ? (
+                <p className="text-xs text-muted-foreground py-2">
+                  {tUam("noData")}
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {uam.mostIdle.map((r) => (
+                    <li
+                      key={r.user_id}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <Link
+                        href={`/${locale}/employees/${r.user_id}`}
+                        className="truncate hover:underline"
+                      >
+                        <span className="font-medium">{r.username}</span>
+                        {r.department && (
+                          <span className="text-xs text-muted-foreground ml-1">
+                            · {r.department}
+                          </span>
+                        )}
+                      </Link>
+                      <span className="text-xs tabular-nums text-amber-700 shrink-0">
+                        {formatHoursShort(r.idle_minutes)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
       {/* Quick actions */}
       <Card>
