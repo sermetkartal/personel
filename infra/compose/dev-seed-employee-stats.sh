@@ -127,24 +127,34 @@ raw AS (
     d.dow,
     -- Weekend: 10% chance someone worked
     CASE
+      -- current_date always looks like a weekday regardless of actual
+      -- dow, so the live demo never lands on a near-empty weekend view.
+      WHEN d.day = current_date THEN (300 + (random() * 180))::int
       WHEN d.dow >= 6 AND random() > 0.10 THEN 0
       WHEN d.dow >= 6 THEN (60 + (random() * 120))::int
       ELSE (300 + (random() * 180))::int
     END AS active_min,
     CASE
+      WHEN d.day = current_date THEN (40 + (random() * 140))::int
       WHEN d.dow >= 6 THEN (random() * 30)::int
       ELSE (40 + (random() * 140))::int
     END AS idle_min,
     CASE
+      WHEN d.day = current_date THEN (20 + (random() * 50))::int
       WHEN d.dow >= 6 THEN 0
       ELSE (20 + (random() * 50))::int
     END AS screens,
     CASE
+      WHEN d.day = current_date THEN (2000 + (random() * 8000))::int
       WHEN d.dow >= 6 THEN 0
       ELSE (2000 + (random() * 8000))::int
     END AS keys,
     -- Base score by role, then jitter
     CASE
+      WHEN d.day = current_date AND e.role = 'manager' THEN (55 + (random() * 30))::int
+      WHEN d.day = current_date AND e.department IN ('Mühendislik','BT','Güvenlik') THEN (60 + (random() * 35))::int
+      WHEN d.day = current_date AND e.department IN ('Finans','Hukuk') THEN (58 + (random() * 30))::int
+      WHEN d.day = current_date THEN (48 + (random() * 35))::int
       WHEN d.dow >= 6 THEN (30 + (random() * 40))::int
       WHEN e.role = 'manager' THEN (55 + (random() * 30))::int
       WHEN e.department IN ('Mühendislik','BT','Güvenlik') THEN (60 + (random() * 35))::int
