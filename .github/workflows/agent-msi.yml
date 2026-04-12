@@ -17,7 +17,7 @@ permissions:
 jobs:
   build-msi:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     env:
       INPUT_VERSION: ${{ github.event.inputs.version }}
