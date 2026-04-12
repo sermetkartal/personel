@@ -94,8 +94,11 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     registry.register(Box::new(KeystrokeMetaCollector::new()));
     registry.register(Box::new(KeystrokeContentCollector::new()));
 
+    // start_all is intentionally infallible: individual collector failures are
+    // logged at error level and do not abort the agent. Inspect health_all()
+    // on the 30-second tick to detect collectors that failed to start.
     registry.start_all(&ctx).await.context("start collectors")?;
-    info!("all collectors started");
+    info!("all collectors started — individual failures logged above if any");
 
     // ── Transport ─────────────────────────────────────────────────────────────
     let (transport_stop_tx, transport_stop_rx) = oneshot::channel::<()>();

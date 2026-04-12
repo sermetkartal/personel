@@ -30,6 +30,9 @@ pub mod screen;
 pub mod usb;
 pub mod window_title;
 
+#[cfg(test)]
+mod tests_logic;
+
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -172,11 +175,19 @@ impl CollectorRegistry {
 
     /// Starts all registered collectors.
     ///
-    /// # Errors
+    /// Collector failures are **isolated**: if one collector fails to start,
+    /// the error is logged at `error!` level and the remaining collectors
+    /// continue to start. This prevents a single faulty collector (e.g., a
+    /// missing OS API on an unsupported Windows build) from taking down the
+    /// entire agent.
     ///
-    /// Returns the first error encountered. Any collectors that were already
-    /// started are NOT stopped automatically; callers should call
-    /// [`stop_all`] on error.
+    /// Callers can inspect [`health_all`] immediately after `start_all` to
+    /// identify which collectors started successfully.
+    ///
+    /// # Returns
+    ///
+    /// Always returns `Ok(())`. Individual start failures are observable
+    /// through the `tracing` log stream (level `error`).
     pub async fn start_all(&mut self, ctx: &CollectorCtx) -> Result<()> {
         for collector in &self.collectors {
             let name = collector.name();
@@ -184,8 +195,14 @@ impl CollectorRegistry {
             match collector.start(ctx.clone()).await {
                 Ok(handle) => self.handles.push(handle),
                 Err(e) => {
-                    error!(name, error = %e, "collector failed to start");
-                    return Err(e);
+                    // Log loudly but do NOT propagate — other collectors must
+                    // continue to run. The 30-second health tick will surface
+                    // the gap as a missing health snapshot.
+                    error!(
+                        collector = name,
+                        error = %e,
+                        "collector failed to start — continuing with remaining collectors"
+                    );
                 }
             }
         }

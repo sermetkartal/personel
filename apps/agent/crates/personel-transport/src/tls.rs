@@ -12,6 +12,24 @@
 //!
 //! The agent also presents its own mTLS client certificate (stored DPAPI-
 //! protected on disk) during the handshake.
+//!
+//! # Pin rotation
+//!
+//! Configure **two or more** pins in [`TlsConfig::spki_pins`]:
+//! - Index 0: the current active CA SPKI pin.
+//! - Index 1+: backup pin(s) for the next CA to be rotated in.
+//!
+//! The verifier accepts a handshake if **any** pin in the set matches. This
+//! allows the server CA to be rotated without a simultaneous agent update.
+//! Remove the old pin only after all agents have received the new pin via
+//! config push.
+//!
+//! # Pin failure behaviour
+//!
+//! On mismatch the connection is rejected, a `warn!` is emitted (log sink is
+//! the agent's OTLP pipeline), and an `AgentError::PinMismatch` is returned.
+//! The caller (transport layer) should treat `PinMismatch` as a tamper event
+//! and emit an `agent.tamper_detected` telemetry event.
 
 use std::sync::Arc;
 
@@ -20,8 +38,29 @@ use rustls::pki_types::{CertificateDer, ServerName, UnixTime};
 use rustls::{ClientConfig, DigitallySignedStruct, Error, SignatureScheme};
 use sha2::{Digest, Sha256};
 use tracing::{debug, warn};
+use x509_parser::prelude::{FromDer, X509Certificate};
 
 use personel_core::error::{AgentError, Result};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PinSet
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// A set of allowed SPKI SHA-256 pins loaded from agent configuration.
+///
+/// Each element is a 32-byte SHA-256 digest of the DER-encoded
+/// `SubjectPublicKeyInfo` field of a trusted CA certificate. Configure at least
+/// two entries (current + backup) to enable zero-downtime CA rotation.
+///
+/// # Example
+///
+/// ```rust,no_run
+/// # use personel_transport::tls::PinSet;
+/// let current: [u8; 32] = [0u8; 32]; // replace with real SHA-256
+/// let backup:  [u8; 32] = [1u8; 32]; // next CA pin, staged for rotation
+/// let pins: PinSet = vec![current, backup];
+/// ```
+pub type PinSet = Vec<[u8; 32]>;
 
 // ──────────────────────────────────────────────────────────────────────────────
 // PinningVerifier
@@ -87,28 +126,62 @@ impl PinningVerifier {
         Ok(Arc::new(Self { pins, inner }))
     }
 
-    fn check_pins(&self, intermediates: &[CertificateDer<'_>]) -> std::result::Result<(), Error> {
+    /// Extracts the DER-encoded `SubjectPublicKeyInfo` bytes from a certificate
+    /// and returns their SHA-256 digest.
+    ///
+    /// Returns `None` if the certificate cannot be parsed (malformed DER).
+    fn spki_hash_of(cert_der: &CertificateDer<'_>) -> Option<[u8; 32]> {
+        // x509_parser parses the DER in zero-copy fashion and gives us direct
+        // access to the raw SPKI bytes, which we then hash.
+        let (_, parsed) = X509Certificate::from_der(cert_der.as_ref()).ok()?;
+        let spki_raw = parsed.public_key().raw;
+        let hash: [u8; 32] = Sha256::digest(spki_raw).into();
+        Some(hash)
+    }
+
+    /// Checks whether any certificate in `certs` has an SPKI SHA-256 that
+    /// matches one of the configured pins.
+    ///
+    /// - If `self.pins` is empty the check is skipped (enrollment/bootstrap mode).
+    /// - If a match is found the connection proceeds.
+    /// - If no match is found the connection is rejected and a tamper-alert log
+    ///   line is emitted at `warn!` level.
+    fn check_pins(&self, certs: &[CertificateDer<'_>]) -> std::result::Result<(), Error> {
         if self.pins.is_empty() {
-            debug!("pin check skipped: no pins configured");
+            debug!("SPKI pin check skipped: no pins configured (enrollment mode)");
             return Ok(());
         }
 
-        for cert in intermediates {
-            // Extract the SubjectPublicKeyInfo field via a simple DER walk.
-            // A full ASN.1 parser is not needed here; we just need the SPKI
-            // bytes to hash. In production use `x509-parser` or `rcgen` to
-            // extract SPKI robustly.
-            // TODO: replace this stub with proper SPKI extraction using
-            //       `x509-parser` crate (add to dependencies).
-            let spki_hash: [u8; 32] = Sha256::digest(cert.as_ref()).into();
-            if self.pins.contains(&spki_hash) {
-                debug!("SPKI pin matched");
-                return Ok(());
+        for cert in certs {
+            match Self::spki_hash_of(cert) {
+                Some(hash) if self.pins.contains(&hash) => {
+                    debug!(
+                        spki_sha256 = hex::encode(hash),
+                        "SPKI pin matched — connection authorised"
+                    );
+                    return Ok(());
+                }
+                Some(hash) => {
+                    debug!(
+                        spki_sha256 = hex::encode(hash),
+                        "SPKI pin miss for this cert — checking next"
+                    );
+                }
+                None => {
+                    debug!("could not parse SPKI from certificate DER — skipping");
+                }
             }
         }
 
-        warn!("SPKI pin mismatch — no certificate in chain matched pinset");
-        Err(Error::General("SPKI pin mismatch".into()))
+        // No cert in the chain matched any pin.
+        warn!(
+            pin_count = self.pins.len(),
+            "SPKI pin mismatch — connection rejected; possible MITM or misconfigured CA; \
+             emitting tamper alert"
+        );
+        // Use a typed rustls error so the transport layer can distinguish this
+        // from a generic TLS failure and emit an agent.tamper_detected event.
+        Err(Error::General("SPKI pin mismatch: agent.tamper_detected".into()))
     }
 }
 

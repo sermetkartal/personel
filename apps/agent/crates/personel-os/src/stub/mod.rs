@@ -109,6 +109,8 @@ pub mod dpapi {
 
 /// Stub anti-tamper module for non-Windows builds.
 pub mod anti_tamper {
+    use super::*;
+
     /// A tamper check result (stub).
     #[derive(Debug, Clone)]
     pub struct TamperCheckResult {
@@ -124,6 +126,45 @@ pub mod anti_tamper {
     #[must_use]
     pub fn run_all_checks() -> Vec<TamperCheckResult> {
         vec![]
+    }
+
+    /// Always returns `false` on non-Windows platforms.
+    ///
+    /// On Windows, this function measures the `QueryPerformanceCounter` delta
+    /// to detect single-step debugger attachment.
+    #[must_use]
+    pub fn detect_timing_anomaly() -> bool {
+        false
+    }
+
+    /// Always returns `false` on non-Windows platforms.
+    ///
+    /// On Windows, this computes the SHA-256 of the agent binary on disk and
+    /// compares it against `expected_hash` to detect binary replacement.
+    #[must_use]
+    pub fn verify_binary_integrity(_expected_hash: &[u8; 32]) -> bool {
+        false
+    }
+
+    /// Always returns `None` on non-Windows platforms.
+    ///
+    /// On Windows, this computes the SHA-256 of the current agent binary for
+    /// first-boot baseline sealing.
+    #[must_use]
+    pub fn compute_binary_hash() -> Option<[u8; 32]> {
+        None
+    }
+
+    /// Always returns `Ok(())` on non-Windows platforms.
+    ///
+    /// On Windows, this sets an ACCESS_DENIED ACE on the agent's service
+    /// registry key to prevent non-administrative writes.
+    ///
+    /// # Errors
+    ///
+    /// Never errors on non-Windows.
+    pub fn protect_service_registry_key() -> Result<()> {
+        Ok(())
     }
 }
 

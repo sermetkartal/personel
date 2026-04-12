@@ -172,6 +172,11 @@ sysinfo        = "0.30"
 # ── Hex encoding ──
 hex            = "0.4"
 
+# ── X.509 / ASN.1 parsing ──
+# x509-parser: zero-copy DER/PEM certificate parser used by personel-transport
+# for SPKI extraction during TLS certificate pinning.
+x509-parser    = { version = "0.16", default-features = false }
+
 [profile.release]
 opt-level     = 3
 lto           = "thin"

@@ -132,3 +132,165 @@ fn base64url_decode(s: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
+// ──────────────────────────────────────────────────────────────────────────────
+// Tests
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ed25519_dalek::{SigningKey, Signer};
+    use rand::rngs::OsRng;
+
+    /// Base64url encodes bytes without padding (matches `base64url_decode`).
+    fn base64url_encode(data: &[u8]) -> String {
+        let alphabet =
+            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+        let chars: Vec<char> = alphabet.chars().collect();
+        let mut out = String::new();
+        let mut bits: u32 = 0;
+        let mut bit_count: u32 = 0;
+        for &byte in data {
+            bits = (bits << 8) | u32::from(byte);
+            bit_count += 8;
+            while bit_count >= 6 {
+                bit_count -= 6;
+                out.push(chars[((bits >> bit_count) & 0x3F) as usize]);
+            }
+        }
+        if bit_count > 0 {
+            out.push(chars[((bits << (6 - bit_count)) & 0x3F) as usize]);
+        }
+        out
+    }
+
+    /// Creates a valid test manifest JSON + `VerifyingKey`.
+    fn make_signed_manifest(
+        version: &str,
+        signing_key: &SigningKey,
+    ) -> (String, VerifyingKey) {
+        let verifying = signing_key.verifying_key();
+        // Build canonical bytes (same order as `canonical_bytes`)
+        let canonical = serde_json::json!({
+            "artifact_sha256": "aabbcc",
+            "artifact_url": "/updates/test.exe",
+            "canary": false,
+            "channel": "stable",
+            "signing_key_id": "update-signing-v1",
+            "version": version,
+        });
+        let canonical_bytes = canonical.to_string().into_bytes();
+        let sig: ed25519_dalek::Signature = signing_key.sign(&canonical_bytes);
+        let sig_b64 = base64url_encode(&sig.to_bytes());
+
+        let json = serde_json::json!({
+            "version": version,
+            "channel": "stable",
+            "artifact_url": "/updates/test.exe",
+            "artifact_sha256": "aabbcc",
+            "signature": sig_b64,
+            "signing_key_id": "update-signing-v1",
+            "canary": false,
+        })
+        .to_string();
+
+        (json, verifying)
+    }
+
+    // ── Ed25519 signature verification ────────────────────────────────────────
+
+    #[test]
+    fn parse_and_verify_valid_signature() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let (json, vk) = make_signed_manifest("1.2.3", &signing_key);
+        let manifest = UpdateManifest::parse_and_verify(&json, &vk);
+        assert!(manifest.is_ok(), "valid manifest should verify: {:?}", manifest.err());
+        assert_eq!(manifest.unwrap().version, "1.2.3");
+    }
+
+    #[test]
+    fn parse_and_verify_wrong_key_fails() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let (json, _vk) = make_signed_manifest("1.0.0", &signing_key);
+        // Use a different key to verify — must fail
+        let wrong_key = SigningKey::generate(&mut OsRng);
+        let result = UpdateManifest::parse_and_verify(&json, &wrong_key.verifying_key());
+        assert!(
+            matches!(result, Err(personel_core::error::AgentError::UpdateSignature)),
+            "wrong key must yield UpdateSignature error"
+        );
+    }
+
+    #[test]
+    fn parse_and_verify_tampered_version_fails() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let (json, vk) = make_signed_manifest("1.2.3", &signing_key);
+        // Tamper: replace version string in JSON
+        let tampered = json.replace("\"1.2.3\"", "\"9.9.9\"");
+        let result = UpdateManifest::parse_and_verify(&tampered, &vk);
+        assert!(
+            result.is_err(),
+            "tampered manifest must not verify"
+        );
+    }
+
+    #[test]
+    fn parse_and_verify_malformed_json_fails() {
+        let signing_key = SigningKey::generate(&mut OsRng);
+        let vk = signing_key.verifying_key();
+        let result = UpdateManifest::parse_and_verify("not-json", &vk);
+        assert!(result.is_err(), "malformed JSON must fail parsing");
+    }
+
+    // ── verify_artifact_hash ──────────────────────────────────────────────────
+
+    #[test]
+    fn artifact_hash_matches() {
+        let data = b"binary payload";
+        let hex = hex::encode(Sha256::digest(data));
+        let manifest = UpdateManifest {
+            version: "1.0.0".into(),
+            channel: "stable".into(),
+            artifact_url: "/u".into(),
+            artifact_sha256: hex,
+            signature: String::new(),
+            signing_key_id: "k".into(),
+            canary: false,
+        };
+        assert!(manifest.verify_artifact_hash(data).is_ok());
+    }
+
+    #[test]
+    fn artifact_hash_mismatch_returns_error() {
+        let manifest = UpdateManifest {
+            version: "1.0.0".into(),
+            channel: "stable".into(),
+            artifact_url: "/u".into(),
+            artifact_sha256: "deadbeef".into(),
+            signature: String::new(),
+            signing_key_id: "k".into(),
+            canary: false,
+        };
+        let result = manifest.verify_artifact_hash(b"wrong content");
+        assert!(
+            matches!(result, Err(personel_core::error::AgentError::ArtifactHash)),
+            "hash mismatch must yield ArtifactHash error"
+        );
+    }
+
+    #[test]
+    fn artifact_hash_case_insensitive() {
+        let data = b"case test";
+        let hex_upper = hex::encode(Sha256::digest(data)).to_uppercase();
+        let manifest = UpdateManifest {
+            version: "1.0.0".into(),
+            channel: "stable".into(),
+            artifact_url: "/u".into(),
+            artifact_sha256: hex_upper,
+            signature: String::new(),
+            signing_key_id: "k".into(),
+            canary: false,
+        };
+        assert!(manifest.verify_artifact_hash(data).is_ok());
+    }
+}

@@ -348,6 +348,102 @@ async fn receive_health_ok() -> Result<String, ()> {
     }
 }
 
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// JSON'dan `IpcCommand` parse edilebilmeli (iç tip, test amaçlı).
+    fn parse_cmd(json: &str) -> Result<IpcCommand, serde_json::Error> {
+        serde_json::from_str(json)
+    }
+
+    // ── IPC command JSON parsing ──────────────────────────────────────────────
+
+    #[test]
+    fn parse_heartbeat_ack_command() {
+        let json = r#"{"cmd":"heartbeat_ack"}"#;
+        let cmd: IpcCommand = parse_cmd(json).expect("heartbeat_ack should parse");
+        assert!(matches!(cmd, IpcCommand::HeartbeatAck));
+    }
+
+    #[test]
+    fn parse_tamper_alert_command() {
+        let json = r#"{"cmd":"tamper_alert","detail":"binary modified"}"#;
+        let cmd: IpcCommand = parse_cmd(json).expect("tamper_alert should parse");
+        match cmd {
+            IpcCommand::TamperAlert { detail } => {
+                assert_eq!(detail, "binary modified");
+            }
+            _ => panic!("expected TamperAlert"),
+        }
+    }
+
+    #[test]
+    fn parse_health_ok_command() {
+        let json = r#"{"cmd":"health_ok","version":"1.3.0"}"#;
+        let cmd: IpcCommand = parse_cmd(json).expect("health_ok should parse");
+        match cmd {
+            IpcCommand::HealthOk { version } => assert_eq!(version, "1.3.0"),
+            _ => panic!("expected HealthOk"),
+        }
+    }
+
+    #[test]
+    fn parse_update_ready_command() {
+        let json =
+            r#"{"cmd":"update_ready","path":"/tmp/personel-agent.new","hash":"abcdef"}"#;
+        let cmd: IpcCommand = parse_cmd(json).expect("update_ready should parse");
+        match cmd {
+            IpcCommand::UpdateReady { path, hash } => {
+                assert_eq!(path, "/tmp/personel-agent.new");
+                assert_eq!(hash, "abcdef");
+            }
+            _ => panic!("expected UpdateReady"),
+        }
+    }
+
+    #[test]
+    fn parse_invalid_json_fails() {
+        assert!(parse_cmd("not json").is_err());
+    }
+
+    #[test]
+    fn parse_unknown_cmd_fails() {
+        // serde tag=cmd → unknown cmd variant → error
+        let json = r#"{"cmd":"unknown_command"}"#;
+        assert!(
+            parse_cmd(json).is_err(),
+            "unknown command type must fail to parse"
+        );
+    }
+
+    // ── HEALTH_TIMEOUT sabiti ─────────────────────────────────────────────────
+
+    #[test]
+    fn health_timeout_is_sixty_seconds() {
+        assert_eq!(HEALTH_TIMEOUT.as_secs(), 60);
+    }
+
+    // ── IpcEvent enum ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn ipc_event_tamper_alert_carries_detail() {
+        let ev = IpcEvent::TamperAlert("test detail".to_string());
+        match ev {
+            IpcEvent::TamperAlert(s) => assert_eq!(s, "test detail"),
+            _ => panic!("wrong variant"),
+        }
+    }
+
+    #[test]
+    fn ipc_event_heartbeat_ack_is_unit_variant() {
+        let ev = IpcEvent::HeartbeatAck;
+        assert!(matches!(ev, IpcEvent::HeartbeatAck));
+    }
+}
+
 // ── OS helpers ────────────────────────────────────────────────────────────────
 
 /// Returns the expected path of the running agent binary.

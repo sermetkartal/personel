@@ -151,6 +151,78 @@ fn is_agent_running() -> bool {
     found
 }
 
+/// Pure helper: given a process name list, returns whether `target` is present.
+///
+/// Used in tests to avoid real OS process enumeration.
+fn name_in_list(names: &[&str], target: &str) -> bool {
+    names.iter().any(|&n| n == target)
+}
+
+// ── Tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── is_agent_running logic (pure helper) ──────────────────────────────────
+
+    #[test]
+    fn name_in_list_found() {
+        assert!(name_in_list(&["personel-agent", "system"], "personel-agent"));
+    }
+
+    #[test]
+    fn name_in_list_not_found() {
+        assert!(!name_in_list(&["foo", "bar"], "personel-agent"));
+    }
+
+    #[test]
+    fn name_in_list_empty_returns_false() {
+        assert!(!name_in_list(&[], "personel-agent"));
+    }
+
+    /// Real `is_agent_running` çağrısı: agent process bu testte çalışmadığından
+    /// `false` veya `true` dönebilir — önemli olan panic olmaması.
+    #[test]
+    fn is_agent_running_does_not_panic() {
+        let _ = is_agent_running();
+    }
+
+    // ── Watchdog constants ────────────────────────────────────────────────────
+
+    #[test]
+    fn poll_interval_is_five_seconds() {
+        assert_eq!(POLL_INTERVAL.as_secs(), 5);
+    }
+
+    #[test]
+    fn miss_threshold_is_three() {
+        assert_eq!(MISS_THRESHOLD, 3);
+    }
+
+    #[test]
+    fn agent_process_name_not_empty() {
+        assert!(!AGENT_PROCESS_NAME.is_empty());
+    }
+
+    // ── Rollback timeout logic (pure version) ─────────────────────────────────
+
+    /// `consecutive_restarts > 10` durumunda backoff hesabı doğru olmalı.
+    #[test]
+    fn restart_backoff_calculation() {
+        let consecutive_restarts: u64 = 15;
+        let delay_secs = (30 * consecutive_restarts).min(300);
+        assert_eq!(delay_secs, 300, "backoff must cap at 300 s");
+    }
+
+    #[test]
+    fn restart_backoff_low_value() {
+        let consecutive_restarts: u64 = 2;
+        let delay_secs = (30 * consecutive_restarts).min(300);
+        assert_eq!(delay_secs, 60);
+    }
+}
+
 /// Attempts to restart the agent via SCM (`sc start`) or direct spawn.
 async fn restart_agent() {
     info!("watchdog: attempting to restart personel-agent");

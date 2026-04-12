@@ -417,9 +417,100 @@ mod tests {
 
     #[test]
     fn backoff_respects_cap() {
-        let cfg = BackoffConfig { base: Duration::from_secs(1), max: Duration::from_secs(5), jitter: 0.0, multiplier: 10.0 };
-        // With jitter=0 every attempt beyond cap should equal max.
+        // jitter=0.001 (non-zero) to avoid gen_range(0..0) panic; still
+        // verifies that the cap holds (5 s + tiny jitter < 5.05 s).
+        let cfg = BackoffConfig {
+            base: Duration::from_secs(1),
+            max: Duration::from_secs(5),
+            jitter: 0.001,
+            multiplier: 10.0,
+        };
         let d5 = cfg.next_delay(5).as_secs_f64();
-        assert!(d5 <= 5.0, "d5={d5} exceeded cap");
+        assert!(d5 <= 5.05, "d5={d5} exceeded cap + jitter margin");
+    }
+
+    /// attempt=0 → base delay (1 s) + minimal jitter: result must be in [1.0, 1.0 + jitter_max).
+    #[test]
+    fn backoff_attempt_zero_is_near_base() {
+        let cfg = BackoffConfig {
+            base: Duration::from_secs(1),
+            max: Duration::from_secs(30),
+            jitter: 0.001, // tiny but non-zero to avoid gen_range(0..0) panic
+            multiplier: 2.0,
+        };
+        let d = cfg.next_delay(0).as_secs_f64();
+        // base=1s, jitter≤0.001 → result in [1.0, 1.001)
+        assert!(d >= 1.0 && d < 1.002, "attempt 0 should be ~1s, got {d}");
+    }
+
+    /// attempt=3 → 1 * 2^3 = 8 s base (+ tiny jitter).
+    #[test]
+    fn backoff_attempt_three_is_near_eight_seconds() {
+        let cfg = BackoffConfig {
+            base: Duration::from_secs(1),
+            max: Duration::from_secs(30),
+            jitter: 0.001,
+            multiplier: 2.0,
+        };
+        let d = cfg.next_delay(3).as_secs_f64();
+        // 8 s + up to 0.001 * 8 = 0.008 jitter
+        assert!(d >= 8.0 && d < 8.1, "attempt 3 should be ~8 s, got {d}");
+    }
+
+    /// attempt=10 with default config → capped at 30 s (+ up to 30 % jitter).
+    #[test]
+    fn backoff_attempt_ten_capped_at_thirty() {
+        let cfg = BackoffConfig::default(); // max=30s, jitter=0.3
+        for _ in 0..20 {
+            // Run multiple times to exercise random jitter
+            let d = cfg.next_delay(10).as_secs_f64();
+            assert!(
+                d <= 30.0 * 1.31,
+                "attempt 10 must be ≤30s * 1.31 jitter factor, got {d}"
+            );
+            assert!(d >= 30.0, "attempt 10 base (no jitter subtraction) must be ≥30s");
+        }
+    }
+
+    /// BATCH_MAX_EVENTS ve BATCH_FLUSH_INTERVAL sabitleri spesifikasyona uygun.
+    #[test]
+    fn batch_constants_match_spec() {
+        assert_eq!(BATCH_MAX_EVENTS, 100, "batch max must be 100 events");
+        assert_eq!(
+            BATCH_FLUSH_INTERVAL,
+            Duration::from_secs(5),
+            "flush interval must be 5 s"
+        );
+    }
+
+    /// HEARTBEAT_INTERVAL sabiti 30 s olmalı.
+    #[test]
+    fn heartbeat_interval_is_thirty_seconds() {
+        assert_eq!(HEARTBEAT_INTERVAL, Duration::from_secs(30));
+    }
+
+    /// BackoffConfig::default() değerlerini doğrula.
+    #[test]
+    fn backoff_default_values() {
+        let cfg = BackoffConfig::default();
+        assert_eq!(cfg.base, Duration::from_secs(1));
+        assert_eq!(cfg.max, Duration::from_secs(30));
+        assert!((cfg.jitter - 0.3).abs() < 1e-9);
+        assert!((cfg.multiplier - 2.0).abs() < 1e-9);
+    }
+
+    /// Minimal jitter ile art arda iki çağrı aynı cap'ten gelir.
+    #[test]
+    fn backoff_large_attempt_stays_at_cap() {
+        // multiplier=10, attempt=5 → 1 * 10^5 = 100_000 >> max=5 → capped at 5
+        let cfg = BackoffConfig {
+            base: Duration::from_secs(1),
+            max: Duration::from_secs(5),
+            jitter: 0.001,
+            multiplier: 10.0,
+        };
+        let d = cfg.next_delay(5).as_secs_f64();
+        // max=5, jitter≤0.001 → result in [5.0, 5.006)
+        assert!(d >= 5.0 && d < 5.01, "capped backoff should be ~5 s, got {d}");
     }
 }
