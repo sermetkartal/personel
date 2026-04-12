@@ -307,14 +307,16 @@ mod windows {
                 "print job"
             );
 
+            // windows 0.54: JOB_INFO_1W has no Size field — size_bytes removed
+            // from payload. TotalPages is the user-visible count which is
+            // sufficient for KVKK audit purposes.
             let payload = format!(
-                r#"{{"job_id":{},"document_name":{:?},"printer_name":{:?},"user_name":{:?},"total_pages":{},"size_bytes":{}}}"#,
+                r#"{{"job_id":{},"document_name":{:?},"printer_name":{:?},"user_name":{:?},"total_pages":{}}}"#,
                 job.JobId,
                 doc_name,
                 printer_name,
                 user_name,
                 job.TotalPages,
-                job.Size,
             );
 
             let now = ctx.clock.now_unix_nanos();

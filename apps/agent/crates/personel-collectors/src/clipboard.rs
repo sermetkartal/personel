@@ -194,15 +194,14 @@ mod windows {
             )
         };
 
-        let hwnd = match hwnd {
-            Ok(h) if h.0 != 0 => h,
-            _ => {
-                error!("clipboard: CreateWindowExW failed");
-                healthy.store(false, Ordering::Relaxed);
-                let _ = stop_rx.blocking_recv();
-                return;
-            }
-        };
+        // windows 0.54: CreateWindowExW returns HWND directly (Ok wrapping
+        // was added in 0.58+). Validate by checking inner pointer value.
+        if hwnd.0 == 0 {
+            error!("clipboard: CreateWindowExW failed");
+            healthy.store(false, Ordering::Relaxed);
+            let _ = stop_rx.blocking_recv();
+            return;
+        }
 
         // Register for clipboard notifications.
         // SAFETY: hwnd is a valid message-only window created above.

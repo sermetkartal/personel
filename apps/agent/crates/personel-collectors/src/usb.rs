@@ -241,9 +241,9 @@ mod windows {
     /// It accesses the global `CALLBACK_STATE` under a mutex.
     unsafe extern "system" fn usb_notification_callback(
         _hnotify: HCMNOTIFICATION,
-        _context: *mut std::ffi::c_void,
+        _context: *const std::ffi::c_void,
         action: CM_NOTIFY_ACTION,
-        event_data: *mut windows::Win32::Devices::DeviceAndDriverInstallation::CM_NOTIFY_EVENT_DATA,
+        event_data: *const windows::Win32::Devices::DeviceAndDriverInstallation::CM_NOTIFY_EVENT_DATA,
         _event_data_size: u32,
     ) -> u32 {
         let kind = match action {
