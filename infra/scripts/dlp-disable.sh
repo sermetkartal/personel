@@ -45,8 +45,11 @@ done
 [[ -n "$ACTOR_ID" && -n "$REASON" ]] \
   || { echo "$LOG_PREFIX ERROR: --actor-id and --reason are required" >&2; exit 2; }
 
-log()  { echo "$LOG_PREFIX $(date --iso-8601=seconds) $*"; }
-err()  { echo "$LOG_PREFIX $(date --iso-8601=seconds) ERROR: $*" >&2; }
+# iso_date: portable ISO-8601 timestamp — BSD date (macOS) uses -u +format;
+# GNU date uses --iso-8601=seconds. Both output the same format.
+iso_date() { date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date --iso-8601=seconds; }
+log()  { echo "$LOG_PREFIX $(iso_date) $*"; }
+err()  { echo "$LOG_PREFIX $(iso_date) ERROR: $*" >&2; }
 need() { command -v "$1" &>/dev/null || { err "required: $1"; exit 3; }; }
 
 need docker

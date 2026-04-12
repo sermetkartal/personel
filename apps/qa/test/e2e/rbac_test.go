@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/personel/qa/internal/harness"
@@ -172,9 +173,6 @@ func TestKeystrokeEndpointsDontExist(t *testing.T) {
 }
 
 // newTestRegistry returns a new Prometheus registry for tests.
-// Defined here to avoid circular imports with e2e helpers.
-func newTestRegistry() interface{ Register(interface{}) error } {
-	// We return a duck-typed wrapper. The actual prometheus.NewRegistry() call
-	// happens in the load test runner which has the import.
-	return nil
+func newTestRegistry() prometheus.Registerer {
+	return prometheus.NewRegistry()
 }

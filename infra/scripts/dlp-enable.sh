@@ -67,8 +67,11 @@ fi
 
 # ---- Helpers -----------------------------------------------------------------
 
-log()  { echo "$LOG_PREFIX $(date --iso-8601=seconds) $*"; }
-err()  { echo "$LOG_PREFIX $(date --iso-8601=seconds) ERROR: $*" >&2; }
+# iso_date: portable ISO-8601 timestamp — BSD date (macOS) uses -u +format;
+# GNU date uses --iso-8601=seconds. Both output the same format.
+iso_date() { date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date --iso-8601=seconds; }
+log()  { echo "$LOG_PREFIX $(iso_date) $*"; }
+err()  { echo "$LOG_PREFIX $(iso_date) ERROR: $*" >&2; }
 need() { command -v "$1" &>/dev/null || { err "required command missing: $1"; exit 3; }; }
 
 need docker

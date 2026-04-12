@@ -41,9 +41,18 @@ func AssertNoKeystrokePlaintext(t *testing.T, body []byte, msg string) {
 	}
 }
 
+// AuditChainT is the minimal testing interface required by AssertAuditChainIntact.
+// *testing.T satisfies this interface, as does any mock testing type that
+// implements Helper, Errorf, and FailNow.
+type AuditChainT interface {
+	Helper()
+	Errorf(format string, args ...interface{})
+	FailNow()
+}
+
 // AssertAuditChainIntact verifies that a sequence of audit records forms a
 // valid hash chain. Each record must contain this_hash = SHA256(seq || payload_hash || prev_hash).
-func AssertAuditChainIntact(t *testing.T, records []AuditRecord) {
+func AssertAuditChainIntact(t AuditChainT, records []AuditRecord) {
 	t.Helper()
 	require.NotEmpty(t, records, "audit chain must not be empty")
 
