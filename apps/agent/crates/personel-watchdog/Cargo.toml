@@ -14,6 +14,10 @@ personel-os   = { path = "../personel-os" }
 
 tokio         = { workspace = true }
 anyhow        = { workspace = true }
+serde         = { workspace = true }
+serde_json    = { workspace = true }
+sha2          = { workspace = true }
+hex           = { workspace = true }
 tracing       = { workspace = true }
 tracing-subscriber = { workspace = true }
 sysinfo       = { workspace = true }

@@ -150,6 +150,16 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
         });
     }
 
+    // ── Post-update health report ─────────────────────────────────────────────
+    // After a successful update swap the watchdog waits up to 60 s for a
+    // `health_ok` message. We send it once all critical subsystems are up.
+    tokio::spawn(async {
+        if let Err(e) = report_health_ok().await {
+            // Non-fatal: watchdog will roll back after timeout if it was waiting.
+            tracing::warn!(error = %e, "health_ok report to watchdog failed");
+        }
+    });
+
     // ── Health tick ───────────────────────────────────────────────────────────
     let health_queue = Arc::clone(&queue);
     let _health_task = tokio::spawn(async move {
@@ -175,5 +185,55 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     let _ = transport_stop_tx.send(());
 
     info!("personel-agent stopped");
+    Ok(())
+}
+
+// ── Post-update health report ─────────────────────────────────────────────────
+
+/// Sends `{"cmd":"health_ok","version":"<ver>"}` to the watchdog IPC pipe/socket.
+///
+/// Called once at startup so the watchdog can confirm a successful update swap
+/// and remove the rollback copy. If the watchdog is not in an update-swap window
+/// this message is silently ignored on the watchdog side.
+///
+/// Errors are non-fatal: the watchdog has a 60-second timeout and will roll back
+/// if no health confirmation arrives.
+async fn report_health_ok() -> anyhow::Result<()> {
+    use tokio::io::AsyncWriteExt;
+
+    let line = format!(
+        "{}\n",
+        serde_json::json!({
+            "cmd": "health_ok",
+            "version": crate::config::AGENT_VERSION,
+        })
+    );
+
+    #[cfg(target_os = "windows")]
+    {
+        use tokio::net::windows::named_pipe::ClientOptions;
+        const PIPE: &str = r"\\.\pipe\personel-watchdog-cmd";
+        let mut client = ClientOptions::new()
+            .open(PIPE)
+            .map_err(|e| anyhow::anyhow!("health pipe open: {e}"))?;
+        client.write_all(line.as_bytes()).await
+            .map_err(|e| anyhow::anyhow!("health pipe write: {e}"))?;
+        client.flush().await
+            .map_err(|e| anyhow::anyhow!("health pipe flush: {e}"))?;
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        use tokio::net::UnixStream;
+        const SOCK: &str = "/tmp/personel-watchdog-health.sock";
+        let mut stream = UnixStream::connect(SOCK).await
+            .map_err(|e| anyhow::anyhow!("health socket connect ({SOCK}): {e}"))?;
+        stream.write_all(line.as_bytes()).await
+            .map_err(|e| anyhow::anyhow!("health socket write: {e}"))?;
+        stream.flush().await
+            .map_err(|e| anyhow::anyhow!("health socket flush: {e}"))?;
+    }
+
+    tracing::info!(version = crate::config::AGENT_VERSION, "health_ok sent to watchdog");
     Ok(())
 }

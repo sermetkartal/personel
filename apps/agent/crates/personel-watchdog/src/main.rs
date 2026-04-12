@@ -1,7 +1,7 @@
 //! `personel-agent-watchdog` — mutual supervision watchdog process.
 //!
 //! Monitors `personel-agent` and restarts it if it dies or stops sending
-//! heartbeats on the named pipe `\\.\pipe\personel-agent-ipc`.
+//! heartbeats on the named pipe `\\.\pipe\personel-watchdog-cmd`.
 //!
 //! # Supervision design
 //!
@@ -16,20 +16,24 @@
 //! - The watchdog is the *only* process allowed to swap the binary during
 //!   updates.
 //!
-//! # Named pipe protocol
+//! # Named pipe / Unix socket IPC
 //!
-//! Length-prefixed frames: 4-byte big-endian length prefix, then proto bytes.
-//! Message types: `Heartbeat`, `RequestRestart`, `UpdateReady`,
-//! `TamperAlert`, `ShutdownAck`.
+//! JSON-line protocol; see [`ipc`] module for command schema.
+//! Windows: `\\.\pipe\personel-watchdog-cmd`
+//! Dev (macOS/Linux): `/tmp/personel-watchdog.sock`
 
 #![deny(unsafe_code)]
+
+mod ipc;
 
 use std::time::Duration;
 
 use anyhow::Result;
 use sysinfo::System;
-use tokio::sync::oneshot;
+use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, error, info, warn};
+
+use ipc::{IpcEvent, spawn_ipc_server};
 
 // ── Watchdog configuration ────────────────────────────────────────────────────
 
@@ -37,8 +41,6 @@ use tracing::{debug, error, info, warn};
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 /// How many consecutive missed polls before the watchdog restarts the agent.
 const MISS_THRESHOLD: u32 = 3;
-/// How long to wait for the main agent to start before declaring a fault.
-const START_TIMEOUT: Duration = Duration::from_secs(30);
 /// The process name to monitor.
 const AGENT_PROCESS_NAME: &str = "personel-agent";
 
@@ -54,6 +56,11 @@ async fn main() -> Result<()> {
 
     info!("personel-agent-watchdog starting");
 
+    // IPC event channel: ipc server → watchdog main loop.
+    let (ipc_tx, ipc_rx) = mpsc::channel::<IpcEvent>(32);
+    spawn_ipc_server(ipc_tx);
+    info!("IPC server spawned");
+
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {
         tokio::signal::ctrl_c().await.ok();
@@ -61,14 +68,17 @@ async fn main() -> Result<()> {
         let _ = shutdown_tx.send(());
     });
 
-    run_watchdog_loop(shutdown_rx).await;
+    run_watchdog_loop(shutdown_rx, ipc_rx).await;
     info!("personel-agent-watchdog stopped");
     Ok(())
 }
 
 // ── Watchdog loop ─────────────────────────────────────────────────────────────
 
-async fn run_watchdog_loop(mut shutdown_rx: oneshot::Receiver<()>) {
+async fn run_watchdog_loop(
+    mut shutdown_rx: oneshot::Receiver<()>,
+    mut ipc_rx: mpsc::Receiver<IpcEvent>,
+) {
     let mut misses: u32 = 0;
     let mut consecutive_restarts: u32 = 0;
     let mut ticker = tokio::time::interval(POLL_INTERVAL);
@@ -95,7 +105,6 @@ async fn run_watchdog_loop(mut shutdown_rx: oneshot::Receiver<()>) {
                         consecutive_restarts += 1;
                         info!(consecutive_restarts, "watchdog: restarting agent");
                         if consecutive_restarts > 10 {
-                            // Exponential back-off to avoid a restart storm.
                             let delay = Duration::from_secs(
                                 (30 * consecutive_restarts as u64).min(300),
                             );
@@ -110,6 +119,20 @@ async fn run_watchdog_loop(mut shutdown_rx: oneshot::Receiver<()>) {
                     }
                 }
             }
+
+            Some(event) = ipc_rx.recv() => {
+                match event {
+                    IpcEvent::HeartbeatAck => {
+                        debug!("watchdog: heartbeat_ack via IPC; resetting miss counter");
+                        misses = 0;
+                    }
+                    IpcEvent::TamperAlert(detail) => {
+                        error!(detail, "watchdog: TAMPER ALERT received via IPC");
+                        // TODO Sprint E: emit to SIEM / telemetry pipeline.
+                    }
+                }
+            }
+
             _ = &mut shutdown_rx => {
                 info!("watchdog: shutdown signal; stopping loop");
                 break;
@@ -121,8 +144,6 @@ async fn run_watchdog_loop(mut shutdown_rx: oneshot::Receiver<()>) {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 /// Returns `true` if at least one process named `personel-agent` is running.
-///
-/// Uses `sysinfo` for cross-platform process enumeration (Windows-compatible).
 fn is_agent_running() -> bool {
     let mut sys = System::new();
     sys.refresh_processes();
@@ -131,27 +152,22 @@ fn is_agent_running() -> bool {
 }
 
 /// Attempts to restart the agent via SCM (`sc start`) or direct spawn.
-///
-/// In production (Windows service), this calls `sc start personel-agent`.
-/// In development / non-Windows, it attempts a direct spawn.
 async fn restart_agent() {
     info!("watchdog: attempting to restart personel-agent");
 
     #[cfg(target_os = "windows")]
     {
-        // Use SCM to restart the service so it inherits the correct identity.
         let output = tokio::process::Command::new("sc")
             .args(["start", "personel-agent"])
             .output()
             .await;
         match output {
+            Ok(out) if out.status.success() => {
+                info!("watchdog: sc start personel-agent succeeded");
+            }
             Ok(out) => {
-                if out.status.success() {
-                    info!("watchdog: sc start personel-agent succeeded");
-                } else {
-                    let stderr = String::from_utf8_lossy(&out.stderr);
-                    error!(%stderr, "watchdog: sc start failed");
-                }
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                error!(%stderr, "watchdog: sc start failed");
             }
             Err(e) => {
                 error!("watchdog: failed to invoke sc.exe: {e}");
@@ -161,8 +177,6 @@ async fn restart_agent() {
 
     #[cfg(not(target_os = "windows"))]
     {
-        // Dev-only: try spawning the binary directly.
-        // This will fail if the binary isn't in PATH; that's expected.
         let _ = tokio::process::Command::new("personel-agent")
             .arg("--console")
             .spawn();
