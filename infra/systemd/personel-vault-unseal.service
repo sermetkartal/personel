@@ -1,0 +1,65 @@
+# =============================================================================
+# Personel Platform — Vault Auto-Unseal Service
+#
+# SECURITY WARNING: This service stores Shamir unseal keys in an env file
+# on the host filesystem. This is acceptable for dev/staging only.
+# Production deployments MUST migrate to Vault Transit Auto-Unseal with an
+# HSM or cloud KMS (AWS KMS, Azure Key Vault, GCP CKMS).
+# See: https://developer.hashicorp.com/vault/docs/configuration/seal
+#
+# SETUP:
+#   1. Create /etc/personel/vault-unseal.env (root:root, mode 0400)
+#      with content:
+#        VAULT_UNSEAL_KEY_1=<share>
+#        VAULT_UNSEAL_KEY_2=<share>
+#        VAULT_UNSEAL_KEY_3=<share>
+#        VAULT_ADDR=https://127.0.0.1:8200
+#        VAULT_CACERT=/etc/personel/tls/tenant_ca.crt
+#
+#   2. Install and enable:
+#        sudo cp infra/systemd/personel-vault-unseal.service \
+#                             /etc/systemd/system/
+#        sudo systemctl daemon-reload
+#        sudo systemctl enable personel-vault-unseal.service
+#
+#   3. The service runs as ExecStartPre before personel-compose.service,
+#      ensuring Vault is unsealed before the application stack starts.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform — Vault Auto-Unseal (Dev/Staging)
+Documentation=file:///opt/personel/infra/runbooks/install.md
+After=docker.service network-online.target
+Requires=docker.service
+# Run before the compose stack so application services see an unsealed Vault
+Before=personel-compose.service
+PartOf=personel.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+
+# The env file must be root-owned and mode 0400
+EnvironmentFile=/etc/personel/vault-unseal.env
+
+# Suppress the security banner in systemd journal (warning is in the unit comment)
+Environment=VAULT_AUTO_UNSEAL_SUPPRESS_WARNING=1
+
+# Load unseal env from the same file (script also reads EnvironmentFile vars)
+Environment=VAULT_UNSEAL_ENV_FILE=/etc/personel/vault-unseal.env
+
+ExecStart=/opt/personel/infra/scripts/vault-auto-unseal.sh
+
+# Allow Vault container ~60 s to become reachable before giving up
+TimeoutStartSec=120
+
+# Do NOT restart automatically — a sealed Vault after a crash needs human review
+Restart=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-vault-unseal
+
+[Install]
+WantedBy=personel.target
