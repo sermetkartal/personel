@@ -110,13 +110,13 @@ mod windows {
     use tokio::sync::oneshot;
     use tracing::{debug, error, info, warn};
 
-    use windows::Win32::Foundation::{CloseHandle, HANDLE};
+    use windows::Win32::Foundation::{HANDLE, WAIT_OBJECT_0, WAIT_TIMEOUT};
     use windows::Win32::Graphics::Printing::{
         ClosePrinter, EnumJobsW, FindClosePrinterChangeNotification,
         FindFirstPrinterChangeNotification, FindNextPrinterChangeNotification,
-        OpenPrinterW, JOB_INFO_1W, PRINTER_CHANGE_ADD_JOB, PRINTER_DEFAULTS,
+        OpenPrinterW, JOB_INFO_1W, PRINTER_CHANGE_ADD_JOB,
     };
-    use windows::core::PWSTR;
+    use windows::core::{PCWSTR, PWSTR};
 
     use personel_core::event::{EventKind, Priority};
     use personel_core::ids::EventId;
@@ -135,16 +135,19 @@ mod windows {
     ) {
         info!("print: starting (FindFirstPrinterChangeNotification)");
 
-        // Open the default printer (NULL = default).
-        // SAFETY: OpenPrinterW with null name and null defaults opens the default printer.
+        // Open the default printer (NULL name = default printer).
+        // SAFETY: OpenPrinterW with null PCWSTR name and None defaults opens the default printer.
+        // windows 0.54: OpenPrinterW first param is IntoParam<PCWSTR> (not PWSTR);
+        //   third param is Option<*const PRINTER_DEFAULTSW> (PRINTER_DEFAULTS was removed).
+        //   The function returns Result<()>, not BOOL.
         let hprinter = unsafe {
             let mut hp = HANDLE::default();
-            let ok = OpenPrinterW(
-                PWSTR::null(),
+            let result = OpenPrinterW(
+                PCWSTR::null(),
                 &mut hp,
-                Some(std::ptr::null()),
+                None, // no PRINTER_DEFAULTSW override — use system defaults
             );
-            if !ok.as_bool() || hp.is_invalid() {
+            if result.is_err() || hp.is_invalid() {
                 None
             } else {
                 Some(hp)
@@ -193,8 +196,8 @@ mod windows {
                 )
             };
 
-            use windows::Win32::System::Threading::{WAIT_OBJECT_0, WAIT_TIMEOUT};
-
+            // WAIT_OBJECT_0 and WAIT_TIMEOUT are in Win32::Foundation in windows 0.54
+            // (already imported at the top of this mod block).
             match wait_result {
                 WAIT_OBJECT_0 => {
                     // Drain job notifications.
@@ -240,10 +243,12 @@ mod windows {
         drops: &Arc<AtomicU64>,
     ) {
         // Query the buffer size needed for JOB_INFO_1W.
+        // windows 0.54: EnumJobsW takes Option<&mut [u8]> (cbbuf is inferred from slice
+        // length) and returns Result<()>. Pass None to get the required byte count.
         let mut bytes_needed: u32 = 0;
         let mut jobs_returned: u32 = 0;
 
-        // SAFETY: First call with null buffer to get required size.
+        // SAFETY: First call with None buffer to probe required size.
         let _ = unsafe {
             EnumJobsW(
                 hprinter,
@@ -251,7 +256,6 @@ mod windows {
                 255,
                 1,
                 None,
-                0,
                 &mut bytes_needed,
                 &mut jobs_returned,
             )
@@ -263,19 +267,18 @@ mod windows {
 
         let mut buf: Vec<u8> = vec![0u8; bytes_needed as usize];
 
-        // SAFETY: Second call with properly sized buffer.
+        // SAFETY: Second call with a properly sized buffer slice.
         let ok = unsafe {
             EnumJobsW(
                 hprinter,
                 0,
                 255,
                 1,
-                Some(buf.as_mut_ptr()),
-                bytes_needed,
+                Some(&mut buf),
                 &mut bytes_needed,
                 &mut jobs_returned,
             )
-            .as_bool()
+            .is_ok()
         };
 
         if !ok || jobs_returned == 0 {

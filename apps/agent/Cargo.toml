@@ -95,6 +95,8 @@ windows = { version = "0.54", features = [
     "Win32_Graphics_Dxgi_Common",
     # Print spooler APIs (print collector)
     "Win32_Graphics_Printing",
+    # GlobalLock / GlobalSize / GlobalUnlock for clipboard CF_UNICODETEXT read-back
+    "Win32_System_Memory",
 ] }
 
 # windows-service crate wraps the SCM API for service lifecycle management.

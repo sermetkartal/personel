@@ -124,7 +124,7 @@ mod windows {
     use tracing::{debug, error, info, warn};
     use zeroize::Zeroizing;
 
-    use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
+    use windows::Win32::Foundation::{HGLOBAL, HWND, LPARAM, LRESULT, WPARAM};
     use windows::Win32::System::DataExchange::{
         AddClipboardFormatListener, CloseClipboard, GetClipboardData,
         OpenClipboard, RemoveClipboardFormatListener,
@@ -206,7 +206,8 @@ mod windows {
 
         // Register for clipboard notifications.
         // SAFETY: hwnd is a valid message-only window created above.
-        let registered = unsafe { AddClipboardFormatListener(hwnd).as_bool() };
+        // windows 0.54: AddClipboardFormatListener returns Result<()>, not BOOL.
+        let registered = unsafe { AddClipboardFormatListener(hwnd).is_ok() };
         if !registered {
             error!("clipboard: AddClipboardFormatListener failed");
             healthy.store(false, Ordering::Relaxed);
@@ -334,13 +335,16 @@ mod windows {
     ///
     /// Caller must be on the message-pump thread. Opens and closes the clipboard.
     unsafe fn read_clipboard_char_count() -> (usize, bool) {
-        if !OpenClipboard(None).as_bool() {
+        // windows 0.54: OpenClipboard returns Result<()>, not BOOL.
+        if OpenClipboard(None).is_err() {
             return (0, false);
         }
         let hdata = GetClipboardData(CF_UNICODETEXT);
         let result = match hdata {
             Ok(h) if h.0 != 0 => {
-                let size = GlobalSize(windows::Win32::Foundation::HANDLE(h.0));
+                // windows 0.54: GlobalSize takes HGLOBAL(*mut c_void), not HANDLE(isize).
+                let hglobal = HGLOBAL(h.0 as *mut _);
+                let size = GlobalSize(hglobal);
                 // Size is in bytes; UTF-16 chars are 2 bytes each (minus null terminator).
                 let chars = size.saturating_sub(2) / 2;
                 (chars, true)
@@ -360,7 +364,8 @@ mod windows {
     /// Caller must be on the message-pump thread. Properly locks and unlocks the
     /// global memory handle returned by `GetClipboardData`.
     unsafe fn read_clipboard_text() -> Option<Zeroizing<Vec<u8>>> {
-        if !OpenClipboard(None).as_bool() {
+        // windows 0.54: OpenClipboard returns Result<()>, not BOOL.
+        if OpenClipboard(None).is_err() {
             return None;
         }
 
@@ -370,27 +375,32 @@ mod windows {
             return None;
         }
 
-        let ptr = GlobalLock(windows::Win32::Foundation::HANDLE(hdata.0));
+        // windows 0.54: GlobalLock/GlobalSize/GlobalUnlock take HGLOBAL(*mut c_void),
+        // not HANDLE(isize). Convert from the HANDLE returned by GetClipboardData.
+        let hglobal = HGLOBAL(hdata.0 as *mut _);
+
+        let ptr = GlobalLock(hglobal);
         if ptr.is_null() {
             let _ = CloseClipboard();
             return None;
         }
 
-        let size = GlobalSize(windows::Win32::Foundation::HANDLE(hdata.0));
+        let size = GlobalSize(hglobal);
         // UTF-16 chars: each char is 2 bytes, last 2 bytes are null terminator.
         let char_count = size.saturating_sub(2) / 2;
 
         let result = if char_count > 0 {
             let slice = std::slice::from_raw_parts(ptr as *const u16, char_count);
             let utf8 = String::from_utf16_lossy(slice);
-            let mut buf = Zeroizing::new(utf8.into_bytes());
-            // Ensure the backing Vec is fully owned so Zeroizing can wipe it.
+            let buf = Zeroizing::new(utf8.into_bytes());
             Some(buf)
         } else {
             None
         };
 
-        GlobalUnlock(windows::Win32::Foundation::HANDLE(hdata.0));
+        // windows 0.54: GlobalUnlock returns Result<()>; ignore the result (may
+        // legitimately fail with ERROR_NOT_LOCKED when lock count reaches zero).
+        let _ = GlobalUnlock(hglobal);
         let _ = CloseClipboard();
         result
     }
