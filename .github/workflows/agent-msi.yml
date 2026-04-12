@@ -1,0 +1,89 @@
+name: Agent MSI Build
+
+on:
+  push:
+    paths:
+      - 'apps/agent/**'
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Override version (e.g. 0.2.0)'
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-msi:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    env:
+      INPUT_VERSION: ${{ github.event.inputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Cache cargo registry + target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            apps/agent/target
+          key: agent-msi-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
+
+      - name: Install OpenSSL
+        run: |
+          choco install openssl -y --no-progress
+          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+
+      - name: Install WiX 4
+        run: dotnet tool install --global wix --version 4.0.5
+
+      - name: Cargo build (release)
+        working-directory: apps/agent
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Verify binaries
+        working-directory: apps/agent
+        run: |
+          $bins = @("personel-agent.exe", "personel-watchdog.exe", "enroll.exe")
+          foreach ($b in $bins) {
+            $p = "target\x86_64-pc-windows-msvc\release\$b"
+            if (-not (Test-Path $p)) { throw "Missing: $p" }
+            $size = (Get-Item $p).Length / 1MB
+            Write-Host "$b — $([math]::Round($size, 1)) MB"
+          }
+
+      - name: Build MSI
+        working-directory: apps/agent/installer
+        run: |
+          if ($env:INPUT_VERSION) {
+            .\build-msi.ps1 -Version $env:INPUT_VERSION
+          } else {
+            .\build-msi.ps1
+          }
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personel-agent-msi
+          path: apps/agent/installer/dist/personel-agent.msi
+          retention-days: 30
+
+      - name: Upload raw binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: personel-agent-binaries
+          path: |
+            apps/agent/target/x86_64-pc-windows-msvc/release/personel-agent.exe
+            apps/agent/target/x86_64-pc-windows-msvc/release/personel-watchdog.exe
+            apps/agent/target/x86_64-pc-windows-msvc/release/enroll.exe
+          retention-days: 30
