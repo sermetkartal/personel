@@ -23,6 +23,7 @@ const OS: &str = "other";
 /// Stub input module for non-Windows builds.
 pub mod input {
     use super::*;
+    use std::sync::mpsc;
 
     /// Information about the foreground window (stub).
     #[derive(Debug, Clone)]
@@ -35,16 +36,29 @@ pub mod input {
         pub hwnd: usize,
     }
 
+    /// A raw keystroke event (stub).
+    #[derive(Debug, Clone, Copy)]
+    pub struct KeyEvent {
+        /// Virtual-key code.
+        pub vk_code: u32,
+        /// Hardware scan code.
+        pub scan_code: u32,
+        /// Flags bitmask.
+        pub flags: u32,
+        /// Timestamp milliseconds.
+        pub timestamp_ms: u64,
+    }
+
+    /// Handle to a running keyboard hook (stub).
+    pub struct HookHandle;
+
     /// Returns the number of milliseconds since the last user input event.
     ///
     /// # Errors
     ///
     /// Always returns `AgentError::Unsupported` on non-Windows platforms.
     pub fn last_input_idle_ms() -> Result<u64> {
-        Err(AgentError::Unsupported {
-            os: OS,
-            component: "input::last_input_idle_ms",
-        })
+        Err(AgentError::Unsupported { os: OS, component: "input::last_input_idle_ms" })
     }
 
     /// Returns foreground window information.
@@ -53,10 +67,16 @@ pub mod input {
     ///
     /// Always returns `AgentError::Unsupported` on non-Windows platforms.
     pub fn foreground_window_info() -> Result<ForegroundWindowInfo> {
-        Err(AgentError::Unsupported {
-            os: OS,
-            component: "input::foreground_window_info",
-        })
+        Err(AgentError::Unsupported { os: OS, component: "input::foreground_window_info" })
+    }
+
+    /// Installs a low-level keyboard hook (stub).
+    ///
+    /// # Errors
+    ///
+    /// Always returns `AgentError::Unsupported` on non-Windows platforms.
+    pub fn install_keyboard_hook(_tx: mpsc::Sender<KeyEvent>) -> Result<HookHandle> {
+        Err(AgentError::Unsupported { os: OS, component: "input::install_keyboard_hook" })
     }
 }
 
@@ -146,7 +166,7 @@ pub mod capture {
         pub monitor_index: u32,
     }
 
-    /// DXGI capture stub.
+    /// DXGI capture stub — always errors on non-Windows platforms.
     pub struct DxgiCapture;
 
     impl DxgiCapture {
@@ -155,17 +175,44 @@ pub mod capture {
         /// # Errors
         ///
         /// Always returns `AgentError::Unsupported`.
-        pub fn open(_monitor: u32) -> Result<Self> {
+        pub fn open(_monitor: u32, _quality: u8) -> Result<Self> {
             Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::open" })
         }
 
-        /// Always errors.
+        /// Always errors on non-Windows.
+        ///
+        /// # Errors
+        ///
+        /// Always returns `AgentError::Unsupported`.
+        pub fn reopen(&mut self) -> Result<()> {
+            Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::reopen" })
+        }
+
+        /// Always errors on non-Windows.
         ///
         /// # Errors
         ///
         /// Always returns `AgentError::Unsupported`.
         pub fn capture_frame(&self) -> Result<CapturedFrame> {
             Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::capture_frame" })
+        }
+
+        /// Always errors on non-Windows.
+        ///
+        /// # Errors
+        ///
+        /// Always returns `AgentError::Unsupported`.
+        pub fn grab_frame(&self) -> Result<Vec<u8>> {
+            Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::grab_frame" })
+        }
+
+        /// Always errors on non-Windows.
+        ///
+        /// # Errors
+        ///
+        /// Always returns `AgentError::Unsupported`.
+        pub fn encode_jpeg(_bgra: &[u8], _width: u32, _height: u32, _quality: u8) -> Result<Vec<u8>> {
+            Err(AgentError::Unsupported { os: OS, component: "capture::DxgiCapture::encode_jpeg" })
         }
     }
 }
@@ -190,5 +237,23 @@ pub mod service {
     #[must_use]
     pub fn is_service_context() -> bool {
         false
+    }
+
+    /// Always errors on non-Windows.
+    ///
+    /// # Errors
+    ///
+    /// Always returns `AgentError::Unsupported`.
+    pub fn install_service() -> Result<()> {
+        Err(AgentError::Unsupported { os: OS, component: "service::install_service" })
+    }
+
+    /// Always errors on non-Windows.
+    ///
+    /// # Errors
+    ///
+    /// Always returns `AgentError::Unsupported`.
+    pub fn uninstall_service() -> Result<()> {
+        Err(AgentError::Unsupported { os: OS, component: "service::uninstall_service" })
     }
 }

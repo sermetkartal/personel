@@ -98,14 +98,57 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     info!("all collectors started");
 
     // ── Transport ─────────────────────────────────────────────────────────────
-    // TODO: wire personel_transport::client::run_stream here.
     let (transport_stop_tx, transport_stop_rx) = oneshot::channel::<()>();
-    let _transport_task = tokio::spawn(async move {
-        // TODO: wire personel_transport::client::run_stream here.
-        // Stub: wait for stop signal.
-        let _ = transport_stop_rx.await;
-        info!("transport stopped");
-    });
+    let transport_queue = Arc::clone(&queue);
+
+    // Only start the real transport if the agent is enrolled (has gateway config).
+    if let Some(enroll) = &config.enrollment {
+        use personel_transport::client::{BackoffConfig, ClientConfig, run_stream};
+
+        // Load PEM-encoded client cert and key from disk.
+        // The files are DPAPI-sealed on Windows; in dev mode they may be plain PEM.
+        let load_result = (|| -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
+            let cert_pem = std::fs::read(&enroll.cert_path)
+                .with_context(|| format!("read client cert: {}", enroll.cert_path.display()))?;
+            let key_pem = std::fs::read(&enroll.key_path)
+                .with_context(|| format!("read client key: {}", enroll.key_path.display()))?;
+            Ok((cert_pem, key_pem))
+        })();
+
+        match load_result {
+            Ok((cert_pem, key_pem)) => {
+                let gateway_url = enroll.gateway_url.clone();
+                let transport_cfg = ClientConfig {
+                    gateway_url,
+                    client_cert_pem: cert_pem,
+                    client_key_pem: key_pem,
+                    tenant_ca_pem: None, // TODO Phase 2: load tenant CA from config
+                    backoff: BackoffConfig::default(),
+                };
+                let _transport_task = tokio::spawn(async move {
+                    if let Err(e) =
+                        run_stream(transport_cfg, transport_queue, transport_stop_rx).await
+                    {
+                        warn!(error = %e, "transport: run_stream exited with error");
+                    }
+                    info!("transport stopped");
+                });
+            }
+            Err(e) => {
+                warn!(error = %e, "transport: cert/key load failed — running in offline mode");
+                let _transport_task = tokio::spawn(async move {
+                    let _ = transport_stop_rx.await;
+                    info!("transport stopped (offline mode)");
+                });
+            }
+        }
+    } else {
+        warn!("agent not enrolled — transport not started (offline mode)");
+        let _transport_task = tokio::spawn(async move {
+            let _ = transport_stop_rx.await;
+            info!("transport stopped (not enrolled)");
+        });
+    }
 
     // ── Health tick ───────────────────────────────────────────────────────────
     let health_queue = Arc::clone(&queue);

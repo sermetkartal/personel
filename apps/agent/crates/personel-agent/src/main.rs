@@ -23,6 +23,9 @@ mod config;
 mod runtime;
 mod service;
 
+#[cfg(target_os = "windows")]
+use personel_os::service::run_as_service as os_run_as_service;
+
 fn main() -> Result<()> {
     // Parse minimal CLI args before tokio runtime starts.
     let args: Vec<String> = std::env::args().collect();
@@ -62,17 +65,30 @@ fn main() -> Result<()> {
 
     if is_service {
         // Windows service mode: the SCM owns the lifecycle.
-        // The service trampoline will call run_agent on the tokio runtime.
+        // run_as_service blocks until the SCM sends SERVICE_CONTROL_STOP.
         info!("starting in Windows service mode");
-        rt.block_on(async move {
-            let (shutdown_tx, shutdown_rx) = oneshot::channel();
-            // TODO: replace with personel_os::service::run_as_service(shutdown_tx)
-            // which blocks until SCM sends SERVICE_CONTROL_STOP.
-            // For now fall through to console mode.
-            tokio::spawn(runtime::wait_for_shutdown(shutdown_tx));
-            service::run_agent(agent_config, shutdown_rx).await
-        })
-        .context("agent run_agent")?;
+
+        #[cfg(target_os = "windows")]
+        {
+            let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+            let (done_tx, done_rx) = oneshot::channel::<()>();
+            rt.spawn(async move {
+                let _ = service::run_agent(agent_config, shutdown_rx).await;
+                let _ = done_tx.send(());
+            });
+            os_run_as_service(shutdown_tx)
+                .context("Windows SCM dispatcher")?;
+            let _ = rt.block_on(done_rx);
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            rt.block_on(async move {
+                let (shutdown_tx, shutdown_rx) = oneshot::channel();
+                tokio::spawn(runtime::wait_for_shutdown(shutdown_tx));
+                service::run_agent(agent_config, shutdown_rx).await
+            })
+            .context("agent run_agent (non-windows service fallback)")?;
+        }
     } else {
         // Console / debug mode.
         info!("starting in console mode");

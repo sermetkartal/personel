@@ -18,9 +18,15 @@ use personel_core::error::{AgentError, Result};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpdateStageStatus {
     /// Artifact is staged and ready for the watchdog to apply.
-    Ready { artifact_path: PathBuf },
+    Ready {
+        /// Path to the staged artifact binary.
+        artifact_path: PathBuf,
+    },
     /// Rollback copy is available.
-    RollbackAvailable { rollback_path: PathBuf },
+    RollbackAvailable {
+        /// Path to the previous-version binary kept for rollback.
+        rollback_path: PathBuf,
+    },
 }
 
 /// Stages a downloaded artifact for update.

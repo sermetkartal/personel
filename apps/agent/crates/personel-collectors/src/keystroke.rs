@@ -7,10 +7,23 @@
 //!
 //! 2. **`KeystrokeContentCollector`** — captures raw keystroke content,
 //!    encrypts it in-place with the PE-DEK, and emits
-//!    `keystroke.content_encrypted`. Enabled when
-//!    `policy.collectors.keystroke_content` AND `policy.keystroke_content_enabled`.
+//!    `keystroke.content_encrypted`. Enabled **only** when
+//!    `policy.collectors.keystroke_content && policy.keystroke_content_enabled`
+//!    — the double gate enforces ADR 0013.
 //!
-//! # Crypto envelope (concrete per key-hierarchy.md)
+//! # ADR 0013 — keystroke content default-OFF
+//!
+//! Clear-text keystrokes **never** enter the event queue. Two conditions must
+//! both be true for any content-mode bytes to be produced:
+//!
+//! 1. `policy.keystroke_content_enabled == true`  (DLP ceremony was completed)
+//! 2. `ctx.pe_dek.is_some()`                      (PE-DEK was provisioned)
+//!
+//! When either condition is false, the collector runs in metadata-only mode
+//! regardless of collector type. The `Zeroizing<Vec<u8>>` per-window plaintext
+//! buffers are wiped on flush and on drop.
+//!
+//! # Crypto envelope (key-hierarchy.md)
 //!
 //! ```text
 //! ciphertext = AES-256-GCM(key=PE-DEK, nonce=random96,
@@ -18,25 +31,21 @@
 //!                           plaintext=keystroke_buffer)
 //! ```
 //!
-//! The plaintext buffer is zeroized immediately after encryption.
+//! The plaintext buffer is a `Zeroizing<Vec<u8>>` and is dropped immediately
+//! after `encrypt()` returns — never written to the queue in plaintext.
 //!
-//! # TODO (Phase 1)
+//! # Platform support
 //!
-//! - Hook `SetWindowsHookEx(WH_KEYBOARD_LL)` via `personel-os` to receive
-//!   keystrokes.
-//! - Per-window buffer management with `policy.keystroke.max_buffer_bytes`.
-//! - Upload ciphertext blob to MinIO (transport layer concern; collector just
-//!   produces the envelope + blob path).
-//! - Exclude password managers per `policy.keystroke.exclude_exe_names`.
+//! `cfg(target_os = "windows")`: full WH_KEYBOARD_LL hook loop.
+//! Other platforms: collectors park until stopped (no-op). This allows
+//! `cargo check` to pass on macOS/Linux.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use async_trait::async_trait;
 use tokio::sync::oneshot;
-use tracing::{debug, error, info, warn};
-use zeroize::Zeroizing;
+use tracing::info;
 
 use personel_core::error::Result;
 use personel_policy::engine::PolicyView;
@@ -44,14 +53,25 @@ use personel_policy::engine::PolicyView;
 use crate::{Collector, CollectorCtx, CollectorHandle, HealthSnapshot};
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Metadata collector
+// Flush interval
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// How often per-window keystroke counts / encrypted buffers are flushed.
+#[cfg(target_os = "windows")]
+const FLUSH_SECS: u64 = 60;
+/// Maximum plaintext buffer per window before a forced flush (bytes).
+#[cfg(target_os = "windows")]
+const MAX_BUFFER_BYTES: usize = 4096;
+
+// ──────────────────────────────────────────────────────────────────────────────
+// KeystrokeMetaCollector
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// Keystroke metadata (counts-only) collector.
 #[derive(Default)]
 pub struct KeystrokeMetaCollector {
     healthy: Arc<AtomicBool>,
-    events: Arc<AtomicU64>,
+    events:  Arc<AtomicU64>,
 }
 
 impl KeystrokeMetaCollector {
@@ -64,39 +84,19 @@ impl KeystrokeMetaCollector {
 
 #[async_trait]
 impl Collector for KeystrokeMetaCollector {
-    fn name(&self) -> &'static str {
-        "keystroke_meta"
-    }
+    fn name(&self) -> &'static str { "keystroke_meta" }
 
     fn event_types(&self) -> &'static [&'static str] {
         &["keystroke.window_stats"]
     }
 
     async fn start(&self, ctx: CollectorCtx) -> Result<CollectorHandle> {
-        let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
+        let (stop_tx, stop_rx) = oneshot::channel::<()>();
         let healthy = Arc::clone(&self.healthy);
-        let events = Arc::clone(&self.events);
+        let events  = Arc::clone(&self.events);
 
-        let task = tokio::spawn(async move {
-            // TODO: install WH_KEYBOARD_LL hook via personel_os::windows::input
-            // and accumulate per-window keystroke counts in a HashMap<hwnd, Stats>.
-            // Flush on policy.keystroke.flush_interval_seconds tick.
-            info!("keystroke_meta collector started (stub)");
-            let mut ticker = tokio::time::interval(Duration::from_secs(
-                ctx.policy().screenshot.interval_seconds.max(60) as u64,
-            ));
-            loop {
-                tokio::select! {
-                    _ = ticker.tick() => {
-                        debug!("keystroke_meta: flush tick (stub — no hook installed yet)");
-                        healthy.store(true, Ordering::Relaxed);
-                    }
-                    _ = &mut stop_rx => {
-                        info!("keystroke_meta collector: stop requested");
-                        break;
-                    }
-                }
-            }
+        let task = tokio::task::spawn_blocking(move || {
+            run_meta_loop(ctx, healthy, events, stop_rx);
         });
 
         Ok(CollectorHandle { name: self.name(), task, stop_tx })
@@ -106,27 +106,28 @@ impl Collector for KeystrokeMetaCollector {
 
     fn health(&self) -> HealthSnapshot {
         HealthSnapshot {
-            healthy: self.healthy.load(Ordering::Relaxed),
+            healthy:           self.healthy.load(Ordering::Relaxed),
             events_since_last: self.events.swap(0, Ordering::Relaxed),
-            drops_since_last: 0,
-            status: "stub".into(),
+            drops_since_last:  0,
+            status:            String::new(),
         }
     }
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
-// Content collector (concrete crypto envelope)
+// KeystrokeContentCollector
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Keystroke content collector — captures and encrypts raw keystrokes.
+/// Keystroke content collector.
 ///
-/// The `pe_dek` field must be `Some` for this collector to produce
-/// `keystroke.content_encrypted` events. If it is `None`, the collector
-/// starts but produces no events.
+/// **ADR 0013**: Only activates in content mode when
+/// `policy.keystroke_content_enabled && ctx.pe_dek.is_some()`.
+/// Falls back to metadata-only silently otherwise.
+/// Clear-text keystrokes are **never** written to the queue.
 #[derive(Default)]
 pub struct KeystrokeContentCollector {
     healthy: Arc<AtomicBool>,
-    events: Arc<AtomicU64>,
+    events:  Arc<AtomicU64>,
 }
 
 impl KeystrokeContentCollector {
@@ -139,52 +140,19 @@ impl KeystrokeContentCollector {
 
 #[async_trait]
 impl Collector for KeystrokeContentCollector {
-    fn name(&self) -> &'static str {
-        "keystroke_content"
-    }
+    fn name(&self) -> &'static str { "keystroke_content" }
 
     fn event_types(&self) -> &'static [&'static str] {
         &["keystroke.content_encrypted"]
     }
 
     async fn start(&self, ctx: CollectorCtx) -> Result<CollectorHandle> {
-        let (stop_tx, mut stop_rx) = oneshot::channel::<()>();
+        let (stop_tx, stop_rx) = oneshot::channel::<()>();
         let healthy = Arc::clone(&self.healthy);
-        let events = Arc::clone(&self.events);
-        let pe_dek = ctx.pe_dek.clone();
+        let events  = Arc::clone(&self.events);
 
-        let task = tokio::spawn(async move {
-            if pe_dek.is_none() {
-                warn!("keystroke_content: PE-DEK not provided; collector will produce no events");
-            }
-
-            // TODO: install WH_KEYBOARD_LL hook. Accumulate plaintext in a
-            //       Zeroizing<Vec<u8>> per-window buffer. On flush:
-            //
-            //   let aad = personel_crypto::envelope::build_keystroke_aad(
-            //       &ctx.endpoint_id.to_bytes(), seq,
-            //   );
-            //   let envelope = personel_crypto::envelope::encrypt(
-            //       pe_dek.as_ref().unwrap(), aad, &plaintext_buf,
-            //   )?;
-            //   // plaintext_buf.zeroize() — already Zeroizing<Vec<u8>>, handled on drop.
-            //   // Upload ciphertext to MinIO (transport responsibility).
-            //   // Enqueue keystroke.content_encrypted metadata event.
-
-            info!("keystroke_content collector started (stub)");
-            let mut ticker = tokio::time::interval(Duration::from_secs(30));
-            loop {
-                tokio::select! {
-                    _ = ticker.tick() => {
-                        healthy.store(true, Ordering::Relaxed);
-                        debug!("keystroke_content: flush tick (stub)");
-                    }
-                    _ = &mut stop_rx => {
-                        info!("keystroke_content collector: stop requested");
-                        break;
-                    }
-                }
-            }
+        let task = tokio::task::spawn_blocking(move || {
+            run_content_loop(ctx, healthy, events, stop_rx);
         });
 
         Ok(CollectorHandle { name: self.name(), task, stop_tx })
@@ -194,10 +162,378 @@ impl Collector for KeystrokeContentCollector {
 
     fn health(&self) -> HealthSnapshot {
         HealthSnapshot {
-            healthy: self.healthy.load(Ordering::Relaxed),
+            healthy:           self.healthy.load(Ordering::Relaxed),
             events_since_last: self.events.swap(0, Ordering::Relaxed),
-            drops_since_last: 0,
-            status: "stub".into(),
+            drops_since_last:  0,
+            status:            String::new(),
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Platform dispatch
+// ──────────────────────────────────────────────────────────────────────────────
+
+fn run_meta_loop(
+    ctx: CollectorCtx,
+    healthy: Arc<AtomicBool>,
+    events: Arc<AtomicU64>,
+    stop_rx: oneshot::Receiver<()>,
+) {
+    #[cfg(target_os = "windows")]
+    windows::run_meta(ctx, healthy, events, stop_rx);
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (ctx, events);
+        info!("keystroke_meta: keyboard hook not supported on this platform — parking");
+        healthy.store(true, Ordering::Relaxed);
+        let _ = stop_rx.blocking_recv();
+    }
+}
+
+fn run_content_loop(
+    ctx: CollectorCtx,
+    healthy: Arc<AtomicBool>,
+    events: Arc<AtomicU64>,
+    stop_rx: oneshot::Receiver<()>,
+) {
+    #[cfg(target_os = "windows")]
+    windows::run_content(ctx, healthy, events, stop_rx);
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = (ctx, events);
+        info!("keystroke_content: keyboard hook not supported on this platform — parking");
+        healthy.store(true, Ordering::Relaxed);
+        let _ = stop_rx.blocking_recv();
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Windows implementation
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(target_os = "windows")]
+mod windows {
+    use std::collections::HashMap;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::{mpsc, Arc};
+    use std::time::{Duration, Instant};
+
+    use tokio::sync::oneshot;
+    use tracing::{debug, error, info, warn};
+    use zeroize::Zeroizing;
+
+    use personel_core::error::{AgentError, Result};
+    use personel_core::event::{EventKind, Priority};
+    use personel_core::ids::EventId;
+    use personel_crypto::envelope;
+
+    use super::{FLUSH_SECS, MAX_BUFFER_BYTES};
+    use crate::CollectorCtx;
+
+    // ── Meta loop ─────────────────────────────────────────────────────────────
+
+    pub fn run_meta(
+        ctx: CollectorCtx,
+        healthy: Arc<std::sync::atomic::AtomicBool>,
+        events: Arc<AtomicU64>,
+        mut stop_rx: oneshot::Receiver<()>,
+    ) {
+        info!("keystroke_meta: starting");
+
+        let (tx, rx) = mpsc::channel::<personel_os::input::KeyEvent>();
+        let _hook = match personel_os::input::install_keyboard_hook(tx) {
+            Ok(h) => {
+                healthy.store(true, Ordering::Relaxed);
+                info!("keystroke_meta: WH_KEYBOARD_LL hook installed");
+                Some(h)
+            }
+            Err(e) => {
+                error!(error = %e, "keystroke_meta: hook install failed");
+                healthy.store(false, Ordering::Relaxed);
+                None
+            }
+        };
+
+        let mut counts: HashMap<String, u64> = HashMap::new();
+        let mut last_flush = Instant::now();
+        let flush_dur = Duration::from_secs(FLUSH_SECS);
+
+        loop {
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+
+            // Drain events.
+            while let Ok(ev) = rx.try_recv() {
+                // Key-down only (LLKHF_UP = bit 7 of flags).
+                if ev.flags & 0x80 == 0 {
+                    let window = personel_os::input::foreground_window_info()
+                        .map(|f| f.title)
+                        .unwrap_or_default();
+                    *counts.entry(window).or_insert(0) += 1;
+                }
+            }
+
+            if last_flush.elapsed() >= flush_dur {
+                for (window, count) in counts.drain() {
+                    if count > 0 {
+                        flush_meta(&ctx, &window, count, FLUSH_SECS, &events);
+                    }
+                }
+                last_flush = Instant::now();
+            }
+
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        // Final flush.
+        for (window, count) in counts.drain() {
+            if count > 0 {
+                flush_meta(&ctx, &window, count, FLUSH_SECS, &events);
+            }
+        }
+        info!("keystroke_meta: stopped");
+    }
+
+    fn flush_meta(
+        ctx: &CollectorCtx,
+        window: &str,
+        count: u64,
+        interval_sec: u64,
+        events: &Arc<AtomicU64>,
+    ) {
+        let payload = format!(
+            r#"{{"window_title":{:?},"count":{},"interval_sec":{}}}"#,
+            window, count, interval_sec
+        );
+        let now = ctx.clock.now_unix_nanos();
+        let id  = EventId::new_v7().to_bytes();
+        match ctx.queue.enqueue(
+            &id,
+            EventKind::KeystrokeWindowStats.as_str(),
+            Priority::Normal,
+            now,
+            now,
+            payload.as_bytes(),
+        ) {
+            Ok(_) => {
+                events.fetch_add(1, Ordering::Relaxed);
+                debug!(window, count, "keystroke_meta: flushed");
+            }
+            Err(e) => warn!(error = %e, "keystroke_meta: queue error"),
+        }
+    }
+
+    // ── Content loop (ADR 0013) ───────────────────────────────────────────────
+
+    pub fn run_content(
+        ctx: CollectorCtx,
+        healthy: Arc<std::sync::atomic::AtomicBool>,
+        events: Arc<AtomicU64>,
+        mut stop_rx: oneshot::Receiver<()>,
+    ) {
+        info!("keystroke_content: starting");
+
+        // ── ADR 0013 double gate ──────────────────────────────────────────
+        // Both must be true for content mode. If either is missing: metadata only.
+        let pe_dek      = ctx.pe_dek.clone();
+        let content_on  = pe_dek.is_some() && ctx.policy().keystroke_content_enabled;
+
+        if !content_on {
+            if pe_dek.is_none() {
+                warn!("keystroke_content: PE-DEK not provisioned — \
+                       metadata-only mode (ADR 0013 default-OFF)");
+            } else {
+                info!("keystroke_content: policy.keystroke_content_enabled=false — \
+                       metadata-only mode (ADR 0013 default-OFF)");
+            }
+        }
+
+        let (tx, rx) = mpsc::channel::<personel_os::input::KeyEvent>();
+        let _hook = match personel_os::input::install_keyboard_hook(tx) {
+            Ok(h) => {
+                healthy.store(true, Ordering::Relaxed);
+                info!("keystroke_content: WH_KEYBOARD_LL hook installed (content_mode={})", content_on);
+                Some(h)
+            }
+            Err(e) => {
+                error!(error = %e, "keystroke_content: hook install failed");
+                healthy.store(false, Ordering::Relaxed);
+                None
+            }
+        };
+
+        let mut seq: u64 = 0;
+        // Plaintext buffers: only populated in content mode; Zeroizing → wiped on drop.
+        let mut ptxt_bufs: HashMap<String, Zeroizing<Vec<u8>>> = HashMap::new();
+        let mut counts:    HashMap<String, u64> = HashMap::new();
+        let mut last_flush = Instant::now();
+        let flush_dur = Duration::from_secs(FLUSH_SECS);
+
+        loop {
+            if stop_rx.try_recv().is_ok() {
+                break;
+            }
+
+            while let Ok(ev) = rx.try_recv() {
+                // Key-down only.
+                if ev.flags & 0x80 != 0 {
+                    continue;
+                }
+                let window = personel_os::input::foreground_window_info()
+                    .map(|f| f.title)
+                    .unwrap_or_default();
+
+                *counts.entry(window.clone()).or_insert(0) += 1;
+
+                if content_on {
+                    // ADR 0013: VK code bytes buffered in Zeroizing<Vec<u8>>.
+                    // Never leave this buffer or the encrypt() path as clear text.
+                    let buf = ptxt_bufs
+                        .entry(window)
+                        .or_insert_with(|| Zeroizing::new(Vec::new()));
+                    buf.push(ev.vk_code as u8);
+
+                    // Size-based flush trigger.
+                    if buf.len() >= MAX_BUFFER_BYTES {
+                        last_flush = Instant::now()
+                            .checked_sub(flush_dur)
+                            .unwrap_or_else(Instant::now);
+                    }
+                }
+            }
+
+            if last_flush.elapsed() >= flush_dur {
+                if content_on {
+                    let dek = pe_dek.as_ref().expect("pe_dek Some when content_on");
+                    let ep  = ctx.endpoint_id.to_bytes();
+                    for (window, buf) in ptxt_bufs.drain() {
+                        if buf.is_empty() {
+                            drop(buf); // zeroize
+                            continue;
+                        }
+                        let aad = envelope::build_keystroke_aad(&ep, seq);
+                        seq += 1;
+                        match envelope::encrypt(dek, aad, buf.as_slice()) {
+                            Ok(env) => {
+                                // ADR 0013: plaintext buf is Zeroizing — wiped on drop.
+                                drop(buf);
+                                flush_content(&ctx, &window, &env, seq - 1, &events);
+                            }
+                            Err(e) => {
+                                drop(buf); // always wipe on error
+                                error!(error = %e, window = window,
+                                       "keystroke_content: encryption failed — buf wiped");
+                            }
+                        }
+                    }
+                } else {
+                    // Metadata-only fallback.
+                    for (window, count) in counts.drain() {
+                        if count > 0 {
+                            flush_meta_fallback(&ctx, &window, count, FLUSH_SECS, &events);
+                        }
+                    }
+                }
+                last_flush = Instant::now();
+            }
+
+            std::thread::sleep(Duration::from_millis(50));
+        }
+
+        // Final flush on shutdown.
+        if content_on {
+            let dek = pe_dek.as_ref().expect("pe_dek Some when content_on");
+            let ep  = ctx.endpoint_id.to_bytes();
+            for (window, buf) in ptxt_bufs.drain() {
+                if buf.is_empty() {
+                    drop(buf);
+                    continue;
+                }
+                let aad = envelope::build_keystroke_aad(&ep, seq);
+                seq += 1;
+                match envelope::encrypt(dek, aad, buf.as_slice()) {
+                    Ok(env) => {
+                        drop(buf);
+                        flush_content(&ctx, &window, &env, seq - 1, &events);
+                    }
+                    Err(_) => { drop(buf); }
+                }
+            }
+        } else {
+            for (window, count) in counts.drain() {
+                if count > 0 {
+                    flush_meta_fallback(&ctx, &window, count, FLUSH_SECS, &events);
+                }
+            }
+        }
+        info!("keystroke_content: stopped");
+    }
+
+    fn flush_content(
+        ctx: &CollectorCtx,
+        window: &str,
+        env: &envelope::CipherEnvelope,
+        seq: u64,
+        events: &Arc<AtomicU64>,
+    ) {
+        // Payload: nonce + ciphertext hex-encoded JSON (interim; proto is transport concern).
+        // ADR 0013: no plaintext field in this event.
+        let payload = format!(
+            r#"{{"window_title":{:?},"seq":{},"nonce":"{}","ciphertext":"{}","aad":"{}"}}"#,
+            window,
+            seq,
+            hex::encode(env.nonce),
+            hex::encode(&env.ciphertext),
+            hex::encode(&env.aad),
+        );
+        let now = ctx.clock.now_unix_nanos();
+        let id  = EventId::new_v7().to_bytes();
+        match ctx.queue.enqueue(
+            &id,
+            EventKind::KeystrokeContentEncrypted.as_str(),
+            Priority::High,
+            now,
+            now,
+            payload.as_bytes(),
+        ) {
+            Ok(_) => {
+                events.fetch_add(1, Ordering::Relaxed);
+                debug!(window, seq, "keystroke_content: encrypted blob enqueued");
+            }
+            Err(e) => warn!(error = %e, "keystroke_content: queue error"),
+        }
+    }
+
+    fn flush_meta_fallback(
+        ctx: &CollectorCtx,
+        window: &str,
+        count: u64,
+        interval_sec: u64,
+        events: &Arc<AtomicU64>,
+    ) {
+        let payload = format!(
+            r#"{{"window_title":{:?},"count":{},"interval_sec":{}}}"#,
+            window, count, interval_sec
+        );
+        let now = ctx.clock.now_unix_nanos();
+        let id  = EventId::new_v7().to_bytes();
+        match ctx.queue.enqueue(
+            &id,
+            EventKind::KeystrokeWindowStats.as_str(),
+            Priority::Normal,
+            now,
+            now,
+            payload.as_bytes(),
+        ) {
+            Ok(_) => {
+                events.fetch_add(1, Ordering::Relaxed);
+                debug!(window, count, "keystroke_content (meta fallback): flushed");
+            }
+            Err(e) => warn!(error = %e, "keystroke_content meta fallback: queue error"),
         }
     }
 }

@@ -27,7 +27,7 @@
 use std::time::Duration;
 
 use anyhow::Result;
-use sysinfo::{ProcessExt, System, SystemExt};
+use sysinfo::System;
 use tokio::sync::oneshot;
 use tracing::{debug, error, info, warn};
 
@@ -126,7 +126,8 @@ async fn run_watchdog_loop(mut shutdown_rx: oneshot::Receiver<()>) {
 fn is_agent_running() -> bool {
     let mut sys = System::new();
     sys.refresh_processes();
-    sys.processes_by_name(AGENT_PROCESS_NAME).next().is_some()
+    let found = sys.processes_by_name(AGENT_PROCESS_NAME).next().is_some();
+    found
 }
 
 /// Attempts to restart the agent via SCM (`sc start`) or direct spawn.

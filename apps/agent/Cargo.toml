@@ -39,7 +39,7 @@ authors = ["Personel Engineering <eng@personel.io>"]
 # ── Async runtime ──
 # tokio: multi-thread runtime, conservative worker count (2–4 for agent).
 # We enable only the features we need to avoid binary bloat.
-tokio          = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "fs", "net", "signal"] }
+tokio          = { version = "1.36", features = ["rt-multi-thread", "macros", "sync", "time", "io-util", "fs", "net", "signal", "process"] }
 futures        = "0.3"
 async-trait    = "0.1"
 
@@ -82,6 +82,11 @@ windows = { version = "0.54", features = [
     "Win32_System_LibraryLoader",
     "Win32_System_Performance",
     "Win32_System_Power",
+    # DXGI Desktop Duplication + D3D11 for screen capture
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
 ] }
 
 # windows-service crate wraps the SCM API for service lifecycle management.
@@ -143,6 +148,15 @@ reqwest        = { version = "0.11", features = ["rustls-tls", "stream"], defaul
 
 # ── Tower (middleware for tonic) ──
 tower          = { version = "0.4", features = ["timeout", "retry"] }
+
+# ── Stream utilities ──
+# tokio-stream: adaptor types (ReceiverStream, etc.) used by tonic bidi client.
+tokio-stream   = { version = "0.1", features = ["net"] }
+
+# ── Image / JPEG encoding ──
+# `image` crate with only the JPEG encoder enabled; disables default PNG/BMP
+# decoders to keep binary size minimal. Used by personel-os capture.rs.
+image          = { version = "0.25", default-features = false, features = ["jpeg"] }
 
 # ── Compression ──
 flate2         = "1"

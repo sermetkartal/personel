@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  main.wxs — WiX 4 installer manifest for Personel Agent.
+
+  Silent install (GPO):
+    msiexec /i personel-agent.msi /qn GATEWAY_URL=https://gw.example.com:8443 TENANT_TOKEN=<jwt>
+
+  GPO Machine policy example:
+    Computer Configuration → Software Settings → Software Installation → Assign
+
+  Properties exposed for GPO / msiexec command line:
+    GATEWAY_URL    — Gateway gRPC endpoint (https://host:8443)
+    TENANT_TOKEN   — Enrollment JWT from the admin console
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
+     xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">
+
+  <?include variables.wxi ?>
+
+  <Package
+    Name="Personel Agent"
+    Version="$(ProductVersion)"
+    Manufacturer="$(Manufacturer)"
+    UpgradeCode="$(UpgradeCode)"
+    Language="1033"
+    Codepage="1252"
+    InstallerVersion="500"
+    Scope="perMachine">
+
+    <!-- Prevent downgrade installs -->
+    <MajorUpgrade
+      DowngradeErrorMessage="A newer version of Personel Agent is already installed."
+      Schedule="afterInstallInitialize" />
+
+    <!-- ── Directory layout ────────────────────────────────────────────── -->
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="PersonelDir" Name="Personel">
+        <Directory Id="AgentDir" Name="Agent" />
+      </Directory>
+    </StandardDirectory>
+
+    <!-- ── Feature tree ───────────────────────────────────────────────── -->
+    <Feature Id="ProductFeature" Title="Personel Agent" Level="1">
+      <ComponentGroupRef Id="AgentComponents" />
+      <ComponentGroupRef Id="FirewallComponents" />
+    </Feature>
+
+    <!-- ── Public properties (GPO / msiexec command line) ────────────── -->
+
+    <!--
+      GATEWAY_URL: gRPC gateway endpoint.
+      Example: https://personel-gw.example.com:8443
+      Written to HKLM\SOFTWARE\Personel\Agent\Config on install.
+    -->
+    <Property Id="GATEWAY_URL" Secure="yes" />
+
+    <!--
+      TENANT_TOKEN: One-time enrollment JWT issued by the admin console.
+      Secure="yes" prevents it from appearing in MSI logs.
+      Written to HKLM\SOFTWARE\Personel\Agent\Config on install.
+    -->
+    <Property Id="TENANT_TOKEN" Secure="yes" Hidden="yes" />
+
+    <!-- ── Components ─────────────────────────────────────────────────── -->
+    <ComponentGroup Id="AgentComponents" Directory="AgentDir">
+
+      <!-- personel-agent.exe -->
+      <Component Id="AgentExe" Guid="$(AgentExeGuid)">
+        <File Id="AgentExeFile"
+              Source="$(sys.SOURCEFILEDIR)..\..\..\..\target\x86_64-pc-windows-msvc\release\personel-agent.exe"
+              KeyPath="yes" />
+
+        <!-- Windows Service: Personel Agent (AUTO_START, LocalSystem) -->
+        <ServiceInstall
+          Id="PersonelAgentService"
+          Name="PersonelAgent"
+          DisplayName="Personel Agent"
+          Description="Monitors user activity for compliance and security (Personel UAM platform)."
+          Type="ownProcess"
+          Start="auto"
+          ErrorControl="normal"
+          Account="LocalSystem"
+          Interactive="no" />
+
+        <!-- Start service on install; stop + delete on uninstall -->
+        <ServiceControl
+          Id="PersonelAgentServiceControl"
+          Name="PersonelAgent"
+          Start="install"
+          Stop="both"
+          Remove="uninstall"
+          Wait="yes" />
+
+        <!-- Registry: gateway URL and tenant token written by enroll.exe
+             (CustomAction below). Placeholder values here ensure the key
+             exists so the service can detect a missing enrollment. -->
+        <RegistryKey Root="HKLM"
+                     Key="SOFTWARE\Personel\Agent\Config">
+          <RegistryValue Type="string" Name="GatewayUrl"   Value="[GATEWAY_URL]"  />
+          <RegistryValue Type="string" Name="TenantToken"  Value="[TENANT_TOKEN]" />
+        </RegistryKey>
+      </Component>
+
+      <!-- personel-watchdog.exe -->
+      <Component Id="WatchdogExe" Guid="$(WatchdogExeGuid)">
+        <File Id="WatchdogExeFile"
+              Source="$(sys.SOURCEFILEDIR)..\..\..\..\target\x86_64-pc-windows-msvc\release\personel-watchdog.exe"
+              KeyPath="yes" />
+
+        <ServiceInstall
+          Id="PersonelWatchdogService"
+          Name="PersonelWatchdog"
+          DisplayName="Personel Watchdog"
+          Description="Restarts the Personel Agent if it crashes or is tampered with."
+          Type="ownProcess"
+          Start="auto"
+          ErrorControl="normal"
+          Account="LocalSystem"
+          Interactive="no" />
+
+        <ServiceControl
+          Id="PersonelWatchdogServiceControl"
+          Name="PersonelWatchdog"
+          Start="install"
+          Stop="both"
+          Remove="uninstall"
+          Wait="yes" />
+      </Component>
+
+      <!-- enroll.exe — run once post-install to provision the PE-DEK and
+           register the endpoint with the gateway. -->
+      <Component Id="EnrollExe" Guid="$(EnrollExeGuid)">
+        <File Id="EnrollExeFile"
+              Source="$(sys.SOURCEFILEDIR)..\..\..\..\target\x86_64-pc-windows-msvc\release\enroll.exe"
+              KeyPath="yes" />
+      </Component>
+
+    </ComponentGroup>
+
+    <!-- ── Windows Firewall exception ─────────────────────────────────── -->
+    <ComponentGroup Id="FirewallComponents" Directory="AgentDir">
+      <Component Id="FirewallException" Guid="{CCCCCCCC-0001-0001-0001-000000000001}">
+        <!-- Outbound TCP 8443 for gRPC to gateway (mTLS) -->
+        <fw:FirewallException
+          Id="PersonelAgentFirewall"
+          Name="Personel Agent (outbound gRPC)"
+          Protocol="tcp"
+          Port="8443"
+          Scope="any"
+          Profile="all" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- ── Custom Action: enroll.exe post-install ─────────────────────── -->
+    <!--
+      Runs `enroll.exe --gateway [GATEWAY_URL] --token [TENANT_TOKEN]` as a
+      deferred, impersonated custom action after service installation.
+      "Deferred" means it runs during the commit phase (services already
+      installed). "Impersonate" means it runs as the installing user rather
+      than SYSTEM, which is required for DPAPI-protected PE-DEK sealing.
+    -->
+    <CustomAction
+      Id="RunEnroll"
+      FileRef="EnrollExeFile"
+      ExeCommand="--gateway &quot;[GATEWAY_URL]&quot; --token &quot;[TENANT_TOKEN]&quot;"
+      Execute="deferred"
+      Impersonate="yes"
+      Return="check" />
+
+    <InstallExecuteSequence>
+      <!-- Run after service install, before service start -->
+      <Custom Action="RunEnroll" After="InstallServices">
+        NOT Installed AND GATEWAY_URL AND TENANT_TOKEN
+      </Custom>
+    </InstallExecuteSequence>
+
+  </Package>
+</Wix>

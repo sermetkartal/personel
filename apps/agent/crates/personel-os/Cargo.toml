@@ -20,3 +20,5 @@ zeroize       = { workspace = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows         = { workspace = true }
 windows-service = { workspace = true }
+# image: JPEG encoding for screen capture frames (jpeg feature only).
+image           = { workspace = true }

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  variables.wxi — WiX 4 variable definitions for Personel Agent installer.
+  Replace GUID placeholders with stable GUIDs generated once via:
+    wix.exe create-guid -count 4
+  Keep GUIDs stable across releases (MSI upgrade uses UpgradeCode to detect
+  previous installs).
+-->
+<Include xmlns="http://wixtoolset.org/schemas/v4/wxs">
+
+  <!-- Product version — kept in sync with Cargo.toml [package].version.
+       Build pipeline substitutes this via: wix build -d ProductVersion=x.y.z -->
+  <?define ProductVersion = "0.1.0" ?>
+
+  <!-- Manufacturer shown in Add/Remove Programs -->
+  <?define Manufacturer = "Personel Technology A.S." ?>
+
+  <!-- UpgradeCode — MUST remain constant across all versions of this product.
+       Change it only to force a clean-install (breaks upgrade path). -->
+  <?define UpgradeCode = "{AAAAAAAA-0001-0001-0001-000000000001}" ?>
+
+  <!-- Component GUIDs — one per installed file/registry key.
+       Stable GUIDs ensure Windows Installer tracks components correctly. -->
+  <?define AgentExeGuid    = "{BBBBBBBB-0001-0001-0001-000000000001}" ?>
+  <?define WatchdogExeGuid = "{BBBBBBBB-0001-0001-0002-000000000001}" ?>
+  <?define EnrollExeGuid   = "{BBBBBBBB-0001-0001-0003-000000000001}" ?>
+
+</Include>

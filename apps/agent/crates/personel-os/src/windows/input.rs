@@ -3,13 +3,27 @@
 //! - [`last_input_idle_ms`] — wraps `GetLastInputInfo`.
 //! - [`foreground_window_info`] — wraps `GetForegroundWindow` +
 //!   `GetWindowText` + `GetWindowThreadProcessId`.
+//! - [`install_keyboard_hook`] — installs a `WH_KEYBOARD_LL` low-level hook
+//!   and pumps messages on a dedicated OS thread. Returns a [`HookHandle`]
+//!   whose `Drop` impl stops the pump and removes the hook.
 
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetLastInputInfo, GetWindowTextW, GetWindowThreadProcessId, LASTINPUTINFO,
-};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::mpsc;
+
 use windows::Win32::System::SystemInformation::GetTickCount64;
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetLastInputInfo, GetMessageW,
+    GetWindowTextW, GetWindowThreadProcessId, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
+    UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, LASTINPUTINFO, MSG, WH_KEYBOARD_LL, WM_QUIT,
+    WINDOWS_HOOK_ID,
+};
+use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 
 use personel_core::error::{AgentError, Result};
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Existing idle / foreground window APIs
+// ──────────────────────────────────────────────────────────────────────────────
 
 /// Information about the current foreground window.
 #[derive(Debug, Clone)]
@@ -43,14 +57,10 @@ pub fn last_input_idle_ms() -> Result<u64> {
         }
         let tick_now = GetTickCount64();
         let last_input_tick = u64::from(lii.dwTime);
-        // GetTickCount64 wraps at ~49 days; GetLastInputInfo uses GetTickCount
-        // (32-bit). Handle the wrap: if last_input_tick > tick_now (modulo
-        // 32-bit) it means the 32-bit counter wrapped.
         let tick_now_32 = (tick_now & 0xFFFF_FFFF) as u64;
         if tick_now_32 >= last_input_tick {
             tick_now_32 - last_input_tick
         } else {
-            // 32-bit wrap: add 2^32 to compensate.
             tick_now_32 + 0x1_0000_0000 - last_input_tick
         }
     };
@@ -59,27 +69,22 @@ pub fn last_input_idle_ms() -> Result<u64> {
 
 /// Returns information about the currently active foreground window.
 ///
-/// Returns `Ok(None)` if no foreground window is present (e.g., locked screen).
+/// Returns an empty `ForegroundWindowInfo` (all zero/empty) if no foreground
+/// window is present (e.g., locked screen).
 ///
 /// # Errors
 ///
-/// Only returns `Err` on an internal buffer overflow, which cannot happen
-/// with the fixed 512-char buffer.
+/// Only returns `Err` on internal buffer overflow, which cannot happen with
+/// the fixed 512-char buffer.
 pub fn foreground_window_info() -> Result<ForegroundWindowInfo> {
-    // SAFETY: GetForegroundWindow returns NULL if no window is in the
-    // foreground; we handle that case. The HWND is valid for the duration
-    // of this function.
+    // SAFETY: GetForegroundWindow returns NULL for no window; we handle it.
+    // HWND is valid for the duration of this function.
     unsafe {
         let hwnd = GetForegroundWindow();
         if hwnd.0 == 0 {
-            return Ok(ForegroundWindowInfo {
-                title: String::new(),
-                pid: 0,
-                hwnd: 0,
-            });
+            return Ok(ForegroundWindowInfo { title: String::new(), pid: 0, hwnd: 0 });
         }
 
-        // Read up to 512 UTF-16 code units.
         let mut buf = [0u16; 512];
         let len = GetWindowTextW(hwnd, &mut buf);
         let title = if len > 0 {
@@ -93,4 +98,207 @@ pub fn foreground_window_info() -> Result<ForegroundWindowInfo> {
 
         Ok(ForegroundWindowInfo { title, pid, hwnd: hwnd.0 as usize })
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Low-level keyboard hook
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// A raw keystroke event from the `WH_KEYBOARD_LL` hook.
+///
+/// Contains only VK codes, scan codes, and flags — **no character
+/// interpretation**. The keystroke collector is responsible for deciding
+/// whether to buffer counts (metadata mode) or encrypt content (DLP mode).
+#[derive(Debug, Clone, Copy)]
+pub struct KeyEvent {
+    /// Virtual-key code (e.g. `VK_A`, `VK_RETURN`).
+    pub vk_code: u32,
+    /// Hardware scan code.
+    pub scan_code: u32,
+    /// Hook flags (`LLKHF_*` bitmask from `KBDLLHOOKSTRUCT.flags`).
+    pub flags: u32,
+    /// `GetTickCount64()` milliseconds at the time the hook fired.
+    pub timestamp_ms: u64,
+}
+
+/// Thread ID of the hook's message-pump thread, used to post `WM_QUIT`.
+///
+/// Stored as a global because the hook callback is a bare `extern "system"
+/// fn` and cannot capture any state.
+static HOOK_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+
+/// The sender end of the key-event channel, set by the hook thread before
+/// installing the hook and cleared on teardown.
+///
+/// Using a raw pointer behind an `AtomicU32` sentinel is unavoidable here
+/// because Win32 hook callbacks cannot carry closures. The pointer is:
+/// - written once before `SetWindowsHookExW` (sequenced-before the callback)
+/// - read only from the hook callback thread (no data race)
+/// - cleared after `UnhookWindowsHookEx` returns (before the thread exits)
+///
+/// # Safety invariant
+///
+/// `KEY_EVENT_TX_PTR` is `Some(Box::into_raw(tx))` only while the hook
+/// thread is running and the `HHOOK` handle is live. The hook callback
+/// casts it to `*mut mpsc::Sender<KeyEvent>` and calls `(*p).send(...)`.
+/// The hook thread owns the pointer and drops it after unhook.
+static KEY_EVENT_TX: std::sync::OnceLock<std::sync::Mutex<Option<*mut mpsc::Sender<KeyEvent>>>> =
+    std::sync::OnceLock::new();
+
+/// SAFETY: The raw pointer is only accessed from the hook callback (single OS
+/// thread) and from the hook-install thread (only while no callback is live).
+unsafe impl Send for HookHandle {}
+unsafe impl Sync for HookHandle {}
+
+/// Handle to a running keyboard hook.
+///
+/// Dropping this handle stops the message pump (`WM_QUIT`) and removes the
+/// hook (`UnhookWindowsHookEx`). The background thread joins automatically
+/// because `PostThreadMessageW(WM_QUIT)` causes `GetMessageW` to return
+/// `false`, ending the pump loop.
+pub struct HookHandle {
+    _thread: std::thread::JoinHandle<()>,
+}
+
+impl Drop for HookHandle {
+    fn drop(&mut self) {
+        let tid = HOOK_THREAD_ID.load(Ordering::Acquire);
+        if tid != 0 {
+            // SAFETY: WM_QUIT is a well-defined message; thread is alive.
+            unsafe {
+                let _ = PostThreadMessageW(tid, WM_QUIT, WPARAM(0), LPARAM(0));
+            }
+        }
+        // _thread is joined when the JoinHandle is dropped. We do NOT call
+        // join() here to avoid blocking Drop callers; the OS will clean up
+        // the thread resources when it exits naturally after WM_QUIT.
+    }
+}
+
+/// Installs a low-level keyboard hook (`WH_KEYBOARD_LL`) on a dedicated OS
+/// thread and returns a [`HookHandle`].
+///
+/// `WH_KEYBOARD_LL` requires a message pump on the installing thread, so this
+/// function spawns a `std::thread` (not a tokio task) and drives the pump with
+/// `GetMessageW`. Key events are sent to the caller via `tx`.
+///
+/// The hook is removed when the returned `HookHandle` is dropped.
+///
+/// # Errors
+///
+/// Returns `AgentError::CollectorStart` if `SetWindowsHookExW` fails.
+pub fn install_keyboard_hook(tx: mpsc::Sender<KeyEvent>) -> Result<HookHandle> {
+    // Channel to propagate hook installation result from the hook thread.
+    let (ready_tx, ready_rx) = mpsc::channel::<std::result::Result<(), String>>();
+
+    // Store the sender in the global so the callback can reach it.
+    let cell = KEY_EVENT_TX.get_or_init(|| std::sync::Mutex::new(None));
+    {
+        let mut guard = cell.lock().expect("KEY_EVENT_TX poisoned");
+        // SAFETY: We box the sender so it has a stable heap address. The
+        // pointer is valid until the hook thread clears it after unhook.
+        *guard = Some(Box::into_raw(Box::new(tx)));
+    }
+
+    let thread = std::thread::Builder::new()
+        .name("personel-kbd-hook".into())
+        .spawn(move || {
+            // Record this thread's ID for WM_QUIT posting.
+            // SAFETY: GetCurrentThreadId() is always safe.
+            let tid = unsafe { windows::Win32::System::Threading::GetCurrentThreadId() };
+            HOOK_THREAD_ID.store(tid, Ordering::Release);
+
+            // Install the hook. NULL hModule + NULL hwnd = global hook on
+            // all threads in the current desktop, which is what WH_KEYBOARD_LL
+            // requires (it ignores the thread ID parameter anyway).
+            // SAFETY: `keyboard_hook_proc` is a valid extern-system function.
+            let hhook = unsafe {
+                SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_hook_proc), None, 0)
+            };
+            match hhook {
+                Ok(h) => {
+                    let _ = ready_tx.send(Ok(()));
+                    // Message pump — required for WH_KEYBOARD_LL to fire.
+                    // SAFETY: standard Win32 message pump pattern.
+                    unsafe {
+                        let mut msg = MSG::default();
+                        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                            let _ = TranslateMessage(&msg);
+                            DispatchMessageW(&msg);
+                        }
+                        // Pump exited: remove hook, clear sender pointer.
+                        let _ = UnhookWindowsHookEx(h);
+                    }
+                }
+                Err(e) => {
+                    let _ = ready_tx.send(Err(format!("SetWindowsHookExW failed: {e}")));
+                }
+            }
+
+            // Clear the sender so no further events can be sent after unhook.
+            if let Some(cell) = KEY_EVENT_TX.get() {
+                if let Ok(mut guard) = cell.lock() {
+                    if let Some(ptr) = guard.take() {
+                        // SAFETY: we own the Box from Box::into_raw above.
+                        unsafe { drop(Box::from_raw(ptr)) };
+                    }
+                }
+            }
+            HOOK_THREAD_ID.store(0, Ordering::Release);
+        })
+        .map_err(|e| AgentError::CollectorStart {
+            name: "keystroke",
+            reason: format!("failed to spawn hook thread: {e}"),
+        })?;
+
+    // Wait for the hook thread to confirm installation.
+    ready_rx
+        .recv()
+        .map_err(|_| AgentError::CollectorStart {
+            name: "keystroke",
+            reason: "hook thread exited before signalling ready".into(),
+        })?
+        .map_err(|reason| AgentError::CollectorStart { name: "keystroke", reason })?;
+
+    Ok(HookHandle { _thread: thread })
+}
+
+/// Low-level keyboard hook callback (`WH_KEYBOARD_LL`).
+///
+/// # Safety
+///
+/// This is an `extern "system"` callback registered with Win32. It is called
+/// from the hook thread's message pump. We access `KEY_EVENT_TX` under a
+/// mutex and send the event, then delegate to the next hook in the chain.
+unsafe extern "system" fn keyboard_hook_proc(
+    n_code: i32,
+    w_param: WPARAM,
+    l_param: LPARAM,
+) -> LRESULT {
+    // nCode < 0 means we must not process the message.
+    if n_code >= 0 {
+        // Cast lParam to KBDLLHOOKSTRUCT.
+        // SAFETY: Win32 guarantees lParam points to a KBDLLHOOKSTRUCT for
+        // WH_KEYBOARD_LL when nCode == HC_ACTION (0).
+        let kbd = &*(l_param.0 as *const KBDLLHOOKSTRUCT);
+        let ts  = GetTickCount64();
+
+        let ev = KeyEvent {
+            vk_code:      kbd.vkCode,
+            scan_code:    kbd.scanCode,
+            flags:        kbd.flags.0,
+            timestamp_ms: ts,
+        };
+
+        // Send to the collector. Ignore send errors (collector may have stopped).
+        if let Some(cell) = KEY_EVENT_TX.get() {
+            if let Ok(guard) = cell.try_lock() {
+                if let Some(ptr) = *guard {
+                    let _ = (*ptr).send(ev);
+                }
+            }
+        }
+    }
+
+    CallNextHookEx(HHOOK::default(), n_code, w_param, l_param)
 }
