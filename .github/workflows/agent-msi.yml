@@ -39,6 +39,9 @@ jobs:
             apps/agent/target
           key: agent-msi-v4-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
 
+      - name: Install protoc
+        run: choco install protoc -y --no-progress
+
       - name: Setup OpenSSL (via StrawberryPerl)
         run: |
           choco install strawberryperl -y --no-progress
