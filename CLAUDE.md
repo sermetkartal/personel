@@ -386,6 +386,85 @@ Bu liste bizim 12 hafta öncesi sıralamamız. **Otonom çalışan Claude Code**
 
 ---
 
+### ⚡ PARALEL EXECUTION STRATEJİSİ — Wave Yapısı
+
+**Her fazda paralel agent kullan.** Sıralı çalışma yasak (zaman israfı). Tek bir sequential blocker (Faz 1) hariç.
+
+CLAUDE.md §9 "ZORUNLU: Uzman Agent Delegasyonu" kuralı geçerli — non-trivial (3+ dosya VEYA domain kararı VEYA çapraz katman) iş = uzman agent.
+
+#### Wave kurulumu (her faz için)
+
+**Önce**: Faz başında paralel olabilecek maddeleri grupla. Çakışma kontrolü:
+- Aynı dosyaya 2 agent dokunamaz
+- Aynı paket/crate'e dokunan 2 agent paralel ÇALIŞABİLİR (farklı dosyalar)
+- Server-side change + agent-side change paralel olabilir (farklı makineler)
+
+**Spawn**: Tek mesajda çoklu Agent tool call (paralel block).
+
+**Sonra**: Wave tamamlanınca tüm sonuçları topla, çakışma çözümle, commit + push.
+
+#### Faz bazlı paralel grupları
+
+| Faz | Paralel Wave Önerisi | Agent türleri |
+|---|---|---|
+| **Faz 1** | Sequential (her madde diğerinin önkoşulu) | Yok |
+| **Faz 2** (yeni collector'lar #7-20) | Wave 1: file_system + network paralel (2 rust-engineer). Wave 2: browser + firefox + cloud + email paralel (4 rust-engineer). Wave 3: office + system + bluetooth + mtp + device + geo + url + clipboard paralel (8 rust-engineer) | rust-engineer x14 |
+| **Faz 3** (ekran capture #21-28) | Wave 1: multi-monitor + adaptive + WebP + delta paralel (4 rust-engineer). Wave 2: sensitivity + OCR + PE-DEK + click-aware paralel (4 rust-engineer) | rust-engineer x8 |
+| **Faz 4** (stability #29-40) | Wave 1: anti-tamper + OTA + crash + throttle paralel (4 rust-engineer + security-engineer). Wave 2: battery + game + queue + auto-update + tamper protect (5 rust-engineer). Wave 3: GPO + benchmark + signing scaffold (3 devops-engineer) | rust-engineer x9 + security-engineer x1 + devops-engineer x3 |
+| **Faz 5** (backend hardening #41-61) | Wave 1: Vault PKI + Postgres TLS + ClickHouse 2-node + NATS cluster (4 devops-engineer). Wave 2: MinIO + OpenSearch + Keycloak HA + tüm TLS (4 devops-engineer). Wave 3: cert rotation + secrets rotation + healthcheck fix + backup + restore drill + PITR (6 devops-engineer) | devops-engineer x14 |
+| **Faz 6** (API #62-72) | Wave 1: enroll PKI + token refresh + endpoint wipe + bulk ops (4 backend-developer). Wave 2: audit streaming + search + aggregation + DSR + isolation + rate limit + service-to-service auth (7 backend-developer) | backend-developer x11 |
+| **Faz 7** (data pipeline #73-80) | Wave 1: schema versioning + DLQ + replay + tiering paralel (4 backend-developer). Wave 2: compression + dedup + registry + DQM (4 backend-developer) | backend-developer x8 |
+| **Faz 8** (ML/Analytics #81-89) | Wave 1: ML scaffold + OCR + UBA paralel (3 ai-engineer + python-pro). Wave 2: productivity + risk + trend + PDF/Excel + dashboards (5 backend-developer + data-analyst) | ai-engineer x2 + python-pro x1 + backend-developer x3 + data-analyst x2 |
+| **Faz 9** (Console UI #90-102) | Wave 1: endpoint mgmt + live view + audit search + policy editor (4 nextjs-developer). Wave 2: DSR + user mgmt + tenant mgmt + settings (4 nextjs-developer). Wave 3: real-time + mobile + a11y + i18n + notif (5 nextjs-developer + react-specialist) | nextjs-developer x12 + react-specialist x1 |
+| **Faz 10** (Portal #103-108) | Tek wave: 6 madde paralel (3 nextjs-developer + 3 frontend-developer) | nextjs-developer x3 + frontend-developer x3 |
+| **Faz 11** (KVKK #109-120) | Tek wave: tüm madde compliance-auditor paralel (4-5 instance) | compliance-auditor x5 |
+| **Faz 12** (Security #121-132) | Wave 1: pentest plan + audit checklist + crypto review + threat model (4 security-auditor). Wave 2: SBOM + Trivy + SAST + secret scan + branch + reproducible + SLSA + WAF (8 devops-engineer + security-engineer) | security-auditor x4 + devops-engineer x6 + security-engineer x2 |
+| **Faz 13** (Infra #133-145) | Wave 1: install + preflight + post-install + upgrade (4 devops-engineer). Wave 2: monitoring + log + APM + segmentation + firewall + bastion + VPN + DDoS + cost (9 devops-engineer + sre-engineer) | devops-engineer x10 + sre-engineer x3 |
+| **Faz 14** (Testing #146-156) | Wave 1: unit + integration + E2E + load + stress + chaos + security + compliance + Phase 1 exit + smoke + regression (11 test-automator + qa-expert paralel) | test-automator x8 + qa-expert x3 |
+| **Faz 15** (Documentation #157-167) | Tek wave: 11 madde paralel (technical-writer + documentation-engineer) | technical-writer x6 + documentation-engineer x5 |
+| **Faz 16** (CI/CD #168-176) | Wave 1: matrix + registry + scanning + MSI sign + release + flags + blue-green + canary + rollback (9 devops-engineer + deployment-engineer) | devops-engineer x6 + deployment-engineer x3 |
+| **Faz 17** (Customer Success #177-186) | Tek wave: 10 madde paralel (technical-writer + customer-success-manager + sales-engineer) | technical-writer x4 + customer-success-manager x3 + sales-engineer x3 |
+| **Final** (#187-190) | Sequential — Sen tek başına yapacaksın | - |
+
+**Toplam tahmini agent çağrısı**: ~150-200 paralel spawn, 17 faz × ortalama 2 wave × 3-8 agent
+
+#### Paralel agent çağırma kuralı
+
+```
+TEK MESAJDA paralel spawn:
+- Agent #1 (rust-engineer): madde X
+- Agent #2 (rust-engineer): madde Y  
+- Agent #3 (devops-engineer): madde Z
+```
+
+**Çakışma riski olduğu durumlar** (sequential yap):
+- Aynı dosyaya 2 madde dokunuyorsa
+- Cargo.toml workspace dependencies değişiyorsa
+- docker-compose.yaml gibi global config dosyaları
+- Migration numarası çakışması (her migration unique sayı)
+
+#### Spawn brief disiplini (her agent için zorunlu)
+
+1. **Goal + why** (1 cümle)
+2. **Context** (CLAUDE.md ref + dosya path'leri)
+3. **Constraints** (locked decisions, KVKK kuralları, ADR'lar)
+4. **Deliverable shape** (dosya listesi + fonksiyon imzası + test kriteri)
+5. **Don't commit, parent will**
+6. **Brief'i kısa tut** (200-400 kelime, agent kendi exploration yapacak)
+
+#### Agent sonucu integration
+
+Wave bitince:
+1. Her agent'ın değiştirdiği dosya listesini al
+2. Çakışma var mı kontrol et
+3. Çakışma varsa: önce hangi öncelikli, manuel merge
+4. Cargo check / go build / pnpm build koş
+5. Pass ise commit (madde numarası listesi commit message'da)
+6. Push
+7. Sonraki wave
+
+---
+
 ### 🚦 OTONOM ÇALIŞAN CLAUDE CODE İÇİN KURALLAR
 
 1. **Onay alma**: Hiçbir maddede onay isteme. Tasarım kararı gerekirse şu §0 altındaki "TASARIM KARARLARI" bölümüne yaz, en güvenli/conservative olanı seç, devam et.
@@ -403,8 +482,9 @@ Bu liste bizim 12 hafta öncesi sıralamamız. **Otonom çalışan Claude Code**
 7. **Token tasarrufu**: 
    - Uzun grep sonuçlarını gerekmedikçe tüm halinde okutma
    - Build log'larını sadece error pattern'i grep'le
-   - Agent'ları paralel kullan (rust-engineer x3, nextjs-developer x2)
+   - Agent'ları AGRESIF paralel kullan (yukarıdaki Wave tablosuna göre)
    - Her major fazda CLAUDE.md state güncelle (bu §0)
+   - Tek başına kod yazma — non-trivial işlerde delegasyon zorunlu (CLAUDE.md §9)
 
 8. **Sıkışınca**: Token limit yaklaşınca (context %75 dolduğunda):
    - Mevcut WIP commit
