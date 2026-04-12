@@ -154,11 +154,11 @@
 
     <!-- ── Custom Action: enroll.exe post-install ─────────────────────── -->
     <!--
-      Runs `enroll.exe --gateway [GATEWAY_URL] --token [TENANT_TOKEN]` as a
-      deferred, impersonated custom action after service installation.
-      "Deferred" means it runs during the commit phase (services already
-      installed). "Impersonate" means it runs as the installing user rather
-      than SYSTEM, which is required for DPAPI-protected PE-DEK sealing.
+      Runs `enroll.exe` with gateway/token flags as a deferred, impersonated
+      custom action after service installation. Deferred means it runs during
+      the commit phase (services already installed). Impersonate means it
+      runs as the installing user rather than SYSTEM, which is required for
+      DPAPI-protected PE-DEK sealing.
     -->
     <CustomAction
       Id="RunEnroll"
