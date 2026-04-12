@@ -6,76 +6,426 @@
 
 ---
 
-## 0. MEVCUT DURUM — Pilot Bring-up (2026-04-12)
+## 0. MEVCUT DURUM + 190-MADDE PRODUCTION ROADMAP (2026-04-13)
 
-### Ubuntu backend sunucusu: 192.168.5.44
+### 🎯 GÖREV (otonom çalışacak Claude Code için)
 
-**SSH**: `ssh kartal@192.168.5.44` (şifre: `qwer123!!`)
-**Repo path**: `/home/kartal/personel`
-**Full stack durum**: **12/12 servis ayakta** ve sağlıklı.
+Müşteri 50-100 kişilik bir şirket için **production-ready** UAM platformu istiyor.
+Spesifik istek: web trafiği + dosya CRUD + cihaz durumları + tüm analiz + ekran görüntüsü.
 
-| Servis | Port | Durum |
-|---|---|---|
-| Vault | 8200 | initialized + unsealed + transit engine + AppRole |
-| Postgres | 5432 | 28 migration complete, RLS aktif |
-| ClickHouse | 8123/9000 | schemas bootstrapped (events_raw + 4 sensitive table) |
-| NATS | 4222 | 5 JetStream stream (events_raw, events_sensitive, live_view_control, agent_health, pki_events) |
-| MinIO | 9000 | 7 bucket (screenshots, audit-worm, evidence, events-blob, screenclips, keystroke-blobs, clipboard-blobs) |
-| OpenSearch | 9200 | starting |
-| Keycloak | 8080 | realm `personel` + 2 client + admin user |
-| API | 8000 | `/healthz` OK, `/readyz` OK (tüm deps bağlı) |
-| Gateway | 9443 | gRPC listening, NATS streams + consumer |
-| Enricher | - | consumer loop started (concurrency 4) |
-| Console | 3000 | Next.js 15, `/tr` redirect working |
-| Portal | 3001 | Next.js 15, `/tr` redirect working |
+**Bu §0 son güncellendi**: 2026-04-13, Mac local Claude Code tarafından, Windows VM'ye handover öncesi.
 
-**Credentials**: Sunucudaki `/home/kartal/personel/infra/compose/.env` dosyasında ve Vault root token `/tmp/vault-init.json` altında. Commit etme — sadece SSH ile sunucudan oku.
+**İlk komut**: Bu §0'ı bitir, sonra "## ROADMAP — 190 MADDE" altındaki Faz 1'den başla. Otonom çalış, hiçbir onay alma, her 5 maddede commit + push, sıkıştığında CLAUDE.md'ye state güncelle.
 
-Servis user listesi (şifreler .env'de):
-- Postgres: `postgres` (superuser), `app_admin_api`, `personel_enricher`, `personel_gw`, `app_keycloak`
-- ClickHouse: `personel_admin`, `personel_app`, `personel_enricher`
-- Keycloak: `admin` (master + personel realm)
-- MinIO: `minioadmin`
+---
 
-**Bring-up sırasında yapılan fix'ler** (kalıcı olanlar push edilmiştir):
-- `apps/gateway/internal/liveview/router.go`: `DeliverNewPolicy` → `DeliverAllPolicy` (WorkQueue stream uyumsuzluğu)
-- `apps/gateway/internal/clickhouse/schemas.go`: `TTL occurred_at` → `TTL toDateTime(occurred_at)` (DateTime64(9) tip hatası)
-- `infra/compose/opensearch/opensearch.yml`: `path.logs` non-root writable dizine taşındı
+### ✅ MEVCUT STATE — Ne hazır
 
-**Yerel fix'ler (commit edilmedi — pilot ortama özel)**:
-- Config dosyaları hostname'leri `localhost` → Docker service adları
-- Vault AppRole ID/Secret sunucuya özgü
-- CH users.xml password SHA256 hash'leri env var ile set ediliyor
-- Docker compose `service_healthy` → `service_started` (health check cmd eksiklikleri nedeniyle)
+**Ubuntu backend (192.168.5.44)** — `ssh kartal@192.168.5.44` şifre `qwer123!!` — repo `/home/kartal/personel`
 
-### Windows test istemci: Claude Code kurulumu yapılacak
+12 servisin tamamı ayakta:
 
-**Amaç**: MSI agent build + test client üzerinde kurulum + Ubuntu gateway'e bağlantı.
+| Servis | Port | Durum | Notlar |
+|---|---|---|---|
+| Vault | 8200 | ✅ initialized | Root token sunucuda `/tmp/vault-init.json`. `disable_mlock=true` (dev shortcut) |
+| Postgres | 5432 | ✅ 28 migration | `sslmode=disable` (dev shortcut). RLS aktif |
+| ClickHouse | 8123/9000 | ✅ schemas | `personel` DB, 5 table |
+| NATS | 4222 | ✅ JetStream | 5 stream (events_raw, events_sensitive, live_view_control, agent_health, pki_events). Dev config (no auth) |
+| MinIO | 9000 | ✅ buckets | 7 bucket. Default minioadmin creds |
+| OpenSearch | 9200 | ⚠️ starting | path.logs fix uygulandı |
+| Keycloak | 8080 | ✅ realm | personel realm + admin user (admin/admin123). Manuel `docker run` (compose dışı). KC_HOSTNAME=keycloak |
+| API | 8000 | ✅ /healthz OK | OIDC + Vault + DB hepsi bağlı |
+| Gateway | 9443 | ✅ gRPC | mTLS bekliyor, NATS publish hazır |
+| Enricher | - | ✅ consumer loop | 4 concurrency |
+| Console | 3000 | ✅ Next.js 15 | `/tr` redirect |
+| Portal | 3001 | ✅ Next.js 15 | `/tr` redirect |
 
-**Yapılacaklar** (Claude Code Windows'ta başladığında):
-1. Build ortamı doğrula: Rust 1.94+, cargo, protoc 34+, git, FireDaemon OpenSSL 3 (C:\Program Files\FireDaemon OpenSSL 3)
-2. Env var'ları confirm et:
-   - `OPENSSL_DIR=C:\Program Files\FireDaemon OpenSSL 3`
-   - `OPENSSL_LIB_DIR=C:\Program Files\FireDaemon OpenSSL 3\lib`
-   - `OPENSSL_INCLUDE_DIR=C:\Program Files\FireDaemon OpenSSL 3\include`
-   - `PROTOC_INCLUDE=C:\personel\proto`
-3. `cd C:\personel && git pull` (en son fix'ler için)
-4. `cd apps\agent && cargo build --release -p personel-agent -p personel-watchdog`
-5. Compile hatası olursa: `cargo build ... 2>&1 | Out-File build.log` → tam hata listesini oku → fix et
-6. Build başarılı olunca: `.\installer\build-msi.ps1` ile MSI üret (WiX 4 kurulu olmalı)
-7. MSI'ı `sc create personel-agent binPath="..."` yerine de kurulabilir (MSI'sız test için)
-8. Agent'ı başlat, gateway (192.168.5.44:9443) bağlantısını doğrula
-9. Event akışını Ubuntu'daki NATS/ClickHouse'da görüntüle
+**Credentials** (sunucu .env'den; commit ETME):
+- Vault root token: `/tmp/vault-init.json` → root_token alanı
+- Vault unseal key: `U1VROrQeITje/ms1w29cs7vy29/q4Q5sAeKQeVdAZq0=`
+- Postgres superuser: `postgres` / `<.env'den oku>`
+- Postgres app: `app_admin_api` / `apipass123`
+- Postgres enricher: `personel_enricher` / `enricher123`
+- Postgres gateway: `personel_gw` / `gw123`
+- ClickHouse admin: `personel_admin` / `clickhouse_admin_pass`
+- ClickHouse app: `personel_app` / `clickhouse_app_pass`
+- ClickHouse enricher: `personel_enricher` / `enricher123`
+- Keycloak: `admin` / `admin123`
+- Keycloak API client secret: `api-secret-dev`
+- MinIO: `minioadmin` / `<.env'den oku>`
+- Vault AppRole gateway-service role_id: `3737d80c-7b47-07df-9c36-20d68b628f6e` (sunucuya özgü)
+- Vault AppRole api-service role_id: `1f2e613d-9ba9-d760-a426-4cd47d38d5fe` (sunucuya özgü)
 
-**Önemli**: Windows compile hataları iteratif olarak çıkabilir — her round'da `#[cfg(target_os = "windows")]` bloklarındaki `windows` crate 0.54 API uyumunu kontrol et. Önceden düzelttiğimiz pattern'ler:
-- `.as_bool()` yerine `?` veya `.is_ok()` (BOOL → Result dönüşümü)
-- `Interface::cast::<T>()` için `use windows::core::Interface;`
-- `D3D11_BIND_FLAG(0)` → `0u32` (flag enum → u32)
-- `HANDLE(-1isize)` (not `*mut _`)
-- `SenderPtr` newtype with `unsafe impl Send+Sync` for raw pointer statics
+**Windows test client (192.168.5.30)** — `ssh kartal@192.168.5.30` şifre `qwer123!!`
+- Hostname: DESKTOP-426U3BG
+- Rust 1.94 + VS Build Tools 2022 + protoc 34.1 + Git 2.53 + FireDaemon OpenSSL 3 (`C:\Program Files\FireDaemon OpenSSL 3`) + WiX 4.0.5 + firewall extension kurulu
+- Repo `C:\personel`
+- Mevcut build: 3 exe `target\release\` ve `target\x86_64-pc-windows-msvc\release\` altında
+- MSI üretildi: `apps\agent\installer\dist\personel-agent.msi` (192 KB)
+- MSI test kuruldu: `C:\Program Files (x86)\Personel\Agent\` — service register OK ama enroll edilmemiş
 
-**Kalan known bug'lar** (düzeltilecek):
-- `personel-collectors` crate'inde 32 compile error — tüm fix'ler commit `99c4644`'te olması bekleniyor ama hâlâ hata veriyor. Windows'ta Claude Code başladığında `cargo build` çıktısını tam log olarak oku, her error'u tek tek düzelt.
+**Build env vars (Windows session'ı için)**:
+```
+OPENSSL_DIR = C:\Program Files\FireDaemon OpenSSL 3
+OPENSSL_LIB_DIR = C:\Program Files\FireDaemon OpenSSL 3\lib
+OPENSSL_INCLUDE_DIR = C:\Program Files\FireDaemon OpenSSL 3\include
+PROTOC_INCLUDE = C:\personel\proto
+PATH += $env:USERPROFILE\.cargo\bin; $env:USERPROFILE\.dotnet\tools; C:\Program Files\Git\bin; C:\Users\kartal\AppData\Local\Microsoft\WinGet\Packages\Google.Protobuf_Microsoft.Winget.Source_8wekyb3d8bbwe\bin
++ vcvars64.bat sourced for MSVC
+```
+
+**Kalıcı fix'ler** (push edilmiş):
+- `apps/gateway/internal/liveview/router.go`: DeliverAllPolicy
+- `apps/gateway/internal/clickhouse/schemas.go`: toDateTime() wrap for DateTime64 TTL
+- `infra/compose/opensearch/opensearch.yml`: path.logs writable
+- `apps/agent/crates/personel-collectors/src/clipboard.rs`: CreateWindowExW direct HWND
+- `apps/agent/crates/personel-collectors/src/print.rs`: JOB_INFO_1W.Size removed
+- `apps/agent/crates/personel-collectors/src/usb.rs`: CM_NOTIFY callback const ptrs
+- `apps/agent/crates/personel-collectors/src/lib.rs`: allow(unsafe_code) for Win32
+- `apps/agent/installer/wix/main.wxs`: WiX 4 syntax (Custom Condition, paths, watchdog name)
+
+**Server-side dev shortcut'ları** (commit EDİLMEDİ — pilot ortama özel, yerel):
+- Config dosyaları: hostname'ler localhost yerine docker service adları
+- Compose: tüm `service_healthy` → `service_started`
+- ClickHouse password env vars (SHA256)
+- API config'de Vault AppRole ID/Secret hardcoded
+
+**Çalışan iken bilinmesi gerekenler**:
+- Ubuntu DNS: 1.1.1.1 (chattr +i, kalıcı)
+- Vault TLS cert: self-signed `/etc/personel/tls/{vault.crt,vault.key,tenant_ca.crt,clickhouse.crt,clickhouse.key,gateway.crt,gateway.key,root_ca.crt}`
+- Tüm `/var/lib/personel/*` 777 perms (dev shortcut)
+- Override compose: `infra/compose/docker-compose.dev-override.yaml` (config volume mounts + service_started deps)
+
+---
+
+### 🚧 KAPATILACAK ZINCIR — Şu an kırık yerler
+
+1. **Vault PKI engine kurulmadı** → enroll fail → agent başlamıyor
+2. **Tenant ID custom claim Keycloak'ta yok** → multi-tenant test edilemez
+3. **Windows agent enroll → service start → event akışı** uçtan uca test edilmemiş
+4. **`personel-collectors`** içinde `file_system` ve `network` synthetic stub
+5. **Browser/email/cloud/system events** collector hiç yok
+6. **MSI custom action enroll.exe**: TENANT_TOKEN olmadan koşmuyor (condition gating doğru ama enroll çalışmıyor)
+
+İlk çözülecek (Faz 1): bu 6 madde.
+
+---
+
+### 📋 ROADMAP — 190 MADDE
+
+Bu liste bizim 12 hafta öncesi sıralamamız. **Otonom çalışan Claude Code** sıraya göre alır, her maddeyi çözer/scaffolde eder.
+
+#### Faz 1: Setup + critical bring-up (1-2 saat)
+
+1. Branch tidy + .gitignore artifact + workspace pull
+2. Ubuntu Vault PKI engine setup (`vault secrets enable pki`, root cert, role)
+3. Ubuntu API enroll endpoint test (cert üretim e2e)
+4. Keycloak tenant_id custom claim mapper
+5. Windows agent enroll → service start → ilk event akışı
+6. Smoke test: Ubuntu'da NATS subject'lerinde event görünüyor mu
+
+#### Faz 2: Agent yeni collector'lar (PARALEL rust-engineer agent'lar)
+
+7. **file_system real**: ETW Microsoft-Windows-Kernel-File real-time consumer (Create/Write/Delete/Rename + sensitive file SHA-256 hash)
+8. **network real**: ETW Microsoft-Windows-DNS-Client + WFP user-mode TCP/UDP flow + TLS SNI
+9. **browser_history**: Chrome/Edge SQLite reader (History DB, 5dk poll, deduplication)
+10. **firefox_history**: Firefox places.sqlite reader
+11. **cloud_storage**: OneDrive/Dropbox/Google Drive lokal sync klasör watcher
+12. **email_metadata**: Outlook MAPI hook (sender/recipient/subject/timestamp — body asla)
+13. **office_activity**: Recent files registry (Word/Excel/PowerPoint)
+14. **system_events**: Power state, sleep/wake, lock/unlock, login/logout, AV deactivation
+15. **bluetooth_devices**: Bluetooth pair/unpair detection
+16. **mtp_devices**: USB beyond storage — phones, cameras (MTP/PTP)
+17. **device_status**: CPU/RAM/disk/battery/screen state poll (1dk)
+18. **geo_ip**: IP-based location (MaxMind GeoLite2 — embedded ya da local lookup)
+19. **window_url_extraction**: Browser title regex → URL extraction
+20. **clipboard_content_redacted**: Clipboard metadata (içerik DLP gated)
+
+#### Faz 3: Ekran görüntüsü iyileştirmeleri (1 saat)
+
+21. Multi-monitor support (DXGI tüm output'lar)
+22. Adaptive frequency (idle 30s, active 1-5dk)
+23. Sensitivity exclusion default list (banking, password manager, private mode)
+24. WebP encoding (-50% boyut)
+25. Delta encoding (sadece değişen bölge)
+26. OCR-ready preprocessing (contrast + grayscale)
+27. PE-DEK encrypt at rest (DLP gated)
+28. Click-aware capture (mouse click coord + zoom)
+
+#### Faz 4: Agent stability & operational (2-3 saat)
+
+29. Anti-tamper real (PE self-hash, registry ACL, watchdog mutual monitoring)
+30. OTA update apply real (binary swap, atomic rename, rollback)
+31. Crash dump collection (MiniDumpWriteDump)
+32. CPU/RAM throttling (<2% / <150MB enforced)
+33. Battery aware (low battery → skip screen capture)
+34. Game mode detection (full-screen exclusive → reduce freq)
+35. Offline queue eviction policy (oldest-first when full)
+36. Auto-update version checker
+37. Uninstall protection (service tampering → audit alert + restart)
+38. ADM template + GPO documentation
+39. Performance benchmark harness (qa/footprint-bench real run)
+40. Code signing CI integration scaffold (cert satın alındığında plug-in)
+
+#### Faz 5: Backend production hardening (Ubuntu live, 3-4 saat)
+
+41. Vault PKI production setup + auto-unseal sealed file
+42. Postgres TLS enable (sslmode=verify-full)
+43. Postgres replica + streaming replication
+44. ClickHouse 2-node + Keeper
+45. ClickHouse replication test + failover drill
+46. NATS JetStream cluster (3-node Raft)
+47. NATS operator JWT + NKeys + at-rest encryption
+48. MinIO distributed (4-node erasure)
+49. MinIO bucket lifecycle policies (retention enforced)
+50. MinIO Object Lock (audit-worm bucket WORM mode)
+51. OpenSearch cluster setup
+52. Keycloak HA (2-node + Infinispan)
+53. Tüm 18 servisin TLS sertifikası Vault PKI'den
+54. Cert rotation automation (cron)
+55. Secrets rotation automation
+56. Compose `service_started` → `service_healthy` geri çevir + healthcheck'ler düzelt
+57. Production env var template + bootstrap-env.sh harden
+58. Backup automation (nightly + hourly incremental)
+59. Restore drill (RTO/RPO ölç)
+60. Off-site backup mirror (MinIO replication)
+61. PITR (Postgres + ClickHouse)
+
+#### Faz 6: API completeness (2 saat)
+
+62. Enroll Vault PKI integration (real cert + token)
+63. Endpoint token refresh
+64. Endpoint deactivation/wipe (remote command)
+65. Bulk endpoint operations (batch enroll/revoke)
+66. Audit log streaming API (WebSocket)
+67. Search API (OpenSearch full-text)
+68. ClickHouse aggregation API (real reports)
+69. DSR fulfillment workflow (PII export + crypto-erase)
+70. Multi-tenant isolation pen test
+71. Per-tenant rate limiting
+72. Service-to-service API key auth
+
+#### Faz 7: Data pipeline (1-2 saat)
+
+73. Event schema versioning (proto v1 → v2 migration)
+74. Dead letter queue
+75. Replay capability (re-process from offset)
+76. Storage tiering (hot/warm/cold)
+77. Compression optimization (ZSTD tuning)
+78. Deduplication (event hash check)
+79. Schema registry
+80. Data quality monitoring (anomaly detection)
+
+#### Faz 8: ML / Analytics (1-2 saat)
+
+81. Llama 3.2 GGUF download script (manuel — Phase 2 marker bırak)
+82. Real ML category classifier inference path
+83. OCR pipeline real (Tesseract + PaddleOCR + KVKK redaction)
+84. UBA real feature extraction (ClickHouse query)
+85. Productivity scoring algorithm
+86. Risk scoring (UBA + DLP signals)
+87. Trend analysis (weekly/monthly)
+88. PDF/Excel report export
+89. Custom dashboards (Grafana + tenant-gated)
+
+#### Faz 9: Web Console UI (3-4 saat — PARALEL nextjs-developer)
+
+90. Endpoint management UI (list/detail/policy/wipe)
+91. Live view UI (WebRTC viewer + HR approval)
+92. Audit log search UI (full-text + filters + export)
+93. Policy editor (visual SensitivityGuard)
+94. DSR fulfillment UI (workflow + status + artifact)
+95. User management UI (Keycloak integration)
+96. Tenant management UI
+97. Settings UI (config tüm)
+98. Real-time dashboards (WebSocket live)
+99. Mobile responsive
+100. Accessibility WCAG 2.1 AA
+101. i18n complete (TR + EN tüm string)
+102. Notification system
+
+#### Faz 10: Employee Portal (1 saat)
+
+103. Aydınlatma metni final integration
+104. Şeffaflık portalı real veri (KVKK m.10/m.11)
+105. DSR submission UI
+106. Data download (KVKK m.11)
+107. Live view consent UI
+108. First-login modal UAT
+
+#### Faz 11: KVKK / Compliance (1 saat — doc generation)
+
+109. VERBİS prep checklist
+110. DPIA real customer doldur (template var)
+111. DPA template son gözden geçirme
+112. Sub-processor registry
+113. Aydınlatma metni gerçek müşteri içeriği template
+114. Açık rıza form (DLP opt-in)
+115. Retention matrix enforcement test
+116. Right to erasure real implementation
+117. Audit trail tamper-proof verification script
+118. Phase 1 exit #9 keystroke admin-blindness red team
+119. DLP opt-in ceremony e2e test
+120. Inspection ready runbook (Kurul denetim senaryosu)
+
+#### Faz 12: Security (2 saat — kod + scaffold)
+
+121. Penetration test plan + vector list (BLOCKER: 3rd party)
+122. Code audit checklist + self-review (BLOCKER: 3rd party)
+123. Cryptographic review document
+124. Threat model update
+125. SBOM generation (cargo cyclonedx + go cyclonedx)
+126. Vulnerability scanning (Trivy CI)
+127. SAST/DAST CI integration (CodeQL + ZAP)
+128. Secret scanning + Gitleaks
+129. Branch protection rules
+130. Reproducible builds setup
+131. SLSA Level 2 supply chain
+132. WAF nginx rules
+
+#### Faz 13: Infrastructure (1-2 saat)
+
+133. Production install.sh (gerçek pre-flight)
+134. Pre-flight check tool
+135. Post-install validation
+136. Upgrade procedure (zero-downtime, rollback)
+137. Monitoring stack (Prometheus + AlertManager + Grafana hardened)
+138. Log aggregation (Loki + Promtail)
+139. Distributed tracing (Tempo)
+140. Network segmentation (data tier internal-only)
+141. Firewall ruleset (port 9443 in only)
+142. Bastion host config
+143. VPN setup doc
+144. DDoS protection scaffold (Nginx rate limit)
+145. Cost monitoring scaffold
+
+#### Faz 14: Testing (2 saat)
+
+146. Unit test coverage > %60 (Go + Rust)
+147. Integration tests koş (testcontainers)
+148. E2E Playwright (Console happy path + Portal happy path)
+149. Load test 500 endpoint simulator
+150. Stress test breaking point
+151. Chaos engineering scenarios
+152. Security test suite (SQL injection, XSS, CSRF, keystroke red team)
+153. Compliance test suite (KVKK m.11 DSR, retention)
+154. Phase 1 exit criteria 18 madde — koş + raporla
+155. Smoke test CI automation
+156. Regression test suite
+
+#### Faz 15: Documentation (1-2 saat)
+
+157. Installation guide (production)
+158. Operations runbook (start/stop/restart/troubleshoot)
+159. Troubleshooting guide
+160. API documentation (OpenAPI auto-gen + examples)
+161. Admin user manual (TR)
+162. Employee user manual (TR)
+163. Architecture documentation update
+164. Onboarding guide (yeni admin)
+165. Incident response playbook
+166. Privacy policy (KVKK)
+167. Terms of service
+
+#### Faz 16: CI/CD (1 saat)
+
+168. GitHub Actions matrix (linux + windows + macos)
+169. Container image registry + signed
+170. Image scanning (Trivy + cosign)
+171. MSI auto-build + sign in CI
+172. Release automation (semver + changelog)
+173. Feature flags (open source)
+174. Blue-green deployment scaffold
+175. Canary release strategy doc
+176. Rollback automation
+
+#### Faz 17: Customer Success (1 saat — doc)
+
+177. Sales materials (one-pager, demo deck)
+178. POC environment provisioning
+179. Trial license mechanism
+180. License validation (online + offline)
+181. Customer success playbook
+182. Training materials (video + slides + lab)
+183. Support tier definitions (SLA)
+184. Ticket system integration scaffold
+185. Status page scaffold
+186. Change log + release notes automation
+
+#### Final
+
+187. Final smoke test full stack
+188. End-to-end pilot scenario walkthrough
+189. CLAUDE.md final state update
+190. README + GitHub repo polish
+
+---
+
+### 🚦 OTONOM ÇALIŞAN CLAUDE CODE İÇİN KURALLAR
+
+1. **Onay alma**: Hiçbir maddede onay isteme. Tasarım kararı gerekirse şu §0 altındaki "TASARIM KARARLARI" bölümüne yaz, en güvenli/conservative olanı seç, devam et.
+
+2. **Commit cadence**: Her 5 madde sonunda commit + push. Commit message'da kapatılan madde numaralarını yaz: `feat(roadmap): items 7-11 — file_system + network + browsers + cloud + email`.
+
+3. **Branch strategy**: `main` üzerinde direkt commit. Branch açma. Conflict çıkarsa rebase.
+
+4. **Test sınırı**: Her madde için kod yaz + en az syntax check (cargo check / go build / pnpm build). Real run mümkünse koş, mümkün değilse "TESTED: scaffold" not bırak.
+
+5. **Windows agent iterasyon**: Windows VM'desin → cargo build doğrudan koşar, SSH gerek yok. Hata olursa edit + rebuild. Commit her 3-5 madde.
+
+6. **Ubuntu backend ops**: SSH ile (Windows'tan PowerShell + ssh.exe veya plink). Komut format: `ssh kartal@192.168.5.44 "command"`. Şifre: `qwer123!!`.
+
+7. **Token tasarrufu**: 
+   - Uzun grep sonuçlarını gerekmedikçe tüm halinde okutma
+   - Build log'larını sadece error pattern'i grep'le
+   - Agent'ları paralel kullan (rust-engineer x3, nextjs-developer x2)
+   - Her major fazda CLAUDE.md state güncelle (bu §0)
+
+8. **Sıkışınca**: Token limit yaklaşınca (context %75 dolduğunda):
+   - Mevcut WIP commit
+   - CLAUDE.md §0'a son durum + sonraki adım yaz
+   - Push
+   - User'a ne kaldığını ve nereden devam edileceğini özet ver
+
+9. **Tasarım kararları** (otonom seçimler — değiştirme yok):
+   - Browser history: visited URL/title only, NO bookmark/cookie/password
+   - Email: sender/recipient/subject/timestamp, NO body
+   - Screen capture multi-monitor: primary first, others Phase 2 marker
+   - Cloud storage: lokal sync klasör watch only, NO cloud API OAuth
+   - Anti-tamper: user-mode only, NO kernel rootkit-level
+   - DLP keystroke content: ADR 0013 default OFF, opt-in ceremony zorunlu
+   - ML models: regex fallback default, GGUF model indirme manuel marker
+   - Test coverage hedefi: %60 minimum (yüzme değil sıkı %60)
+
+10. **Fiziksel olarak yapamayacağın 35 madde** (cert satın alma, pentest contract, lawyer, etc.):
+    - Skip etme. Scaffold + dokümantasyon + "AWAITING: <ne lazım>" notu bırak
+    - CLAUDE.md "AWAITING CUSTOMER ACTION" listesine ekle
+
+---
+
+### ⚠️ TASARIM KARARLARI VE BLOCKERS LİSTESİ
+
+**Otonom çalışırken karşılaştığın tasarım kararlarını buraya ekle**:
+
+(başlangıçta boş — Faz 1'den itibaren doldurulacak)
+
+**AWAITING CUSTOMER ACTION** (otonom çalışan Claude Code kapatamaz):
+
+- [ ] EV Code Signing Certificate satın alma (~$700/yıl Sectigo)
+- [ ] Penetration test contract (third-party, ~₺50-80K)
+- [ ] Code audit contract (third-party, ~₺80-150K)
+- [ ] Hukuki danışmanlık DPA review (~₺20-40K)
+- [ ] VERBİS kayıt (müşteri DPO yapacak)
+- [ ] Aydınlatma metni final içerik (müşteri kurum)
+- [ ] DPA imza
+- [ ] Vault HSM cihazı kararı (Phase 2)
+- [ ] Production CA kararı (Let's Encrypt vs internal)
+- [ ] Cloudflare/WAF account
+- [ ] PagerDuty/Slack webhook URL
+- [ ] Sentry/error tracking account
+- [ ] MaxMind GeoLite2 lisans + indirme
+
+---
 
 ---
 
