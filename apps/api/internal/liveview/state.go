@@ -44,6 +44,12 @@ func Transition(current State, event string) (State, error) {
 		{StateApproved, "agent_start", StateActive},
 		{StateApproved, "agent_fail", StateFailed},
 		{StateApproved, "agent_decline", StateFailed},
+		// Terminate from APPROVED — agent never came online, IT or DPO
+		// can still kill the session before it ever activated.
+		{StateApproved, "hr_terminate", StateTerminatedByHR},
+		{StateApproved, "admin_terminate", StateTerminatedByHR},
+		{StateApproved, "it_manager_terminate", StateTerminatedByHR},
+		{StateApproved, "dpo_terminate", StateTerminatedByDPO},
 		{StateActive, "end", StateEnded},
 		// Legacy HR terminate kept as a no-op transition target so old
 		// rows in live_view_sessions don't break state machine lookups.

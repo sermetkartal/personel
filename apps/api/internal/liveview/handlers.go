@@ -3,6 +3,7 @@ package liveview
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -32,6 +33,9 @@ func RequestHandler(svc *Service) http.HandlerFunc {
 			case auth.ErrForbidden:
 				httpx.WriteError(w, r, http.StatusForbidden, httpx.ProblemTypeForbidden, "Forbidden", "err.forbidden")
 			default:
+				slog.Error("liveview: request failed",
+					slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+					slog.Any("error", err))
 				httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			}
 			return
@@ -95,6 +99,10 @@ func ApproveHandler(svc *Service) http.HandlerFunc {
 				if isWorkflowErr(err) {
 					httpx.WriteError(w, r, http.StatusConflict, httpx.ProblemTypeWorkflowState, "Invalid State", "err.workflow_state")
 				} else {
+					slog.Error("liveview: approve failed",
+						slog.String("session_id", id),
+						slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+						slog.Any("error", err))
 					httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 				}
 			}
@@ -180,6 +188,10 @@ func TerminateHandler(svc *Service) http.HandlerFunc {
 			if err == auth.ErrForbidden {
 				httpx.WriteError(w, r, http.StatusForbidden, httpx.ProblemTypeForbidden, "Forbidden", "err.forbidden")
 			} else {
+				slog.Error("liveview: terminate failed",
+					slog.String("session_id", id),
+					slog.String("request_id", httpx.RequestIDFromContext(r.Context())),
+					slog.Any("error", err))
 				httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			}
 			return

@@ -53,8 +53,8 @@ vault:
   # bring-up. When vault container is rebuilt, these IDs change and
   # this file must be regenerated. Real deployments use systemd
   # credentials or a Vault agent sidecar to rotate these.
-  app_role_id: "8b153db4-f8eb-0d8f-8164-b7dccf76ae12"
-  app_role_secret_id: "984ff106-042c-900c-8b9c-5384cfd5bc4c"
+  app_role_id: "fe43d0d9-2fd7-3760-71b2-6dde3cac3600"
+  app_role_secret_id: "e04103c0-9d2e-0635-cbad-5c25a743f0ad"
   tls_ca_cert: ""
   control_plane_signing_key: "control-plane-signing"
   token_renew_interval: 10m

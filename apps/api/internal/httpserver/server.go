@@ -32,6 +32,7 @@ import (
 	"github.com/personel/api/internal/mobile"
 	"github.com/personel/api/internal/policy"
 	"github.com/personel/api/internal/reports"
+	"github.com/personel/api/internal/reportspg"
 	"github.com/personel/api/internal/screenshots"
 	"github.com/personel/api/internal/silence"
 	"github.com/personel/api/internal/tenant"
@@ -266,6 +267,28 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			r.Get("/endpoint-activity", reports.EndpointActivityHandler(svc.Reports))
 			r.Get("/app-blocks", reports.AppBlocksHandler(svc.Reports))
 		})
+
+		// --- Reports preview (Postgres-backed, Phase 1 dev/demo) ---
+		// Reads from employee_daily_stats + employee_hourly_stats so the
+		// console reports pages can render real numbers before the
+		// ClickHouse event pipeline is live. Swap to /v1/reports/* in
+		// Phase 2 when the roll-up job writes to ClickHouse.
+		if svc.DBPool != nil {
+			r.Route("/reports-preview", func(r chi.Router) {
+				// KVKK m.5/m.6 proportionality: productivity/idle-active are personnel
+				// performance metrics. IT operators have no legitimate need (their role is
+				// device support, not HR analytics) and must not see them. HR explicitly
+				// allowed; DPO/Auditor allowed for compliance oversight.
+				r.Use(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleManager, auth.RoleHR,
+					auth.RoleDPO, auth.RoleAuditor, auth.RoleITManager,
+				))
+				r.Get("/productivity", reportspg.ProductivityHandler(svc.DBPool))
+				r.Get("/top-apps", reportspg.TopAppsHandler(svc.DBPool))
+				r.Get("/idle-active", reportspg.IdleActiveHandler(svc.DBPool))
+				r.Get("/app-blocks", reportspg.AppBlocksHandler(svc.DBPool))
+			})
+		}
 
 		// --- Screenshots (Investigator / DPO only) ---
 		r.Route("/screenshots", func(r chi.Router) {

@@ -54,7 +54,26 @@ EOF
   echo "SECRET_ID=$SECRET_ID"
 ' > /tmp/personel-vault-approle.env
 cat /tmp/personel-vault-approle.env
-yellow "(Copy ROLE_ID / SECRET_ID into api/api.dev.yaml vault.app_role_id / app_role_secret_id if they changed.)"
+
+# Auto-sync the freshly-minted AppRole ID/Secret into api.dev.yaml so the
+# next api container start finds valid credentials without hand-editing.
+ROLE_ID=$(grep ^ROLE_ID= /tmp/personel-vault-approle.env | cut -d= -f2)
+SECRET_ID=$(grep ^SECRET_ID= /tmp/personel-vault-approle.env | cut -d= -f2)
+API_YAML="$(dirname "$0")/api/api.dev.yaml"
+if [[ -f "$API_YAML" && -n "$ROLE_ID" && -n "$SECRET_ID" ]]; then
+  # macOS sed: use BSD-compatible -i ''; GNU sed tolerates it too with
+  # an empty suffix followed by an expression so keep both forms.
+  if sed --version >/dev/null 2>&1; then
+    sed -i "s|^  app_role_id: .*|  app_role_id: \"${ROLE_ID}\"|" "$API_YAML"
+    sed -i "s|^  app_role_secret_id: .*|  app_role_secret_id: \"${SECRET_ID}\"|" "$API_YAML"
+  else
+    sed -i '' "s|^  app_role_id: .*|  app_role_id: \"${ROLE_ID}\"|" "$API_YAML"
+    sed -i '' "s|^  app_role_secret_id: .*|  app_role_secret_id: \"${SECRET_ID}\"|" "$API_YAML"
+  fi
+  green "api.dev.yaml: AppRole credentials synced ($API_YAML)"
+else
+  yellow "(api.dev.yaml not patched — missing file or empty ROLE_ID/SECRET_ID)"
+fi
 
 green "==> 2/4 MinIO buckets (audit-worm with Object Lock)"
 docker run --rm --network personel_data --entrypoint sh minio/mc:latest -c "

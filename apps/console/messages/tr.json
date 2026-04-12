@@ -295,26 +295,55 @@
 
   "reports": {
     "title": "Raporlar",
-    "subtitle": "ClickHouse tabanlı aktivite analitiği",
+    "subtitle": "Çalışan aktivite analitiği",
     "dateRange": "Tarih Aralığı",
     "endpoint": "Uç Nokta",
     "allEndpoints": "Tüm Uç Noktalar",
+    "emptyTitle": "Veri Bulunamadı",
+    "emptyDesc": "Seçilen aralık için henüz aktivite verisi yok. Seed script çalıştırıldıktan sonra tekrar deneyin.",
     "productivity": {
       "title": "Verimlilik Zaman Çizelgesi",
-      "description": "Saatlik aktif/boşta zaman dağılımı",
-      "activeTime": "Aktif Süre",
-      "idleTime": "Boşta Süre"
+      "description": "Son 7 günün saatlik aktif/boşta dağılımı",
+      "rangeLabel": "Dönem",
+      "totalActive": "Toplam Aktif",
+      "totalIdle": "Toplam Boşta",
+      "dailyStripsTitle": "Günlük Dağılım",
+      "legendActive": "Aktif",
+      "legendIdle": "Boşta"
     },
     "topApps": {
       "title": "En Çok Kullanılan Uygulamalar",
       "description": "Aktif kullanım süresine göre uygulama sıralaması",
-      "appName": "Uygulama",
-      "duration": "Süre",
-      "percentage": "Yüzde"
+      "rangeLabel": "Dönem",
+      "listTitle": "Uygulama Sıralaması",
+      "category": {
+        "productive": "Üretken",
+        "neutral": "Nötr",
+        "distracting": "Dikkat Dağıtıcı"
+      }
     },
     "idleActive": {
       "title": "Boşta / Aktif Analizi",
-      "description": "Dönem bazlı boşta ve aktif zaman karşılaştırması"
+      "description": "Dönem bazlı boşta ve aktif zaman karşılaştırması",
+      "rangeLabel": "Dönem",
+      "activeRatio": "Aktif Oranı",
+      "totalActive": "Toplam Aktif",
+      "totalIdle": "Toplam Boşta",
+      "dailyTitle": "Günlük Bölüm",
+      "employees": "çalışan",
+      "legendActive": "Aktif",
+      "legendIdle": "Boşta"
+    },
+    "appBlocks": {
+      "title": "Uygulama Engelleme Olayları",
+      "description": "Politika tarafından engellenen uygulamalar ve olay sayıları",
+      "noticeTitle": "Phase 2 Özelliği",
+      "noEvents": "Henüz engelleme olayı kaydedilmedi.",
+      "col": {
+        "occurredAt": "Zaman",
+        "appName": "Uygulama",
+        "count": "Sayı"
+      }
     },
     "blockingEvents": {
       "title": "Engelleme Olayları",
@@ -322,10 +351,6 @@
       "eventType": "Olay Türü",
       "count": "Sayı",
       "lastOccurrence": "Son Oluşma"
-    },
-    "appBlocks": {
-      "title": "Uygulama Engelleme Olayları",
-      "description": "Politika tarafından engellenen uygulamalar ve olay sayıları"
     }
   },
 

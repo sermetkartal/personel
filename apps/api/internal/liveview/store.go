@@ -12,26 +12,26 @@ import (
 
 // Session is the persisted aggregate for a live view session/request.
 type Session struct {
-	ID                string
-	TenantID          string
-	EndpointID        string
-	RequesterID       string
-	ApproverID        *string
-	ApprovalNotes     *string
-	ReasonCode        string
-	Justification     string
-	RequestedDuration time.Duration
-	State             State
-	LiveKitRoom       *string
-	LiveKitRoomStr    string // convenience accessor
-	AdminToken        string
-	AgentToken        string
-	SigningKeyID       string
-	CreatedAt         time.Time
-	ApprovedAt        *time.Time
-	StartedAt         *time.Time
-	EndedAt           *time.Time
-	FailureReason     *string
+	ID                string         `json:"id"`
+	TenantID          string         `json:"tenant_id"`
+	EndpointID        string         `json:"endpoint_id"`
+	RequesterID       string         `json:"requester_id"`
+	ApproverID        *string        `json:"approver_id"`
+	ApprovalNotes     *string        `json:"approval_notes"`
+	ReasonCode        string         `json:"reason_code"`
+	Justification     string         `json:"justification"`
+	RequestedDuration time.Duration  `json:"requested_duration_ns"`
+	State             State          `json:"state"`
+	LiveKitRoom       *string        `json:"-"`
+	LiveKitRoomStr    string         `json:"livekit_room"`
+	AdminToken        string         `json:"admin_token,omitempty"`
+	AgentToken        string         `json:"-"`
+	SigningKeyID      string         `json:"signing_key_id,omitempty"`
+	CreatedAt         time.Time      `json:"created_at"`
+	ApprovedAt        *time.Time     `json:"approved_at"`
+	StartedAt         *time.Time     `json:"started_at"`
+	EndedAt           *time.Time     `json:"ended_at"`
+	FailureReason     *string        `json:"failure_reason"`
 }
 
 // Store handles all live view session persistence.

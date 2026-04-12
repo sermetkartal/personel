@@ -295,26 +295,55 @@
 
   "reports": {
     "title": "Reports",
-    "subtitle": "ClickHouse-backed activity analytics",
+    "subtitle": "Employee activity analytics",
     "dateRange": "Date Range",
     "endpoint": "Endpoint",
     "allEndpoints": "All Endpoints",
+    "emptyTitle": "No Data Available",
+    "emptyDesc": "No activity data for the selected range yet. Run the dev seed and retry.",
     "productivity": {
       "title": "Productivity Timeline",
-      "description": "Hourly active/idle time distribution",
-      "activeTime": "Active Time",
-      "idleTime": "Idle Time"
+      "description": "Last 7 days hourly active/idle distribution",
+      "rangeLabel": "Range",
+      "totalActive": "Total Active",
+      "totalIdle": "Total Idle",
+      "dailyStripsTitle": "Daily Breakdown",
+      "legendActive": "Active",
+      "legendIdle": "Idle"
     },
     "topApps": {
       "title": "Top Applications",
       "description": "Application ranking by active usage time",
-      "appName": "Application",
-      "duration": "Duration",
-      "percentage": "Percentage"
+      "rangeLabel": "Range",
+      "listTitle": "Application Ranking",
+      "category": {
+        "productive": "Productive",
+        "neutral": "Neutral",
+        "distracting": "Distracting"
+      }
     },
     "idleActive": {
       "title": "Idle / Active Analysis",
-      "description": "Period-based idle vs active time comparison"
+      "description": "Period-based idle vs active time comparison",
+      "rangeLabel": "Range",
+      "activeRatio": "Active Ratio",
+      "totalActive": "Total Active",
+      "totalIdle": "Total Idle",
+      "dailyTitle": "Daily Breakdown",
+      "employees": "employees",
+      "legendActive": "Active",
+      "legendIdle": "Idle"
+    },
+    "appBlocks": {
+      "title": "App Blocking Events",
+      "description": "Applications blocked by policy and event counts",
+      "noticeTitle": "Phase 2 Feature",
+      "noEvents": "No blocking events recorded yet.",
+      "col": {
+        "occurredAt": "Time",
+        "appName": "Application",
+        "count": "Count"
+      }
     },
     "blockingEvents": {
       "title": "Blocking Events",
@@ -322,10 +351,6 @@
       "eventType": "Event Type",
       "count": "Count",
       "lastOccurrence": "Last Occurrence"
-    },
-    "appBlocks": {
-      "title": "App Blocking Events",
-      "description": "Applications blocked by policy and event counts"
     }
   },
 
