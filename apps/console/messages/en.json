@@ -259,9 +259,24 @@
     },
     "detail": {
       "title": "Employee Detail",
-      "endpoints": "Associated Endpoints",
-      "dsrHistory": "DSR History",
-      "liveViewHistory": "Live View History"
+      "backToList": "Back to employee list",
+      "currentlyActive": "Currently active",
+      "watchLive": "Watch Live",
+      "hourlyTitle": "Hourly Activity",
+      "hourlySubtitle": "00:00 — 23:59",
+      "topAppsTitle": "Top Applications",
+      "last7DaysTitle": "Last 7 Days",
+      "endpointsTitle": "Assigned Devices",
+      "noData": "No data",
+      "noEndpoints": "No active devices assigned to this employee.",
+      "online": "Online",
+      "offline": "Offline",
+      "kpi": {
+        "activeToday": "Active Today",
+        "idleToday": "Idle Today",
+        "screenshots": "Screenshots",
+        "productivityScore": "Productivity"
+      }
     }
   },
 

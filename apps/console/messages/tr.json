@@ -259,9 +259,24 @@
     },
     "detail": {
       "title": "Çalışan Detayı",
-      "endpoints": "Bağlı Uç Noktalar",
-      "dsrHistory": "Veri Talep Geçmişi",
-      "liveViewHistory": "Canlı İzleme Geçmişi"
+      "backToList": "Çalışan listesine dön",
+      "currentlyActive": "Şu an aktif",
+      "watchLive": "Canlı İzle",
+      "hourlyTitle": "Saatlik Aktivite",
+      "hourlySubtitle": "00:00 — 23:59",
+      "topAppsTitle": "En Çok Kullanılan Uygulamalar",
+      "last7DaysTitle": "Son 7 Gün",
+      "endpointsTitle": "Atanan Cihazlar",
+      "noData": "Veri yok",
+      "noEndpoints": "Bu çalışana atanan aktif cihaz yok.",
+      "online": "Çevrimiçi",
+      "offline": "Çevrimdışı",
+      "kpi": {
+        "activeToday": "Bugün Aktif",
+        "idleToday": "Bugün Boşta",
+        "screenshots": "Ekran Görüntüsü",
+        "productivityScore": "Üretkenlik"
+      }
     }
   },
 

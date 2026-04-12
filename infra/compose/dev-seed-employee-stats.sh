@@ -213,6 +213,82 @@ ON CONFLICT (user_id, day) DO UPDATE SET
 SQL
 
 echo
+echo "=== Populating employee_hourly_stats (today, hours 0-23) ==="
+
+$PGEXEC <<'SQL'
+-- For each employee with a row on today's employee_daily_stats, build
+-- 24 hourly buckets. Activity is concentrated in 09:00-18:00; outside
+-- those hours, both active and idle are zero (no data captured).
+WITH emps AS (
+  SELECT s.user_id, s.active_minutes AS day_active, s.idle_minutes AS day_idle,
+         s.screenshot_count AS day_screens,
+         s.top_apps AS apps
+  FROM employee_daily_stats s
+  WHERE s.day = current_date
+),
+hours AS (
+  SELECT generate_series(0, 23) AS hour
+),
+buckets AS (
+  SELECT
+    e.user_id,
+    h.hour,
+    e.day_active,
+    e.day_idle,
+    e.day_screens,
+    e.apps,
+    CASE
+      WHEN h.hour BETWEEN 9 AND 17 THEN
+        -- Weight: morning ramp-up, lunch dip at 12-13, afternoon plateau
+        CASE
+          WHEN h.hour IN (12, 13) THEN 0.08
+          WHEN h.hour IN (9, 17)  THEN 0.09
+          ELSE 0.13
+        END
+      ELSE 0
+    END AS weight
+  FROM emps e CROSS JOIN hours h
+),
+normalized AS (
+  SELECT
+    b.*,
+    SUM(weight) OVER (PARTITION BY b.user_id) AS total_weight
+  FROM buckets b
+)
+INSERT INTO employee_hourly_stats(user_id, day, hour, active_minutes, idle_minutes, top_app, screenshot_count)
+SELECT
+  n.user_id,
+  current_date,
+  n.hour,
+  CASE
+    WHEN n.total_weight > 0 AND n.weight > 0
+      THEN LEAST(60, GREATEST(0, (n.day_active * n.weight / n.total_weight + (random() * 4 - 2))::int))
+    ELSE 0
+  END AS active_min,
+  CASE
+    WHEN n.total_weight > 0 AND n.weight > 0
+      THEN LEAST(60, GREATEST(0, (n.day_idle * n.weight / n.total_weight + (random() * 3 - 1))::int))
+    ELSE 0
+  END AS idle_min,
+  CASE
+    WHEN n.weight > 0 AND jsonb_array_length(COALESCE(n.apps, '[]'::jsonb)) > 0
+      THEN (n.apps -> ((abs(hashtext(n.user_id::text || n.hour::text)) % jsonb_array_length(n.apps)))) ->> 'name'
+    ELSE NULL
+  END AS top_app,
+  CASE
+    WHEN n.weight > 0
+      THEN GREATEST(0, (n.day_screens * n.weight / NULLIF(n.total_weight, 0))::int)
+    ELSE 0
+  END AS screens
+FROM normalized n
+ON CONFLICT (user_id, day, hour) DO UPDATE SET
+  active_minutes   = EXCLUDED.active_minutes,
+  idle_minutes     = EXCLUDED.idle_minutes,
+  top_app          = EXCLUDED.top_app,
+  screenshot_count = EXCLUDED.screenshot_count;
+SQL
+
+echo
 echo "=== Summary ==="
 $PGEXEC <<SQL
 SELECT day, count(*) AS employees,

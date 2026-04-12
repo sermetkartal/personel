@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import {
   Activity,
@@ -22,6 +24,8 @@ interface Props {
 
 export function EmployeesMonitoringClient({ initialOverview }: Props): JSX.Element {
   const t = useTranslations("employees");
+  const params = useParams<{ locale: string }>();
+  const locale = params?.locale ?? "tr";
   const [search, setSearch] = useState("");
   const [deptFilter, setDeptFilter] = useState<string>("all");
 
@@ -143,7 +147,7 @@ export function EmployeesMonitoringClient({ initialOverview }: Props): JSX.Eleme
           </thead>
           <tbody className="divide-y">
             {filtered.map((r) => (
-              <EmployeeRow key={r.user_id} row={r} />
+              <EmployeeRow key={r.user_id} row={r} locale={locale} />
             ))}
             {filtered.length === 0 && (
               <tr>
@@ -165,7 +169,13 @@ export function EmployeesMonitoringClient({ initialOverview }: Props): JSX.Eleme
   );
 }
 
-function EmployeeRow({ row }: { row: EmployeeOverviewRow }): JSX.Element {
+function EmployeeRow({
+  row,
+  locale,
+}: {
+  row: EmployeeOverviewRow;
+  locale: string;
+}): JSX.Element {
   const activeH = formatHours(row.today.active_minutes);
   const idleH = formatHours(row.today.idle_minutes);
   const activePct = clampPct(
@@ -177,9 +187,18 @@ function EmployeeRow({ row }: { row: EmployeeOverviewRow }): JSX.Element {
     .toLocaleUpperCase("tr");
 
   return (
-    <tr className="hover:bg-muted/30">
+    <tr
+      className="hover:bg-muted/40 cursor-pointer transition-colors"
+      onClick={() => {
+        window.location.href = `/${locale}/employees/${row.user_id}`;
+      }}
+    >
       <td className="px-4 py-3">
-        <div className="flex items-center gap-3">
+        <Link
+          href={`/${locale}/employees/${row.user_id}`}
+          onClick={(e) => e.stopPropagation()}
+          className="flex items-center gap-3"
+        >
           <div
             className={`h-8 w-8 rounded-full flex items-center justify-center text-xs font-bold ${
               row.is_currently_active
@@ -193,7 +212,7 @@ function EmployeeRow({ row }: { row: EmployeeOverviewRow }): JSX.Element {
             <div className="font-semibold truncate">{row.username}</div>
             <div className="text-xs text-muted-foreground truncate">{row.email}</div>
           </div>
-        </div>
+        </Link>
       </td>
       <td className="px-4 py-3 text-muted-foreground">
         <div>{row.department || "—"}</div>

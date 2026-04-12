@@ -149,8 +149,10 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 				r.Use(auth.RequireRole(
 					auth.RoleAdmin, auth.RoleManager, auth.RoleHR,
 					auth.RoleDPO, auth.RoleInvestigator, auth.RoleAuditor,
+					auth.RoleITManager, auth.RoleITOperator,
 				))
 				r.Get("/overview", user.EmployeesOverviewHandler(svc.DBPool))
+				r.Get("/{userID}/detail", user.EmployeeDetailHandler(svc.DBPool))
 			})
 		}
 
