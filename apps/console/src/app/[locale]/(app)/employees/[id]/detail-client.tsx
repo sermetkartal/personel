@@ -330,28 +330,36 @@ function HourlyChart({
 }): JSX.Element {
   return (
     <div>
-      <div className="flex items-end gap-1 h-40">
+      <div className="flex gap-1 h-40 items-stretch">
         {hourly.map((h) => {
+          // Each column is its own hour; the bar fills a fraction of the
+          // column where 60 minutes = 100% column height. Clamp
+          // defensively — data should never exceed 60 but noise could.
+          const activePct = Math.min(100, (h.active_minutes / 60) * 100);
+          const idlePct = Math.min(
+            Math.max(0, 100 - activePct),
+            (h.idle_minutes / 60) * 100,
+          );
           const total = h.active_minutes + h.idle_minutes;
-          const activePct = total === 0 ? 0 : (h.active_minutes / 60) * 100;
-          const idlePct = total === 0 ? 0 : (h.idle_minutes / 60) * 100;
-          const isBusinessHour = h.hour >= 9 && h.hour <= 17;
           return (
             <div
               key={h.hour}
-              className="flex-1 flex flex-col justify-end group relative"
+              className="flex-1 h-full flex flex-col justify-end group relative min-w-0"
               title={`${String(h.hour).padStart(2, "0")}:00 — ${h.active_minutes}dk aktif / ${h.idle_minutes}dk boşta${h.top_app ? ` · ${h.top_app}` : ""}`}
             >
-              <div
-                className="w-full bg-amber-400 transition-opacity group-hover:opacity-80"
-                style={{ height: `${idlePct}%` }}
-              />
-              <div
-                className="w-full bg-green-500 transition-opacity group-hover:opacity-80"
-                style={{ height: `${activePct}%` }}
-              />
-              {!isBusinessHour && total === 0 && (
-                <div className="h-px bg-border" />
+              {total === 0 ? (
+                <div className="h-px w-full bg-border/60" />
+              ) : (
+                <>
+                  <div
+                    className="w-full bg-amber-400 transition-opacity group-hover:opacity-80"
+                    style={{ height: `${idlePct}%` }}
+                  />
+                  <div
+                    className="w-full bg-green-500 transition-opacity group-hover:opacity-80"
+                    style={{ height: `${activePct}%` }}
+                  />
+                </>
               )}
             </div>
           );

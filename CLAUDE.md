@@ -802,6 +802,82 @@ Reality check ESAS TEST. Agent'lar `cargo build` / `pnpm build` / `go build` ça
 - **Reasoning agent'lar** (architect, security-engineer) invariants önerir (cryptographic, structural). Bunları ADR'a yazıp CI linter ile zorla.
 - **Hallucinated packages** sık karşılaşılan hata paterni: `@radix-ui/react-badge`, `@radix-ui/react-sheet` gibi benzer ama var olmayan paketler. Reality check yakalar.
 
+### ZORUNLU: Uzman Agent Delegasyonu (2026-04-12 kuralı)
+
+Bu proje çok katmanlı (Rust agent + Go backend + TypeScript console + Python ML
++ on-prem infra + KVKK compliance + SOC 2 evidence). Tek bir general-purpose
+oturumun her katmana derinlemesine girmesi hem yavaş hem kalitesiz. Bu yüzden
+Personel üzerinde çalışan her Claude Code oturumu için şu kural zorunludur:
+
+> **Non-trivial bir iş gelirse, o işe uygun uzman agent'ı spawn et.**
+> "Non-trivial" = 3+ dosya değişikliği VEYA domain bilgisi isteyen tasarım
+> kararı VEYA başka bir katmanı etkileyen mimari değişim.
+>
+> Tek satır typo fix, config değer güncellemesi, markdown rötuşu gibi
+> trivial işlerde delegasyon ZORUNLU DEĞİL — direkt yap.
+
+#### Katman → Agent eşlemesi
+
+| Dokunulan yer | Delegasyon |
+|---|---|
+| `apps/agent/` (Rust) | `voltagent-lang:rust-engineer` |
+| `apps/api/` Go handler/service/domain | `voltagent-core-dev:backend-developer` veya `voltagent-lang:golang-pro` |
+| `apps/gateway/` + `apps/enricher/` | `voltagent-lang:golang-pro` |
+| `apps/console/` + `apps/portal/` (Next.js 15) | `voltagent-lang:nextjs-developer` |
+| Reusable React komponenti / shadcn | `voltagent-lang:react-specialist` |
+| `apps/ml-classifier/`, `apps/ocr-service/`, `apps/uba-detector/` | `voltagent-lang:python-pro` + `voltagent-data-ai:ai-engineer` |
+| `apps/mobile-admin/` (Expo RN) | `voltagent-lang:expo-react-native-expert` |
+| `infra/compose/`, Dockerfile, systemd | `voltagent-infra:devops-engineer` veya `voltagent-infra:docker-expert` |
+| Vault, PKI, mTLS, anti-tamper | `voltagent-qa-sec:security-auditor` + `voltagent-infra:security-engineer` |
+| KVKK compliance, DPIA, aydınlatma | `voltagent-qa-sec:compliance-auditor` |
+| SOC 2 Type II control, evidence, policy | `voltagent-qa-sec:compliance-auditor` + `voltagent-meta:workflow-orchestrator` |
+| ClickHouse schema / query optimize | `voltagent-data-ai:database-optimizer` veya `voltagent-data-ai:postgres-pro` |
+| Postgres migration / index / perf | `voltagent-data-ai:postgres-pro` |
+| Mimari karar / ADR / bounded context | `voltagent-core-dev:microservices-architect` |
+| API contract / OpenAPI | `voltagent-core-dev:api-designer` |
+| Test suite / QA framework | `voltagent-qa-sec:qa-expert` + `voltagent-qa-sec:test-automator` |
+| Threat model / pentest / red team | `voltagent-qa-sec:penetration-tester` + `voltagent-qa-sec:security-auditor` |
+| Performance / load test / bottleneck | `voltagent-qa-sec:performance-engineer` |
+| Kod review (PR, commit öncesi) | `pr-review-toolkit:code-reviewer` + `pr-review-toolkit:silent-failure-hunter` |
+| Refactor, code smell, duplication | `voltagent-dev-exp:refactoring-specialist` veya `code-simplifier:code-simplifier` |
+| Dashboard / görsel UI tasarım | `voltagent-core-dev:ui-designer` veya `voltagent-core-dev:design-bridge` |
+| Broad araştırma / codebase exploration | `Explore` agent (quick/medium/very thorough) |
+| Çok katmanlı plan (3+ domain) | `voltagent-meta:agent-organizer` — uygun team'i seçip koordine eder |
+
+#### Paralel delegasyon
+
+Birden fazla bağımsız sorun varsa tek mesajda paralel spawn et. Örnek: bir
+feature hem Go API hem Next.js console hem postgres migration gerektiriyorsa
+üç agent'ı aynı anda brief'le, sonuçları topla, entegre et.
+
+#### Ne zaman delegasyon YAPMA
+
+- Bildiğin dosyada tek satır değişiklik
+- Build hatası mesajını direkt fix'leme
+- git commit / push
+- Bash komutu çalıştırma / docker restart
+- Kullanıcıyla diyalog, plan tartışması, progress raporu
+- Kullanıcı açıkça "kendin yap" dediğinde
+
+#### Brief yazma disiplini
+
+Agent'ın senin konuşmanı görmediğini unutma. Brief'te şunlar olmalı:
+
+1. **Goal + why**: ne yapılacak ve neden önemli (KVKK? compliance? pazar?)
+2. **Context**: hangi dosyalar, hangi sistem, hangi katman
+3. **Constraints**: locked decisions (§6), ADR'lar, KVKK kuralları (§11)
+4. **Deliverable shape**: dosya listesi / fonksiyon imzası / test kriteri
+5. **Kısa yanıt sınırı**: gerektiğinde "rapor 200 kelime altı" de
+
+Kötü brief: "api'ye endpoint ekle"
+İyi brief: "apps/api/internal/user/employee_detail.go içine GET
+/v1/employees/{id}/detail handler'ı ekle. Dönüşü: profile + today's daily
+stats + 24h hourly array + last 7 days + assigned endpoints. RBAC:
+canViewEmployees listesi (admin/dpo/hr/manager/it_manager/it_operator/
+investigator/auditor). Postgres source: employee_daily_stats +
+employee_hourly_stats (migration 0027). Testler integration/ altında.
+Commit atma — parent yapacak."
+
 ---
 
 ## 10. Known Tech Debt (Faz 1 Polish Listesi)
