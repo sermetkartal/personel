@@ -68,7 +68,7 @@
       <!-- personel-agent.exe -->
       <Component Id="AgentExe" Guid="$(AgentExeGuid)">
         <File Id="AgentExeFile"
-              Source="$(sys.SOURCEFILEDIR)..\..\..\..\target\x86_64-pc-windows-msvc\release\personel-agent.exe"
+              Source="$(sys.SOURCEFILEDIR)..\..\target\x86_64-pc-windows-msvc\release\personel-agent.exe"
               KeyPath="yes" />
 
         <!-- Windows Service: Personel Agent (AUTO_START, LocalSystem) -->
@@ -102,10 +102,10 @@
         </RegistryKey>
       </Component>
 
-      <!-- personel-watchdog.exe -->
+      <!-- personel-agent-watchdog.exe -->
       <Component Id="WatchdogExe" Guid="$(WatchdogExeGuid)">
         <File Id="WatchdogExeFile"
-              Source="$(sys.SOURCEFILEDIR)..\..\..\..\target\x86_64-pc-windows-msvc\release\personel-watchdog.exe"
+              Source="$(sys.SOURCEFILEDIR)..\..\target\x86_64-pc-windows-msvc\release\personel-agent-watchdog.exe"
               KeyPath="yes" />
 
         <ServiceInstall
@@ -132,7 +132,7 @@
            register the endpoint with the gateway. -->
       <Component Id="EnrollExe" Guid="$(EnrollExeGuid)">
         <File Id="EnrollExeFile"
-              Source="$(sys.SOURCEFILEDIR)..\..\..\..\target\x86_64-pc-windows-msvc\release\enroll.exe"
+              Source="$(sys.SOURCEFILEDIR)..\..\target\x86_64-pc-windows-msvc\release\enroll.exe"
               KeyPath="yes" />
       </Component>
 
