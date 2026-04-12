@@ -37,7 +37,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             apps/agent/target
-          key: agent-msi-v4-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
+          key: agent-msi-v5-${{ runner.os }}-${{ hashFiles('apps/agent/Cargo.lock') }}
 
       - name: Install protoc
         run: choco install protoc -y --no-progress
@@ -64,14 +64,14 @@ jobs:
         working-directory: apps/agent
         env:
           PROTOC_INCLUDE: ${{ github.workspace }}/proto
-        run: cargo build --release --target x86_64-pc-windows-msvc -p personel-agent -p personel-watchdog
+        run: cargo build --release -p personel-agent -p personel-watchdog
 
       - name: Verify binaries
         working-directory: apps/agent
         run: |
           $bins = @("personel-agent.exe", "personel-watchdog.exe", "enroll.exe")
           foreach ($b in $bins) {
-            $p = "target\x86_64-pc-windows-msvc\release\$b"
+            $p = "target\release\$b"
             if (-not (Test-Path $p)) { throw "Missing: $p" }
             $size = (Get-Item $p).Length / 1MB
             Write-Host "$b — $([math]::Round($size, 1)) MB"
@@ -98,7 +98,7 @@ jobs:
         with:
           name: personel-agent-binaries
           path: |
-            apps/agent/target/x86_64-pc-windows-msvc/release/personel-agent.exe
-            apps/agent/target/x86_64-pc-windows-msvc/release/personel-watchdog.exe
-            apps/agent/target/x86_64-pc-windows-msvc/release/enroll.exe
+            apps/agent/target/release/personel-agent.exe
+            apps/agent/target/release/personel-watchdog.exe
+            apps/agent/target/release/enroll.exe
           retention-days: 30
