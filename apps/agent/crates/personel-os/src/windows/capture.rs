@@ -32,7 +32,7 @@
 //!   Transform for ≤30 s clips.
 
 use image::codecs::jpeg::JpegEncoder;
-use image::ColorType;
+use image::ExtendedColorType;
 // Interface trait must be in scope for the .cast::<T>() QueryInterface calls
 // on COM objects (ID3D11Device → IDXGIDevice, IDXGIOutput → IDXGIOutput1, etc.).
 use windows::core::Interface;
@@ -211,7 +211,7 @@ impl DxgiCapture {
 
         let mut buf: Vec<u8> = Vec::with_capacity(rgb.len() / 4);
         JpegEncoder::new_with_quality(&mut buf, quality)
-            .encode(&rgb, width, height, ColorType::Rgb8)
+            .encode(&rgb, width, height, ExtendedColorType::Rgb8)
             .map_err(|e| AgentError::Internal(format!("JPEG encode: {e}")))?;
         Ok(buf)
     }

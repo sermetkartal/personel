@@ -82,8 +82,7 @@ pub fn check_remote_debugger() -> Result<TamperCheckResult> {
     let current_process = HANDLE(-1isize);
     unsafe {
         CheckRemoteDebuggerPresent(current_process, &mut is_debugger_present)
-            .ok()
-            .map_err(|e| personel_core::error::AgentError::TamperDetected {
+            .map_err(|_| personel_core::error::AgentError::TamperDetected {
                 check: "remote_debugger",
             })?;
     }
