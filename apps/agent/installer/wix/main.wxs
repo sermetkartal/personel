@@ -170,9 +170,8 @@
 
     <InstallExecuteSequence>
       <!-- Run after service install, before service start -->
-      <Custom Action="RunEnroll" After="InstallServices">
-        NOT Installed AND GATEWAY_URL AND TENANT_TOKEN
-      </Custom>
+      <Custom Action="RunEnroll" After="InstallServices"
+              Condition="NOT Installed AND GATEWAY_URL AND TENANT_TOKEN" />
     </InstallExecuteSequence>
 
   </Package>
