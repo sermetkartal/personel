@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Keeper Configuration
+  ============================================================
+  ClickHouse Keeper is the built-in ZooKeeper replacement that ships
+  with ClickHouse 22.4+. It uses Raft consensus — no separate ZK process.
+
+  USAGE: This file is mounted into config.d/ on replication nodes only.
+  It is NOT mounted in the single-node Phase 1 base stack.
+  docker-compose.replication.yaml mounts this file into both
+  clickhouse-01 and clickhouse-02 via configs: stanzas.
+
+  TOPOLOGY (2-node pilot — Phase 1 exit #17):
+    server_id=1  clickhouse-01:9181  (voting)
+    server_id=2  clickhouse-02:9181  (voting)
+
+  WARNING — QUORUM: Two Raft participants tolerate zero failures.
+  A single node crash HALTS all ReplicatedMergeTree writes. This is
+  acceptable for staging validation (exit criterion #17) but production
+  MUST add a third participant (a dedicated keeper-only container or a
+  third ClickHouse node). See infra/runbooks/clickhouse-scaling-plan.md.
+-->
+<clickhouse>
+    <keeper_server>
+        <!-- Raft storage — separate from ClickHouse table data -->
+        <path>/var/lib/clickhouse/coordination</path>
+
+        <!--
+          server_id: unique integer per host.
+          Set via CH_KEEPER_SERVER_ID env var in docker-compose.replication.yaml.
+          clickhouse-01 → 1, clickhouse-02 → 2
+        -->
+        <server_id from_env="CH_KEEPER_SERVER_ID"/>
+
+        <!-- Keeper client port (ZooKeeper-compatible protocol) -->
+        <tcp_port>9181</tcp_port>
+
+        <!-- Raft internal port -->
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>clickhouse-01</hostname>
+                <port>9234</port>
+            </server>
+            <server>
+                <id>2</id>
+                <hostname>clickhouse-02</hostname>
+                <port>9234</port>
+            </server>
+        </raft_configuration>
+
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+
+        <coordination_settings>
+            <!-- Raft heartbeat / election timeouts (ms) -->
+            <heart_beat_interval_ms>500</heart_beat_interval_ms>
+            <election_timeout_lower_bound_ms>1000</election_timeout_lower_bound_ms>
+            <election_timeout_upper_bound_ms>2000</election_timeout_upper_bound_ms>
+            <!-- Snapshot every 100k log entries -->
+            <snapshot_distance>100000</snapshot_distance>
+            <reserved_log_items>100000</reserved_log_items>
+            <!-- Stale reads tolerated (follower can serve reads) -->
+            <quorum_reads>false</quorum_reads>
+            <force_sync>true</force_sync>
+        </coordination_settings>
+    </keeper_server>
+
+    <!-- Tell ClickHouse to use its own Keeper instead of external ZooKeeper -->
+    <zookeeper>
+        <node>
+            <host>clickhouse-01</host>
+            <port>9181</port>
+        </node>
+        <node>
+            <host>clickhouse-02</host>
+            <port>9181</port>
+        </node>
+        <session_timeout_ms>30000</session_timeout_ms>
+        <operation_timeout_ms>10000</operation_timeout_ms>
+    </zookeeper>
+</clickhouse>

@@ -75,40 +75,37 @@
         <status_info>true</status_info>
     </prometheus>
 
-    <!-- ZooKeeper/Keeper — NOT configured for Phase 1 single-node.
-         Uncomment and configure in Phase-1-exit replication setup.
-    <zookeeper>
-        <node>
-            <host>ch-01.personel.internal</host>
-            <port>2181</port>
-        </node>
-        <node>
-            <host>ch-02.personel.internal</host>
-            <port>2181</port>
-        </node>
-        <node>
-            <host>ch-03.personel.internal</host>
-            <port>2181</port>
-        </node>
-    </zookeeper>
+    <!-- ClickHouse Keeper (built-in ZooKeeper replacement — no separate ZK process).
+         Phase-1-exit replication: activated via docker-compose.replication.yaml.
+         In single-node Phase 1 mode this stanza is intentionally absent from
+         the base config. The replication compose override mounts a
+         config.d/keeper.xml that adds these stanzas on the replication hosts.
+         Keeper uses Raft consensus; 3 participants needed for quorum
+         (ch-01 + ch-02 + a lightweight keeper-only node or co-hosted keeper).
+         For 2-node pilot (Phase-1-exit #17) we run keeper on both ch-01 and
+         ch-02 with a third keeper participant on ch-02 (server_id=3 disabled)
+         — acceptable for staging; production requires a third dedicated node.
     -->
 
-    <!-- Remote servers — Phase-1-exit cluster definition.
-         NOT active for single-node. Referenced by macros.xml for migration prep.
+    <!-- Remote servers — Phase-1-exit cluster definition (Phase 1 exit #17).
+         Active only when docker-compose.replication.yaml is applied.
+         Password is injected via CH_REPLICATION_PASSWORD env var in the
+         replication compose override — never hardcode here.
     <remote_servers>
         <personel_cluster>
             <shard>
+                <internal_replication>true</internal_replication>
                 <replica>
-                    <host>ch-01.personel.internal</host>
+                    <host>clickhouse-01</host>
                     <port>9000</port>
                     <user>personel_app</user>
-                    <password>VAULT_SECRET</password>
+                    <password>CHANGEME_VIA_ENV</password>
                 </replica>
                 <replica>
-                    <host>ch-02.personel.internal</host>
+                    <host>clickhouse-02</host>
                     <port>9000</port>
                     <user>personel_app</user>
-                    <password>VAULT_SECRET</password>
+                    <password>CHANGEME_VIA_ENV</password>
                 </replica>
             </shard>
         </personel_cluster>

@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Remote Servers (Replication)
+  ============================================================
+  Defines the personel_cluster with 1 shard / 2 replicas.
+  Active only when docker-compose.replication.yaml is applied.
+  Password is injected via CH_REPLICATION_PASSWORD env var — never hardcode.
+
+  internal_replication=true: the INSERT client talks to one replica; that
+  replica propagates to the other via the ReplicatedMergeTree replication
+  log. This is the recommended mode for ReplicatedMergeTree — do NOT use
+  Distributed table replication in combination with it for writes.
+-->
+<clickhouse>
+    <remote_servers>
+        <personel_cluster>
+            <shard>
+                <internal_replication>true</internal_replication>
+                <replica>
+                    <host>clickhouse-01</host>
+                    <port>9000</port>
+                    <user>personel_app</user>
+                    <password from_env="CH_REPLICATION_PASSWORD"/>
+                </replica>
+                <replica>
+                    <host>clickhouse-02</host>
+                    <port>9000</port>
+                    <user>personel_app</user>
+                    <password from_env="CH_REPLICATION_PASSWORD"/>
+                </replica>
+            </shard>
+        </personel_cluster>
+    </remote_servers>
+</clickhouse>

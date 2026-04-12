@@ -6,12 +6,10 @@ const withNextIntl = createNextIntlPlugin("./src/lib/i18n/config.ts");
 const nextConfig = {
   output: "standalone",
 
-  experimental: {
-    serverComponentsExternalPackages: ["jose"],
-  },
-
-  // No external font loading — fonts are self-hosted
-  optimizeFonts: false,
+  // next/font/google self-hosts Inter at build time — no runtime CDN calls.
+  // jose is a pure-ESM package; declaring it as a server external prevents
+  // bundler from trying to tree-shake it inside RSC bundles.
+  serverExternalPackages: ["jose"],
 
   // Content Security Policy headers — no third-party scripts allowed
   async headers() {

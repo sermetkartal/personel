@@ -1,0 +1,183 @@
+name: personel
+
+# =============================================================================
+# Personel Platform — ClickHouse 2-Node Replication Overlay
+# Phase 1 exit criterion #17: "ClickHouse replication staging rig validated"
+# =============================================================================
+#
+# USAGE:
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f docker-compose.replication.yaml \
+#     up -d
+#
+# PREREQUISITES:
+#   1. Set CH_REPLICATION_PASSWORD in .env (min 20 chars, random)
+#   2. Provision ch-01 and ch-02 host volumes:
+#        CLICKHOUSE_DATA_DIR_01 and CLICKHOUSE_DATA_DIR_02 in .env
+#   3. Run staging-replication-rig.sh after stack is healthy to validate
+#      replication convergence (inserts on ch-01 visible on ch-02).
+#
+# KEEPER QUORUM WARNING:
+#   2-node Raft (no quorum majority on single failure). Acceptable for
+#   staging validation only. Production: add a third keeper participant.
+#
+# TABLE MIGRATION:
+#   After the stack is healthy, convert existing MergeTree tables:
+#     ALTER TABLE events.activity_events
+#       MODIFY ENGINE = ReplicatedMergeTree(
+#         '/clickhouse/tables/{shard}/activity_events', '{replica}'
+#       )
+#       PARTITION BY toYYYYMM(event_time);
+#   Or use the ATTACH PARTITION trick for zero-downtime if data volume
+#   is large. See infra/runbooks/clickhouse-scaling-plan.md.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # clickhouse-01 (replica-01) — replaces the single-node "clickhouse" service
+  # ---------------------------------------------------------------------------
+  clickhouse-01:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: personel-clickhouse-01
+    hostname: clickhouse-01
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      CLICKHOUSE_DB: personel
+      CLICKHOUSE_USER: personel_app
+      CLICKHOUSE_PASSWORD: ${CH_REPLICATION_PASSWORD:?CH_REPLICATION_PASSWORD is required}
+      CH_KEEPER_SERVER_ID: "1"
+      CH_REPLICATION_PASSWORD: ${CH_REPLICATION_PASSWORD}
+    volumes:
+      - clickhouse-01-data:/var/lib/clickhouse
+      - clickhouse-01-logs:/var/log/clickhouse-server
+      # Base config (ports, TLS, memory, merge_tree, prometheus)
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
+      # Replication: macros for replica-01
+      - ./clickhouse/macros.xml:/etc/clickhouse-server/config.d/macros.xml:ro
+      # Replication: keeper + zookeeper stanza + remote_servers
+      - ./clickhouse/keeper.xml:/etc/clickhouse-server/config.d/keeper.xml:ro
+      - ./clickhouse/remote-servers.xml:/etc/clickhouse-server/config.d/remote-servers.xml:ro
+      # TLS certs (same CA as gateway mTLS)
+      - ${PERSONEL_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    ports:
+      - "127.0.0.1:18123:8123"   # HTTP (localhost only — behind Envoy in prod)
+      - "127.0.0.1:19000:9000"   # Native TCP
+      - "127.0.0.1:19181:9181"   # Keeper client port
+      - "127.0.0.1:19234:9234"   # Keeper Raft port
+    networks:
+      - data
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 14G
+        reservations:
+          cpus: "1"
+          memory: 4G
+
+  # ---------------------------------------------------------------------------
+  # clickhouse-02 (replica-02)
+  # ---------------------------------------------------------------------------
+  clickhouse-02:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: personel-clickhouse-02
+    hostname: clickhouse-02
+    restart: unless-stopped
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      CLICKHOUSE_DB: personel
+      CLICKHOUSE_USER: personel_app
+      CLICKHOUSE_PASSWORD: ${CH_REPLICATION_PASSWORD:?CH_REPLICATION_PASSWORD is required}
+      CH_KEEPER_SERVER_ID: "2"
+      CH_REPLICATION_PASSWORD: ${CH_REPLICATION_PASSWORD}
+    volumes:
+      - clickhouse-02-data:/var/lib/clickhouse
+      - clickhouse-02-logs:/var/log/clickhouse-server
+      # Base config
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
+      # Replication: macros for replica-02
+      - ./clickhouse/macros-02.xml:/etc/clickhouse-server/config.d/macros.xml:ro
+      # Replication: keeper + remote_servers
+      - ./clickhouse/keeper.xml:/etc/clickhouse-server/config.d/keeper.xml:ro
+      - ./clickhouse/remote-servers.xml:/etc/clickhouse-server/config.d/remote-servers.xml:ro
+      # TLS certs
+      - ${PERSONEL_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    ports:
+      - "127.0.0.1:28123:8123"
+      - "127.0.0.1:29000:9000"
+      - "127.0.0.1:29181:9181"
+      - "127.0.0.1:29234:9234"
+    networks:
+      - data
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    depends_on:
+      clickhouse-01:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 14G
+        reservations:
+          cpus: "1"
+          memory: 4G
+
+  # ---------------------------------------------------------------------------
+  # Disable the single-node clickhouse service from base compose when this
+  # overlay is active. Services that connect to ClickHouse (enricher, api)
+  # should target clickhouse-01 (primary writer) via the load balancer or
+  # direct DNS. For staging, point CLICKHOUSE_HOST=clickhouse-01.
+  # ---------------------------------------------------------------------------
+  clickhouse:
+    deploy:
+      replicas: 0
+
+volumes:
+  clickhouse-01-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_DATA_DIR_01:-/var/lib/personel/clickhouse/01/data}
+  clickhouse-01-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_DATA_DIR_01:-/var/lib/personel/clickhouse/01}/logs
+  clickhouse-02-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_DATA_DIR_02:-/var/lib/personel/clickhouse/02/data}
+  clickhouse-02-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_DATA_DIR_02:-/var/lib/personel/clickhouse/02}/logs

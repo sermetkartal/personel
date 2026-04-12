@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Macros for clickhouse-02
+  Replica 2 of the 2-node replication staging rig (Phase 1 exit #17).
+  Mounted by docker-compose.replication.yaml into clickhouse-02 only.
+  clickhouse-01 uses macros.xml (replica-01).
+-->
+<clickhouse>
+    <macros>
+        <replica>replica-02</replica>
+        <shard>shard-01</shard>
+        <cluster>personel_cluster</cluster>
+    </macros>
+</clickhouse>
