@@ -22,3 +22,5 @@ windows         = { workspace = true }
 windows-service = { workspace = true }
 # image: JPEG encoding for screen capture frames (jpeg feature only).
 image           = { workspace = true }
+# sha2: SHA-256 for binary integrity verification in anti_tamper.rs.
+sha2            = { workspace = true }

@@ -21,9 +21,11 @@ use windows::Win32::Security::{
     InitializeSecurityDescriptor, InitializeAcl, AddAccessDeniedAce,
     SetSecurityDescriptorDacl,
     SECURITY_DESCRIPTOR, ACL,
-    SECURITY_DESCRIPTOR_REVISION, ACL_REVISION,
+    ACL_REVISION,
     DACL_SECURITY_INFORMATION,
 };
+// SECURITY_DESCRIPTOR_REVISION = 1u32 lives in SystemServices, not Win32::Security.
+use windows::Win32::System::SystemServices::SECURITY_DESCRIPTOR_REVISION;
 use windows::core::PCWSTR;
 
 use sha2::{Digest, Sha256};
@@ -76,8 +78,8 @@ pub fn check_debugger_present() -> TamperCheckResult {
 /// Returns an error if the Win32 call fails.
 pub fn check_remote_debugger() -> Result<TamperCheckResult> {
     let mut is_debugger_present = windows::Win32::Foundation::BOOL(0);
-    // SAFETY: -1 is the pseudo-handle for the current process; always valid.
-    let current_process = HANDLE(-1isize as *mut _);
+    // SAFETY: -1 (as isize) is the pseudo-handle for the current process; always valid.
+    let current_process = HANDLE(-1isize);
     unsafe {
         CheckRemoteDebuggerPresent(current_process, &mut is_debugger_present)
             .ok()

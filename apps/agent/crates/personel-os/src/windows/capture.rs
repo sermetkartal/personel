@@ -33,9 +33,12 @@
 
 use image::codecs::jpeg::JpegEncoder;
 use image::ColorType;
+// Interface trait must be in scope for the .cast::<T>() QueryInterface calls
+// on COM objects (ID3D11Device → IDXGIDevice, IDXGIOutput → IDXGIOutput1, etc.).
+use windows::core::Interface;
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
-    D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D, D3D11_BIND_FLAG,
+    D3D11CreateDevice, ID3D11Device, ID3D11DeviceContext, ID3D11Texture2D,
     D3D11_CPU_ACCESS_READ, D3D11_MAP_READ, D3D11_MAPPED_SUBRESOURCE, D3D11_SDK_VERSION,
     D3D11_TEXTURE2D_DESC, D3D11_USAGE_STAGING,
 };
@@ -334,6 +337,8 @@ impl DxgiCapture {
         })?;
 
         // Allocate CPU-readable staging texture.
+        // In windows 0.54, D3D11_TEXTURE2D_DESC.BindFlags and .CPUAccessFlags are
+        // plain u32 fields.  Extract the inner values from the flag newtypes.
         let staging_desc = D3D11_TEXTURE2D_DESC {
             Width:          self.width,
             Height:         self.height,
@@ -342,9 +347,9 @@ impl DxgiCapture {
             Format:         DXGI_FORMAT_B8G8R8A8_UNORM,
             SampleDesc:     DXGI_SAMPLE_DESC { Count: 1, Quality: 0 },
             Usage:          D3D11_USAGE_STAGING,
-            BindFlags:      D3D11_BIND_FLAG(0),
-            CPUAccessFlags: D3D11_CPU_ACCESS_READ,
-            MiscFlags:      Default::default(),
+            BindFlags:      0u32,                           // no bind flags for staging
+            CPUAccessFlags: D3D11_CPU_ACCESS_READ.0 as u32, // D3D11_CPU_ACCESS_FLAG → u32
+            MiscFlags:      0u32,
         };
         let mut staging_opt: Option<ID3D11Texture2D> = None;
         self.device

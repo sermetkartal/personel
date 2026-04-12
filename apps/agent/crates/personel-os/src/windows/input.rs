@@ -11,11 +11,13 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::mpsc;
 
 use windows::Win32::System::SystemInformation::GetTickCount64;
+// GetLastInputInfo and LASTINPUTINFO are in Win32::UI::Input::KeyboardAndMouse,
+// not in Win32::UI::WindowsAndMessaging (which only has the hook / message APIs).
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
-    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetLastInputInfo, GetMessageW,
+    CallNextHookEx, DispatchMessageW, GetForegroundWindow, GetMessageW,
     GetWindowTextW, GetWindowThreadProcessId, PostThreadMessageW, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, LASTINPUTINFO, MSG, WH_KEYBOARD_LL, WM_QUIT,
-    WINDOWS_HOOK_ID,
+    UnhookWindowsHookEx, HHOOK, KBDLLHOOKSTRUCT, MSG, WH_KEYBOARD_LL, WM_QUIT,
 };
 use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
 
@@ -127,6 +129,24 @@ pub struct KeyEvent {
 /// fn` and cannot capture any state.
 static HOOK_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 
+/// Newtype wrapper that allows a raw `*mut mpsc::Sender<KeyEvent>` to be stored
+/// in a `static`.
+///
+/// # Safety invariant
+///
+/// The wrapped pointer is `Some(Box::into_raw(tx))` only while the hook thread
+/// is running and the `HHOOK` handle is live.  All writes happen under the
+/// enclosing `Mutex`, and reads occur only from the single hook-callback thread
+/// while the mutex is held.  There is therefore no data race.
+struct SenderPtr(*mut mpsc::Sender<KeyEvent>);
+
+// SAFETY: SenderPtr is only ever accessed under the Mutex<Option<SenderPtr>>
+// lock.  The pointer is written before the hook is installed and cleared after
+// UnhookWindowsHookEx returns.  No two threads ever access the pointed-to
+// Sender concurrently, so both Send and Sync are sound.
+unsafe impl Send for SenderPtr {}
+unsafe impl Sync for SenderPtr {}
+
 /// The sender end of the key-event channel, set by the hook thread before
 /// installing the hook and cleared on teardown.
 ///
@@ -138,11 +158,11 @@ static HOOK_THREAD_ID: AtomicU32 = AtomicU32::new(0);
 ///
 /// # Safety invariant
 ///
-/// `KEY_EVENT_TX_PTR` is `Some(Box::into_raw(tx))` only while the hook
-/// thread is running and the `HHOOK` handle is live. The hook callback
+/// The inner `SenderPtr` is `Some(SenderPtr(Box::into_raw(tx)))` only while the
+/// hook thread is running and the `HHOOK` handle is live. The hook callback
 /// casts it to `*mut mpsc::Sender<KeyEvent>` and calls `(*p).send(...)`.
 /// The hook thread owns the pointer and drops it after unhook.
-static KEY_EVENT_TX: std::sync::OnceLock<std::sync::Mutex<Option<*mut mpsc::Sender<KeyEvent>>>> =
+static KEY_EVENT_TX: std::sync::OnceLock<std::sync::Mutex<Option<SenderPtr>>> =
     std::sync::OnceLock::new();
 
 /// SAFETY: The raw pointer is only accessed from the hook callback (single OS
@@ -197,7 +217,7 @@ pub fn install_keyboard_hook(tx: mpsc::Sender<KeyEvent>) -> Result<HookHandle> {
         let mut guard = cell.lock().expect("KEY_EVENT_TX poisoned");
         // SAFETY: We box the sender so it has a stable heap address. The
         // pointer is valid until the hook thread clears it after unhook.
-        *guard = Some(Box::into_raw(Box::new(tx)));
+        *guard = Some(SenderPtr(Box::into_raw(Box::new(tx))));
     }
 
     let thread = std::thread::Builder::new()
@@ -238,7 +258,7 @@ pub fn install_keyboard_hook(tx: mpsc::Sender<KeyEvent>) -> Result<HookHandle> {
             // Clear the sender so no further events can be sent after unhook.
             if let Some(cell) = KEY_EVENT_TX.get() {
                 if let Ok(mut guard) = cell.lock() {
-                    if let Some(ptr) = guard.take() {
+                    if let Some(SenderPtr(ptr)) = guard.take() {
                         // SAFETY: we own the Box from Box::into_raw above.
                         unsafe { drop(Box::from_raw(ptr)) };
                     }
@@ -293,8 +313,10 @@ unsafe extern "system" fn keyboard_hook_proc(
         // Send to the collector. Ignore send errors (collector may have stopped).
         if let Some(cell) = KEY_EVENT_TX.get() {
             if let Ok(guard) = cell.try_lock() {
-                if let Some(ptr) = *guard {
-                    let _ = (*ptr).send(ev);
+                if let Some(ref sp) = *guard {
+                    // SAFETY: sp.0 is valid while the hook is installed; this
+                    // callback only fires while the hook thread is alive.
+                    let _ = (*sp.0).send(ev);
                 }
             }
         }
