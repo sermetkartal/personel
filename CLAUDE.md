@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.8 — Faz 1 items 1-5 done, item 5 ~85% (enroll + mTLS + auth e2e ✅; queue→stream drain bug open); item 6 blocked — 2026-04-13
+> Versiyon: 1.9 — Faz 1 COMPLETE (items 1-6 ✅). events_raw stream'de gerçek agent batch'i akıyor. Faz 2 Wave 1 başlıyor — 2026-04-13
 
 ---
 
@@ -123,18 +123,34 @@ PATH += $env:USERPROFILE\.cargo\bin; $env:USERPROFILE\.dotnet\tools; C:\Program 
 
 ---
 
-### 🚧 KAPATILACAK ZINCIR — Şu an kırık yerler (2026-04-13 güncelleme)
+### ✅ FAZ 1 TAMAMLANDI (2026-04-13)
 
-Faz 1 Madde 1-5 çalışma durumu:
+Faz 1 Madde 1-6 uçtan uca doğrulandı:
 
-1. ✅ **Vault PKI engine kurulmuş**: `pki` at `pki`, role `agent-cert` (client auth), role `server-cert` (both), AppRole `agent-enrollment` with policy `agent-enroll`, api-service + gateway-service AppRoles policy'leri ile
-2. ✅ **Keycloak `tenant_id` mapper**: user profile şemasına attribute eklendi, protocol mapper oluşturuldu, admin user tenant `be459dac-1a79-4054-b6e1-fa934a927315`a bağlı
-3. ⚠️ **Windows agent uçtan uca**: %85 — enroll → real Vault cert (hex serial, lowercase) → service start → all 12 collectors boot → mTLS handshake to gateway → gateway auth `stream: agent connected` VERIFIED. **Kırık**: agent queue `pending=4, in_flight=0` — bidi stream açık ama publish loop queue'yu drain etmiyor. Events NATS'a gitmiyor. Sonraki oturum için rust-engineer analizi lazım (`apps/agent/crates/personel-transport/src/client.rs` stream send path)
-4. `personel-collectors` içinde `file_system` ve `network` synthetic stub — Faz 2
-5. Browser/email/cloud/system events collector hiç yok — Faz 2
-6. ✅ **MSI enroll.exe**: çalışıyor — combined token (base64url JSON) parse + CSR üretim + POST /v1/agent-enroll + DPAPI seal + config.toml TOML schema (AgentConfig with `[enrollment]` section + `root_ca_path`)
+1. ✅ **Vault PKI engine**: `pki` at `pki`, role `agent-cert` (client auth), role `server-cert` (both flags, SAN IP 192.168.5.44), AppRole `agent-enrollment` with policy `agent-enroll`, api-service + gateway-service AppRole policy'leri ile
+2. ✅ **Keycloak tenant_id mapper**: user profile şemasına attribute + protocol mapper; admin → tenant `be459dac-1a79-4054-b6e1-fa934a927315`
+3. ✅ **Admin API /v1/endpoints/enroll + /v1/agent-enroll**: combined opaque token + CSR signing via Vault pki/sign/agent-cert
+4. ✅ **Rust agent enroll.exe**: 9-step ceremony → DPAPI seal → config.toml `[enrollment]` + root_ca.pem
+5. ✅ **Windows agent mTLS + Hello + event publish**: bidi stream kuruluyor, Hello frame gönderiliyor, Welcome alınıyor, event batches NATS'a akıyor
+6. ✅ **NATS smoke test**: `events_raw` stream'de gerçek agent batch mesajları görünüyor
 
-**Madde 6 (NATS smoke)** bloke: Madde 5 publish path düzelene kadar events_raw stream'i boş. 5 stream var, consumer'lar yapılandırılmış (events_raw, events_sensitive, live_view_control, agent_health, pki_events).
+**Canlı pilot doğrulama komutu** (gelecek oturumlar için referans):
+```bash
+# Vault root token kurtarma (unseal ile):
+docker exec personel-vault sh -c "VAULT_SKIP_VERIFY=true vault operator generate-root -init -format=json"
+# → nonce + otp al, sonra:
+docker exec personel-vault sh -c "VAULT_SKIP_VERIFY=true vault operator generate-root -nonce=<nonce> -format=json U1VROrQeITje/ms1w29cs7vy29/q4Q5sAeKQeVdAZq0="
+# → encoded_token al, decode et:
+docker exec personel-vault sh -c "VAULT_SKIP_VERIFY=true vault operator generate-root -decode=<token> -otp=<otp>"
+
+# Combined enroll token al + agent'ı çalıştır:
+TOKEN=$(curl -s -X POST http://192.168.5.44:8000/v1/endpoints/enroll -H "Authorization: Bearer $JWT" | jq -r .token)
+enroll.exe --token "$TOKEN" --gateway "https://192.168.5.44:9443"
+personel-agent.exe  # console mode
+
+# events_raw sayısını kontrol:
+docker exec personel-nats wget -qO- "http://127.0.0.1:8222/jsz?streams=1" | jq '.account_details[0].stream_detail[] | select(.name=="events_raw")'
+```
 
 **Yeni tespit edilen tech debt** (CLAUDE.md §10'a taşınacak):
 - **Schema drift**: `audit.append_event` iki farklı signature (init.sql vs migration 004) — migration 0029 overload ile köprülendi
