@@ -193,8 +193,11 @@ fn run() -> std::result::Result<(), EnrollErr> {
 
     let cert_path = data_dir.join("cert.pem");
     let key_path = data_dir.join("private_key.enc");
+    let root_ca_path = data_dir.join("root_ca.pem");
     let cfg_path = data_dir.join("config.toml");
 
+    // cert.pem holds leaf || chain (tonic Identity::from_pem accepts either
+    // the leaf alone or a leaf+intermediates bundle).
     let mut cert_bundle = body.cert_pem.clone();
     if !cert_bundle.ends_with('\n') {
         cert_bundle.push('\n');
@@ -206,6 +209,18 @@ fn run() -> std::result::Result<(), EnrollErr> {
     fs::write(&cert_path, cert_bundle.as_bytes())
         .map_err(|e| EnrollErr::Io(format!("write cert: {e}")))?;
 
+    // root_ca.pem is the trust anchor used by the agent's mTLS client to
+    // verify the gateway's server certificate. For a flat Vault PKI this is
+    // the issuing CA itself; for chained PKIs the response includes the full
+    // chain and the root is the last cert in the bundle. Either way, writing
+    // chain_pem here gives rustls the anchors it needs.
+    let mut root_bundle = body.chain_pem.clone();
+    if !root_bundle.ends_with('\n') {
+        root_bundle.push('\n');
+    }
+    fs::write(&root_ca_path, root_bundle.as_bytes())
+        .map_err(|e| EnrollErr::Io(format!("write root ca: {e}")))?;
+
     let sealed = seal_private_key(&private_key_der);
     fs::write(&key_path, &sealed)
         .map_err(|e| EnrollErr::Io(format!("write key: {e}")))?;
@@ -216,12 +231,13 @@ fn run() -> std::result::Result<(), EnrollErr> {
             "# Schema mirrors personel_agent::config::AgentConfig.\n",
             "\n",
             "[enrollment]\n",
-            "tenant_id   = \"{}\"\n",
-            "endpoint_id = \"{}\"\n",
-            "gateway_url = \"{}\"\n",
-            "spki_pins   = [\"{}\"]\n",
-            "cert_path   = \"{}\"\n",
-            "key_path    = \"{}\"\n",
+            "tenant_id    = \"{}\"\n",
+            "endpoint_id  = \"{}\"\n",
+            "gateway_url  = \"{}\"\n",
+            "spki_pins    = [\"{}\"]\n",
+            "cert_path    = \"{}\"\n",
+            "key_path     = \"{}\"\n",
+            "root_ca_path = \"{}\"\n",
         ),
         body.tenant_id,
         body.endpoint_id,
@@ -229,6 +245,7 @@ fn run() -> std::result::Result<(), EnrollErr> {
         body.spki_pin_sha256,
         cert_path.display().to_string().replace('\\', "\\\\"),
         key_path.display().to_string().replace('\\', "\\\\"),
+        root_ca_path.display().to_string().replace('\\', "\\\\"),
     );
     fs::write(&cfg_path, cfg.as_bytes())
         .map_err(|e| EnrollErr::Io(format!("write config: {e}")))?;

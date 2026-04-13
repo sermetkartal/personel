@@ -78,8 +78,14 @@ func (p *Pool) Close() { p.p.Close() }
 //	    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 //	);
 func (p *Pool) GetEndpointByCertSerial(ctx context.Context, serial string) (*EndpointRecord, error) {
+	// Schema ownership note: the endpoints table lives in init.sql with
+	// columns `is_active`, `revoked_at`, `hardware_fingerprint` — not the
+	// `revoked` + `hw_fingerprint` shape this comment block originally
+	// assumed. We derive `revoked` from `NOT is_active` at query time so
+	// the downstream code (EndpointRecord.Revoked) keeps its existing
+	// semantics. Tracked under CLAUDE.md §10 schema unification.
 	const q = `
-		SELECT e.id, e.tenant_id, e.cert_serial, e.revoked, e.hw_fingerprint
+		SELECT e.id, e.tenant_id, e.cert_serial, (NOT e.is_active) AS revoked, e.hardware_fingerprint
 		FROM endpoints e
 		WHERE e.cert_serial = $1
 		LIMIT 1`

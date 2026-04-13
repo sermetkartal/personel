@@ -243,7 +243,7 @@ func (s *Service) AgentEnroll(ctx context.Context, req *AgentEnrollRequest, spki
 		req.OSVersion,
 		req.AgentVersion,
 		hwBytes,
-		issued.SerialNumber,
+		formatSerialHex(issued.SerialNumber),
 	).Scan(&endpointID)
 	if err != nil {
 		return nil, fmt.Errorf("agent enroll: insert endpoint: %w", err)

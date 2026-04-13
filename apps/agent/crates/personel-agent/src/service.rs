@@ -108,24 +108,44 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     if let Some(enroll) = &config.enrollment {
         use personel_transport::client::{BackoffConfig, ClientConfig, run_stream};
 
-        // Load PEM-encoded client cert and key from disk.
-        // The files are DPAPI-sealed on Windows; in dev mode they may be plain PEM.
-        let load_result = (|| -> anyhow::Result<(Vec<u8>, Vec<u8>)> {
+        // Load the client cert (PEM bundle: leaf || chain), unseal the
+        // DPAPI-protected PKCS#8 DER private key and re-wrap it as PEM, and
+        // load the Vault PKI root CA used as the mTLS trust anchor.
+        let load_result = (|| -> anyhow::Result<(Vec<u8>, Vec<u8>, Option<Vec<u8>>)> {
             let cert_pem = std::fs::read(&enroll.cert_path)
                 .with_context(|| format!("read client cert: {}", enroll.cert_path.display()))?;
-            let key_pem = std::fs::read(&enroll.key_path)
-                .with_context(|| format!("read client key: {}", enroll.key_path.display()))?;
-            Ok((cert_pem, key_pem))
+
+            let sealed_key = std::fs::read(&enroll.key_path)
+                .with_context(|| format!("read sealed key: {}", enroll.key_path.display()))?;
+            let key_der = unseal_private_key(&sealed_key)
+                .context("unseal private key")?;
+            let key_pem = pkcs8_der_to_pem(&key_der);
+
+            let root_ca_pem = match enroll.root_ca_path.as_ref() {
+                Some(p) => Some(
+                    std::fs::read(p)
+                        .with_context(|| format!("read root CA: {}", p.display()))?,
+                ),
+                None => {
+                    warn!(
+                        "transport: root_ca_path not configured — mTLS server verification \
+                         will fail unless the gateway cert chains to a system trust anchor"
+                    );
+                    None
+                }
+            };
+
+            Ok((cert_pem, key_pem, root_ca_pem))
         })();
 
         match load_result {
-            Ok((cert_pem, key_pem)) => {
+            Ok((cert_pem, key_pem, tenant_ca_pem)) => {
                 let gateway_url = enroll.gateway_url.clone();
                 let transport_cfg = ClientConfig {
                     gateway_url,
                     client_cert_pem: cert_pem,
                     client_key_pem: key_pem,
-                    tenant_ca_pem: None, // TODO Phase 2: load tenant CA from config
+                    tenant_ca_pem,
                     backoff: BackoffConfig::default(),
                 };
                 let _transport_task = tokio::spawn(async move {
@@ -239,4 +259,43 @@ async fn report_health_ok() -> anyhow::Result<()> {
 
     tracing::info!(version = crate::config::AGENT_VERSION, "health_ok sent to watchdog");
     Ok(())
+}
+
+// ── Private key unsealing + PKCS#8 DER → PEM ──────────────────────────────────
+
+/// Unseals the DPAPI-protected private key blob written by `enroll.exe`.
+///
+/// On Windows the file is a `CryptProtectData` machine-scope blob containing
+/// PKCS#8 DER bytes. On non-Windows dev builds the blob is the raw bytes —
+/// we just pass them through and hope the caller knows what it's doing.
+#[cfg(target_os = "windows")]
+fn unseal_private_key(sealed: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let plaintext = personel_os::windows::dpapi::unprotect(sealed)
+        .map_err(|e| anyhow::anyhow!("DPAPI unprotect: {e}"))?;
+    Ok(plaintext.to_vec())
+}
+
+#[cfg(not(target_os = "windows"))]
+fn unseal_private_key(sealed: &[u8]) -> anyhow::Result<Vec<u8>> {
+    // Dev fallback: enroll.rs stores the DER bytes verbatim on non-Windows.
+    Ok(sealed.to_vec())
+}
+
+/// Wraps PKCS#8 DER bytes in a PEM envelope (`-----BEGIN PRIVATE KEY-----`
+/// markers, base64-encoded body wrapped at 64 columns) suitable for
+/// `tonic::transport::Identity::from_pem`.
+fn pkcs8_der_to_pem(der: &[u8]) -> Vec<u8> {
+    use base64::engine::general_purpose::STANDARD;
+    use base64::Engine as _;
+
+    let b64 = STANDARD.encode(der);
+    let mut out = String::with_capacity(b64.len() + 64);
+    out.push_str("-----BEGIN PRIVATE KEY-----\n");
+    for chunk in b64.as_bytes().chunks(64) {
+        // SAFETY: STANDARD base64 alphabet is pure ASCII, every chunk is valid UTF-8.
+        out.push_str(std::str::from_utf8(chunk).expect("base64 alphabet is ASCII"));
+        out.push('\n');
+    }
+    out.push_str("-----END PRIVATE KEY-----\n");
+    out.into_bytes()
 }

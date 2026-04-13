@@ -53,6 +53,12 @@ pub struct EnrollmentConfig {
     pub cert_path: PathBuf,
     /// Agent private key path (DER-encoded DPAPI blob).
     pub key_path: PathBuf,
+    /// Trust anchor for verifying the gateway server cert (PEM, Vault PKI root).
+    /// Optional for backward compatibility with pre-Faz-1.5 enrollments; if
+    /// absent the agent attempts the handshake without a configured trust
+    /// anchor and a warning is logged.
+    #[serde(default)]
+    pub root_ca_path: Option<PathBuf>,
 }
 
 /// Top-level agent configuration (on-disk TOML).
