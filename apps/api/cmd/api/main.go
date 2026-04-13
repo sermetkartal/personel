@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/personel/api/internal/accessreview"
+	"github.com/personel/api/internal/apikey"
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/backup"
@@ -219,6 +220,15 @@ func main() {
 	reportsCHClient := clickhouseclient.NewClient(ch)
 	reportsCHHandlers := reports.NewCHHandlers(reportsCHClient)
 
+	// Roadmap item #87 — trend analysis service over employee_daily_stats.
+	trendStore := reports.NewPGTrendStore(pool)
+	trendSvc := reports.NewTrendService(trendStore)
+	trendsHandler := reports.NewTrendsHandler(trendSvc)
+
+	// Roadmap item #72 — service-to-service API key auth.
+	apikeyStore := apikey.NewStore(pool)
+	apikeySvc := apikey.NewService(apikeyStore, "dev", recorder, log)
+
 	// --- Roadmap item #67 — Search (OpenSearch full-text) ---
 	// Degraded-mode graceful: if the cluster is unreachable at boot,
 	// NewClient returns an error and we pass nil into NewService so
@@ -381,6 +391,8 @@ func main() {
 		LiveView:     lvSvc,
 		Reports:      reportsSvc,
 		ReportsCH:    reportsCHHandlers,
+		Trends:       trendsHandler,
+		APIKey:       apikeySvc,
 		Search:       searchSvc,
 		Screenshots:  screenshotsSvc,
 		Transparency: transSvc,

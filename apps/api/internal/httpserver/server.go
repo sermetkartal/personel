@@ -68,6 +68,7 @@ type Services struct {
 	LiveView     *liveview.Service
 	Reports      *reports.Service
 	ReportsCH    *reports.CHHandlers
+	Trends       *reports.TrendsHandler
 	Search       *search.Service
 	Screenshots  *screenshots.Service
 	Transparency *transparency.Service
@@ -414,6 +415,13 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			r.Get("/idle-active", reports.IdleActiveHandler(svc.Reports))
 			r.Get("/endpoint-activity", reports.EndpointActivityHandler(svc.Reports))
 			r.Get("/app-blocks", reports.AppBlocksHandler(svc.Reports))
+
+			// --- Roadmap item #87 — trend analysis (week-over-week + z-score).
+			// RBAC inherits the /reports parent gate. Handler is nil-safe
+			// (svc.Trends may be nil if the trend service wasn't wired).
+			if svc.Trends != nil {
+				r.Get("/trends", svc.Trends.Get)
+			}
 
 			// --- Roadmap item #68 — real CH aggregation queries
 			// Parallel /ch/ subpath. Uses the same RBAC as the parent
