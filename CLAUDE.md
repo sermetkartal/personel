@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.3 — Faz 1+2+3+4 COMPLETE; Faz 5 Wave 1 + Wave 2 partial: 16/21 (items 41-58 hariç 59,60,61). vm5 (192.168.5.32) cluster scaffold'ları hazır. Toplam 56/190. — 2026-04-13
+> Versiyon: 2.4 — Faz 1+2+3+4 COMPLETE; Faz 5 Wave 1 + Wave 2 LIVE deployed: 16/21 (items 41-58 hariç 59,60,61). vm3+vm5 cluster çalışıyor (postgres replica, NATS R=2, MinIO mirror, ClickHouse 2-node + 2 keeper, OpenSearch 2-node green, Keycloak HA Infinispan). Toplam 56/190. — 2026-04-13
 
 ---
 
