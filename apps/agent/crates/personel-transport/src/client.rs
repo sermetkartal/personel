@@ -38,7 +38,8 @@ use tracing::{debug, error, info, warn};
 
 use personel_core::error::{AgentError, Result};
 use personel_proto::v1::{
-    agent_message, server_message, AgentMessage, Heartbeat,
+    agent_message, server_message, AgentMessage, AgentVersion, EndpointId,
+    HardwareFingerprint, Heartbeat, Hello, TenantId,
 };
 use personel_proto::AgentServiceClient;
 
@@ -104,11 +105,37 @@ pub struct ClientConfig {
     /// When present, added as a trusted root so the gateway's server cert can
     /// be validated.  When absent, the system/Mozilla root store is used.
     pub tenant_ca_pem: Option<Vec<u8>>,
+    /// Tenant UUID bytes (16 bytes big-endian). Used in the Hello frame.
+    pub tenant_id: [u8; 16],
+    /// Endpoint UUID bytes (16 bytes big-endian). Used in the Hello frame.
+    pub endpoint_id: [u8; 16],
+    /// Hardware fingerprint digest. Used in the Hello frame.
+    pub hw_fingerprint: Vec<u8>,
+    /// Operating system version string reported in Hello.
+    pub os_version: String,
+    /// Agent semver (e.g., "0.1.0").
+    pub agent_version: String,
     /// Reconnect backoff settings.
     pub backoff: BackoffConfig,
 }
 
 // ── TransportClient ───────────────────────────────────────────────────────────
+
+/// Identity metadata cached between reconnect attempts. Used to rebuild the
+/// Hello frame on every new `stream_once` invocation.
+#[derive(Clone)]
+pub struct AgentIdentity {
+    /// Tenant UUID as raw 16 bytes (big-endian).
+    pub tenant_id: [u8; 16],
+    /// Endpoint UUID as raw 16 bytes (big-endian).
+    pub endpoint_id: [u8; 16],
+    /// Hardware fingerprint digest (typically SHA-256 of MachineGuid + extras).
+    pub hw_fingerprint: Vec<u8>,
+    /// Operating system identifier string reported in Hello.
+    pub os_version: String,
+    /// Agent semver string (e.g., "0.1.0").
+    pub agent_version: String,
+}
 
 /// A connected gRPC transport client.
 ///
@@ -116,6 +143,7 @@ pub struct ClientConfig {
 /// [`TransportClient::run_bidi`].
 pub struct TransportClient {
     channel: Channel,
+    identity: AgentIdentity,
 }
 
 impl TransportClient {
@@ -152,7 +180,14 @@ impl TransportClient {
             .connect_timeout(Duration::from_secs(15));
 
         let channel = endpoint.connect_lazy();
-        Ok(Self { channel })
+        let identity = AgentIdentity {
+            tenant_id: cfg.tenant_id,
+            endpoint_id: cfg.endpoint_id,
+            hw_fingerprint: cfg.hw_fingerprint,
+            os_version: cfg.os_version,
+            agent_version: cfg.agent_version,
+        };
+        Ok(Self { channel, identity })
     }
 
     /// Runs the bidi gRPC stream loop, reconnecting on errors.
@@ -178,7 +213,7 @@ impl TransportClient {
                     info!("transport: stop requested — exiting bidi loop");
                     return Ok(());
                 }
-                result = stream_once(self.channel.clone(), Arc::clone(&queue)) => {
+                result = stream_once(self.channel.clone(), Arc::clone(&queue), self.identity.clone()) => {
                     match result {
                         Ok(()) => {
                             info!("transport: stream ended cleanly");
@@ -208,6 +243,7 @@ impl TransportClient {
 async fn stream_once(
     channel: Channel,
     queue: Arc<personel_queue::queue::EventQueue>,
+    identity: AgentIdentity,
 ) -> Result<()> {
     info!("transport: opening bidi stream");
 
@@ -215,6 +251,41 @@ async fn stream_once(
     // this mpsc; the ReceiverStream adaptor turns it into a tonic Streaming.
     let (msg_tx, msg_rx) = tokio::sync::mpsc::channel::<AgentMessage>(256);
     let outbound = ReceiverStream::new(msg_rx);
+
+    // The gateway stream handler requires the very first frame to be Hello.
+    // Push it onto the mpsc BEFORE invoking client.stream() so the initial
+    // HTTP/2 request body carries something — some tonic/h2 versions hold
+    // the DATA frame until the first yield from the ReceiverStream.
+    let (major, minor, patch) = parse_semver(&identity.agent_version);
+    let hello = AgentMessage {
+        payload: Some(agent_message::Payload::Hello(Hello {
+            agent_version: Some(AgentVersion {
+                major,
+                minor,
+                patch,
+                build: String::new(),
+            }),
+            endpoint_id: Some(EndpointId {
+                value: identity.endpoint_id.to_vec(),
+            }),
+            tenant_id: Some(TenantId {
+                value: identity.tenant_id.to_vec(),
+            }),
+            hw_fingerprint: Some(HardwareFingerprint {
+                blob: identity.hw_fingerprint.clone(),
+            }),
+            resume_cookie: Vec::new(),
+            last_acked_seq: 0,
+            os_version: identity.os_version.clone(),
+            agent_build: identity.agent_version.clone(),
+            pe_dek_version: 0,
+            tmk_version: 0,
+        })),
+    };
+    if msg_tx.send(hello).await.is_err() {
+        return Err(AgentError::Grpc("outbound channel closed before Hello".into()));
+    }
+    info!("transport: Hello queued");
 
     let mut client = AgentServiceClient::new(channel);
     let response = client
@@ -325,6 +396,17 @@ async fn stream_once(
             }
         }
     }
+}
+
+/// Parses a dotted semver string ("0.1.0") into (major, minor, patch). Missing
+/// or non-numeric components default to 0.
+fn parse_semver(s: &str) -> (u32, u32, u32) {
+    let mut parts = s.split('.').map(|p| p.parse::<u32>().unwrap_or(0));
+    (
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+        parts.next().unwrap_or(0),
+    )
 }
 
 // ── Server message dispatch ───────────────────────────────────────────────────

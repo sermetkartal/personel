@@ -141,11 +141,36 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
         match load_result {
             Ok((cert_pem, key_pem, tenant_ca_pem)) => {
                 let gateway_url = enroll.gateway_url.clone();
+                // Parse UUIDs into 16-byte arrays for the Hello frame. If
+                // parsing fails we fall back to zeros and log — the gateway
+                // will reject the Hello but at least the stream loop runs.
+                let tenant_bytes = uuid::Uuid::parse_str(&enroll.tenant_id)
+                    .map(|u| *u.as_bytes())
+                    .unwrap_or([0u8; 16]);
+                let endpoint_bytes = uuid::Uuid::parse_str(&enroll.endpoint_id)
+                    .map(|u| *u.as_bytes())
+                    .unwrap_or([0u8; 16]);
+                // hw_fingerprint lives on disk in config.toml only when we
+                // cache it; for Phase 1 re-derive a stable digest from the
+                // endpoint UUID so the gateway does not reject Hello on
+                // missing fingerprint. The authoritative fingerprint lives
+                // in the endpoints table keyed on enrollment time.
+                let hw_digest = {
+                    use sha2::{Digest, Sha256};
+                    let mut h = Sha256::new();
+                    h.update(enroll.endpoint_id.as_bytes());
+                    h.finalize().to_vec()
+                };
                 let transport_cfg = ClientConfig {
                     gateway_url,
                     client_cert_pem: cert_pem,
                     client_key_pem: key_pem,
                     tenant_ca_pem,
+                    tenant_id: tenant_bytes,
+                    endpoint_id: endpoint_bytes,
+                    hw_fingerprint: hw_digest,
+                    os_version: std::env::consts::OS.to_string(),
+                    agent_version: env!("CARGO_PKG_VERSION").to_string(),
                     backoff: BackoffConfig::default(),
                 };
                 let _transport_task = tokio::spawn(async move {

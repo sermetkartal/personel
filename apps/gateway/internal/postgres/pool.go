@@ -5,6 +5,8 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -130,25 +132,41 @@ func (p *Pool) GetEndpointByCertSerial(ctx context.Context, serial string) (*End
 //	    PRIMARY KEY (endpoint_id, pe_dek_version)
 //	);
 func (p *Pool) GetKeyVersions(ctx context.Context, endpointID uuid.UUID) (*KeyVersionRecord, error) {
+	// Schema ownership note: migration 0022_keystroke_keys.up.sql uses a
+	// single `key_version TEXT` column (values like 'v1'), not the numeric
+	// pe_dek_version + tmk_version pair the original handshake spec assumed.
+	// Until key rotation is wired end-to-end we parse the text version
+	// suffix ("v<N>") into a monotonic integer used for both PE-DEK and
+	// TMK comparisons. When the row is absent (no DLP enrollment yet,
+	// Phase 1 ADR 0013 default-OFF) we return zeros so Hello.pe_dek=0
+	// and Hello.tmk=0 pass the handshake without rejection.
 	const q = `
-		SELECT pe_dek_version, tmk_version
+		SELECT key_version
 		FROM keystroke_keys
 		WHERE endpoint_id = $1
-		ORDER BY pe_dek_version DESC
 		LIMIT 1`
 
 	row := p.p.QueryRow(ctx, q, endpointID)
-	rec := &KeyVersionRecord{}
-	err := row.Scan(&rec.ExpectedPEDEKVersion, &rec.ExpectedTMKVersion)
+	var keyVersion string
+	err := row.Scan(&keyVersion)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			// Endpoint has no key row yet — first connection before DLP enrollment.
-			// Allow with version 0 so Hello.pe_dek_version=0 passes.
 			return &KeyVersionRecord{}, nil
 		}
 		return nil, fmt.Errorf("postgres: get key versions: %w", err)
 	}
-	return rec, nil
+	// Parse "v1" → 1, "v2" → 2, etc. Anything unrecognised becomes 0 so
+	// the handshake treats it as "endpoint has no active DLP state".
+	var numeric uint32
+	if strings.HasPrefix(keyVersion, "v") {
+		if n, perr := strconv.ParseUint(keyVersion[1:], 10, 32); perr == nil {
+			numeric = uint32(n)
+		}
+	}
+	return &KeyVersionRecord{
+		ExpectedPEDEKVersion: numeric,
+		ExpectedTMKVersion:   numeric,
+	}, nil
 }
 
 // GetEndpointMetadata returns enrichment fields for an endpoint, used by the
