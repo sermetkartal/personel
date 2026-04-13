@@ -37,21 +37,28 @@ type EmployeeOverviewRow struct {
 }
 
 type DailyStats struct {
-	Day                string    `json:"day"`
-	ActiveMinutes      int       `json:"active_minutes"`
-	IdleMinutes        int       `json:"idle_minutes"`
-	ScreenshotCount    int       `json:"screenshot_count"`
-	KeystrokeCount     int       `json:"keystroke_count"`
-	ProductivityScore  int       `json:"productivity_score"`
-	TopApps            []TopApp  `json:"top_apps"`
-	FirstActivityAt    time.Time `json:"first_activity_at"`
-	LastActivityAt     time.Time `json:"last_activity_at"`
+	Day                string          `json:"day"`
+	ActiveMinutes      int             `json:"active_minutes"`
+	IdleMinutes        int             `json:"idle_minutes"`
+	ScreenshotCount    int             `json:"screenshot_count"`
+	KeystrokeCount     int             `json:"keystroke_count"`
+	ProductivityScore  int             `json:"productivity_score"`
+	TopApps            []TopApp        `json:"top_apps"`
+	FirstActivityAt    time.Time       `json:"first_activity_at"`
+	LastActivityAt     time.Time       `json:"last_activity_at"`
+	RichSignals        json.RawMessage `json:"rich_signals,omitempty"`
 }
 
 type TopApp struct {
-	Name     string `json:"name"`
-	Minutes  int    `json:"minutes"`
-	Category string `json:"category"`
+	Name     string         `json:"name"`
+	Minutes  int            `json:"minutes"`
+	Category string         `json:"category"`
+	Files    []TopAppFile   `json:"files,omitempty"`
+}
+
+type TopAppFile struct {
+	Path    string `json:"path"`
+	Minutes int    `json:"minutes"`
 }
 
 // EmployeesOverviewHandler returns one row per employee for the given
@@ -95,7 +102,9 @@ func queryEmployeeOverview(ctx context.Context, pool *pgxpool.Pool, tenantID, da
 	const q = `
 		WITH today AS (
 			SELECT user_id, active_minutes, idle_minutes, screenshot_count, keystroke_count,
-			       productivity_score, top_apps, first_activity_at, last_activity_at, day
+			       productivity_score, top_apps,
+			       COALESCE(rich_signals, '{}'::jsonb) AS rich_signals,
+			       first_activity_at, last_activity_at, day
 			FROM employee_daily_stats
 			WHERE day = $2::date
 		),
@@ -126,6 +135,7 @@ func queryEmployeeOverview(ctx context.Context, pool *pgxpool.Pool, tenantID, da
 			COALESCE(t.keystroke_count, 0),
 			COALESCE(t.productivity_score, 0),
 			COALESCE(t.top_apps, '[]'::jsonb),
+			COALESCE(t.rich_signals, '{}'::jsonb),
 			t.first_activity_at,
 			t.last_activity_at,
 			COALESCE(l.sum_active, 0),
@@ -150,7 +160,7 @@ func queryEmployeeOverview(ctx context.Context, pool *pgxpool.Pool, tenantID, da
 	var out []EmployeeOverviewRow
 	for rows.Next() {
 		var r EmployeeOverviewRow
-		var topAppsRaw []byte
+		var topAppsRaw, richRaw []byte
 		var firstAt, lastAt *time.Time
 		if err := rows.Scan(
 			&r.UserID, &r.Username, &r.FullName, &r.Email,
@@ -158,7 +168,7 @@ func queryEmployeeOverview(ctx context.Context, pool *pgxpool.Pool, tenantID, da
 			&r.Today.ActiveMinutes, &r.Today.IdleMinutes,
 			&r.Today.ScreenshotCount, &r.Today.KeystrokeCount,
 			&r.Today.ProductivityScore,
-			&topAppsRaw,
+			&topAppsRaw, &richRaw,
 			&firstAt, &lastAt,
 			&r.Last7DaysActiveMin, &r.Last7DaysAvgScore,
 			&r.AssignedEndpoints,
@@ -167,6 +177,9 @@ func queryEmployeeOverview(ctx context.Context, pool *pgxpool.Pool, tenantID, da
 		}
 		r.Today.Day = day
 		_ = json.Unmarshal(topAppsRaw, &r.Today.TopApps)
+		if len(richRaw) > 0 {
+			r.Today.RichSignals = json.RawMessage(richRaw)
+		}
 		if firstAt != nil {
 			r.Today.FirstActivityAt = *firstAt
 		}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import {
@@ -12,12 +13,30 @@ import {
   Video,
   TrendingUp,
   Calendar,
+  ChevronDown,
+  ChevronRight,
+  Globe,
+  Mail,
+  FolderOpen,
+  Network,
+  Usb,
+  Bluetooth,
+  Smartphone,
+  PowerOff,
+  Cpu,
+  Printer,
+  Clipboard,
+  ShieldAlert,
+  Lock,
+  Eye,
+  Ban,
 } from "lucide-react";
 import type {
   EmployeeDetail,
   HourlyBucket,
   TopApp,
   DailyStatsCompact,
+  RichSignals,
 } from "@/lib/api/employees";
 
 interface Props {
@@ -31,6 +50,13 @@ function formatHours(mins: number): string {
   if (h === 0) return `${m} dk`;
   if (m === 0) return `${h} sa`;
   return `${h} sa ${m} dk`;
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
 }
 
 function scoreClass(score: number): string {
@@ -54,6 +80,7 @@ function categoryClass(cat: TopApp["category"]): string {
 export function EmployeeDetailClient({ detail, locale }: Props): JSX.Element {
   const t = useTranslations("employees");
   const { profile, today, hourly, last_7_days, assigned_endpoints } = detail;
+  const [expandedApp, setExpandedApp] = useState<string | null>(null);
 
   const initials = (profile.username || profile.email || "?")
     .slice(0, 2)
@@ -71,6 +98,7 @@ export function EmployeeDetailClient({ detail, locale }: Props): JSX.Element {
     .slice(0, 10);
 
   const maxAppMinutes = Math.max(1, ...topApps.map((a) => a.minutes));
+  const richSignals = today.rich_signals;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -197,37 +225,84 @@ export function EmployeeDetailClient({ detail, locale }: Props): JSX.Element {
                 {t("detail.noData")}
               </div>
             )}
-            {topApps.map((app) => (
-              <div key={app.name}>
-                <div className="flex items-center justify-between mb-1">
-                  <span
-                    className={`text-xs px-1.5 py-0.5 rounded border ${categoryClass(app.category)}`}
+            {topApps.map((app) => {
+              const isExpanded = expandedApp === app.name;
+              const hasFiles = (app.files?.length ?? 0) > 0;
+              return (
+                <div key={app.name}>
+                  <button
+                    type="button"
+                    onClick={() => hasFiles && setExpandedApp(isExpanded ? null : app.name)}
+                    className={`w-full text-left ${hasFiles ? "cursor-pointer" : "cursor-default"}`}
                   >
-                    {app.name}
-                  </span>
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {formatHours(app.minutes)}
-                  </span>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1.5">
+                        {hasFiles && (
+                          isExpanded ? (
+                            <ChevronDown className="h-3 w-3 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3 w-3 text-muted-foreground" />
+                          )
+                        )}
+                        <span
+                          className={`text-xs px-1.5 py-0.5 rounded border ${categoryClass(app.category)}`}
+                        >
+                          {app.name}
+                        </span>
+                        {hasFiles && (
+                          <span className="text-[10px] text-muted-foreground">
+                            {app.files!.length} dosya
+                          </span>
+                        )}
+                      </span>
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {formatHours(app.minutes)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={
+                          app.category === "productive"
+                            ? "h-full bg-green-500"
+                            : app.category === "distracting"
+                              ? "h-full bg-red-500"
+                              : "h-full bg-muted-foreground/50"
+                        }
+                        style={{
+                          width: `${Math.round((app.minutes / maxAppMinutes) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </button>
+                  {isExpanded && hasFiles && (
+                    <div className="mt-2 ml-5 border-l-2 border-border pl-3 space-y-1.5 animate-fade-in">
+                      {app.files!.map((f) => (
+                        <div
+                          key={f.path}
+                          className="flex items-center justify-between text-xs gap-2"
+                        >
+                          <span
+                            className="font-mono truncate text-muted-foreground"
+                            title={f.path}
+                          >
+                            {f.path}
+                          </span>
+                          <span className="tabular-nums whitespace-nowrap text-foreground/80">
+                            {formatHours(f.minutes)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                  <div
-                    className={
-                      app.category === "productive"
-                        ? "h-full bg-green-500"
-                        : app.category === "distracting"
-                          ? "h-full bg-red-500"
-                          : "h-full bg-muted-foreground/50"
-                    }
-                    style={{
-                      width: `${Math.round((app.minutes / maxAppMinutes) * 100)}%`,
-                    }}
-                  />
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
+
+      {/* Rich monitoring signals — every collector category has a card here */}
+      {richSignals && <RichSignalsGrid signals={richSignals} />}
 
       {/* Last 7 days + assigned endpoints */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -423,5 +498,565 @@ function Last7Days({ days }: { days: DailyStatsCompact[] }): JSX.Element {
         );
       })}
     </div>
+  );
+}
+
+function RichSignalsGrid({ signals }: { signals: RichSignals }) {
+  return (
+    <div className="space-y-4">
+      <h2 className="text-sm font-semibold text-foreground/80 uppercase tracking-wider">
+        Zengin Sinyaller (tüm toplayıcılar)
+      </h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {signals.browser && <BrowserCard data={signals.browser} />}
+        {signals.email && <EmailCard data={signals.email} />}
+        {signals.filesystem && <FilesystemCard data={signals.filesystem} />}
+        {signals.network && <NetworkCard data={signals.network} />}
+        {signals.usb && <UsbCard data={signals.usb} />}
+        {signals.bluetooth && <BluetoothCard data={signals.bluetooth} />}
+        {signals.mtp && <MtpCard data={signals.mtp} />}
+        {signals.system && <SystemCard data={signals.system} />}
+        {signals.device && <DeviceCard data={signals.device} />}
+        {signals.print && <PrintCard data={signals.print} />}
+        {signals.clipboard && <ClipboardCard data={signals.clipboard} />}
+        {signals.keystroke && <KeystrokeCard data={signals.keystroke} />}
+        {signals.liveview && <LiveViewCard data={signals.liveview} />}
+        {signals.policy && <PolicyCard data={signals.policy} />}
+        {signals.tamper && <TamperCard data={signals.tamper} />}
+      </div>
+    </div>
+  );
+}
+
+function SignalCard({
+  icon: Icon,
+  title,
+  subtitle,
+  children,
+  accent = "blue",
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  accent?: "blue" | "green" | "amber" | "red" | "purple" | "slate";
+}) {
+  const accentClass = {
+    blue: "bg-blue-500/10 text-blue-600 dark:text-blue-400",
+    green: "bg-green-500/10 text-green-600 dark:text-green-400",
+    amber: "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+    red: "bg-red-500/10 text-red-600 dark:text-red-400",
+    purple: "bg-purple-500/10 text-purple-600 dark:text-purple-400",
+    slate: "bg-slate-500/10 text-slate-600 dark:text-slate-400",
+  }[accent];
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <div className={`p-1.5 rounded ${accentClass}`}>
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="text-sm font-semibold">{title}</div>
+          {subtitle && (
+            <div className="text-xs text-muted-foreground truncate">
+              {subtitle}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="text-xs space-y-1.5">{children}</div>
+    </div>
+  );
+}
+
+function StatRow({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: React.ReactNode;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2">
+      <span className="text-muted-foreground truncate">{label}</span>
+      <span
+        className={`tabular-nums whitespace-nowrap font-medium ${mono ? "font-mono" : ""}`}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function BrowserCard({ data }: { data: NonNullable<RichSignals["browser"]> }) {
+  return (
+    <SignalCard
+      icon={Globe}
+      title="Tarayıcı"
+      subtitle={`${data.top_domains?.length ?? 0} domain`}
+      accent="blue"
+    >
+      {data.top_domains?.slice(0, 6).map((d) => (
+        <div
+          key={d.domain}
+          className="flex items-center justify-between gap-2"
+        >
+          <span className="font-mono truncate text-foreground/80">
+            {d.domain}
+          </span>
+          <span className="tabular-nums whitespace-nowrap text-muted-foreground">
+            {d.visits}× · {formatHours(d.minutes)}
+          </span>
+        </div>
+      ))}
+      {data.incognito_blocked !== undefined && data.incognito_blocked > 0 && (
+        <div className="pt-1.5 border-t border-border">
+          <StatRow
+            label="Gizli mod engellendi"
+            value={
+              <span className="text-amber-600 dark:text-amber-400">
+                {data.incognito_blocked}
+              </span>
+            }
+          />
+        </div>
+      )}
+    </SignalCard>
+  );
+}
+
+function EmailCard({ data }: { data: NonNullable<RichSignals["email"]> }) {
+  return (
+    <SignalCard
+      icon={Mail}
+      title="E-posta"
+      subtitle={`${data.sent} gönderildi · ${data.received} alındı`}
+      accent="purple"
+    >
+      {data.top_correspondents?.slice(0, 5).map((c) => (
+        <div
+          key={c.address}
+          className="flex items-center justify-between gap-2"
+        >
+          <span className="font-mono truncate text-foreground/80">
+            {c.address}
+          </span>
+          <span className="tabular-nums text-muted-foreground">
+            {c.count}
+          </span>
+        </div>
+      ))}
+      {data.redacted_subjects !== undefined && (
+        <div className="pt-1.5 border-t border-border">
+          <StatRow
+            label="KVKK maskeleme"
+            value={`${data.redacted_subjects} konu`}
+          />
+        </div>
+      )}
+    </SignalCard>
+  );
+}
+
+function FilesystemCard({
+  data,
+}: {
+  data: NonNullable<RichSignals["filesystem"]>;
+}) {
+  return (
+    <SignalCard
+      icon={FolderOpen}
+      title="Dosya Sistemi"
+      subtitle={`${data.created + data.written + data.deleted} olay`}
+      accent="green"
+    >
+      <StatRow label="Oluşturuldu" value={data.created} />
+      <StatRow label="Yazıldı" value={data.written} />
+      <StatRow label="Silindi" value={data.deleted} />
+      {data.sensitive_hashed !== undefined && (
+        <StatRow
+          label="Hassas (hash'li)"
+          value={
+            <span className="text-amber-600 dark:text-amber-400">
+              {data.sensitive_hashed}
+            </span>
+          }
+        />
+      )}
+      {data.top_paths && data.top_paths.length > 0 && (
+        <div className="pt-1.5 border-t border-border space-y-1">
+          {data.top_paths.slice(0, 3).map((p) => (
+            <div
+              key={p.path}
+              className="flex items-center justify-between gap-2"
+            >
+              <span
+                className="font-mono truncate text-foreground/70 text-[10px]"
+                title={p.path}
+              >
+                {p.path}
+              </span>
+              <span className="tabular-nums text-muted-foreground text-[10px]">
+                {p.events}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </SignalCard>
+  );
+}
+
+function NetworkCard({ data }: { data: NonNullable<RichSignals["network"]> }) {
+  return (
+    <SignalCard
+      icon={Network}
+      title="Ağ"
+      subtitle={`${data.flows.toLocaleString("tr-TR")} akış`}
+      accent="blue"
+    >
+      <StatRow label="DNS sorgusu" value={data.dns_queries.toLocaleString("tr-TR")} />
+      {data.top_hosts?.slice(0, 4).map((h) => (
+        <div key={h.host} className="flex items-center justify-between gap-2">
+          <span className="font-mono truncate text-foreground/80">
+            {h.host}
+          </span>
+          <span className="tabular-nums text-muted-foreground">
+            {formatBytes(h.bytes)}
+          </span>
+        </div>
+      ))}
+      {data.geoip && data.geoip.length > 0 && (
+        <div className="pt-1.5 border-t border-border">
+          <div className="flex flex-wrap gap-1">
+            {data.geoip.slice(0, 6).map((g) => (
+              <span
+                key={g.country}
+                className="px-1.5 py-0.5 rounded bg-muted text-[10px]"
+              >
+                {g.country} · {g.ip_count}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </SignalCard>
+  );
+}
+
+function UsbCard({ data }: { data: NonNullable<RichSignals["usb"]> }) {
+  return (
+    <SignalCard
+      icon={Usb}
+      title="USB"
+      subtitle={`${data.attached} takıldı · ${data.removed} çıkarıldı`}
+      accent="amber"
+    >
+      {data.timeline?.slice(0, 5).map((t, idx) => (
+        <div
+          key={`${t.ts}-${idx}`}
+          className="flex items-center justify-between gap-2"
+        >
+          <span className="truncate text-foreground/80">
+            <span
+              className={`inline-block w-1.5 h-1.5 rounded-full mr-1.5 ${
+                t.event === "attached" ? "bg-green-500" : "bg-red-500"
+              }`}
+            />
+            {t.vendor} {t.product}
+          </span>
+          <span className="tabular-nums text-muted-foreground text-[10px]">
+            {new Date(t.ts).toLocaleTimeString("tr-TR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          </span>
+        </div>
+      ))}
+    </SignalCard>
+  );
+}
+
+function BluetoothCard({
+  data,
+}: {
+  data: NonNullable<RichSignals["bluetooth"]>;
+}) {
+  return (
+    <SignalCard
+      icon={Bluetooth}
+      title="Bluetooth"
+      subtitle={`${data.paired_devices?.length ?? 0} eşleşmiş cihaz`}
+      accent="blue"
+    >
+      {data.paired_devices?.slice(0, 6).map((d) => (
+        <div key={d.name} className="flex items-center justify-between gap-2">
+          <span className="truncate text-foreground/80">{d.name}</span>
+          <span className="text-muted-foreground text-[10px]">{d.class}</span>
+        </div>
+      ))}
+    </SignalCard>
+  );
+}
+
+function MtpCard({ data }: { data: NonNullable<RichSignals["mtp"]> }) {
+  return (
+    <SignalCard
+      icon={Smartphone}
+      title="MTP / Taşınabilir"
+      subtitle={`${data.devices?.length ?? 0} cihaz`}
+      accent="amber"
+    >
+      {data.devices?.slice(0, 5).map((d) => (
+        <div
+          key={d.friendly_name}
+          className="flex items-center justify-between gap-2"
+        >
+          <span className="truncate text-foreground/80">
+            {d.friendly_name}
+          </span>
+          <span className="text-muted-foreground text-[10px]">
+            {d.manufacturer}
+          </span>
+        </div>
+      ))}
+    </SignalCard>
+  );
+}
+
+function SystemCard({ data }: { data: NonNullable<RichSignals["system"]> }) {
+  return (
+    <SignalCard
+      icon={PowerOff}
+      title="Sistem Olayları"
+      subtitle={`${data.locks} kilit · ${data.unlocks} açma`}
+      accent="slate"
+    >
+      <StatRow label="Kilit" value={data.locks} />
+      <StatRow label="Açma" value={data.unlocks} />
+      <StatRow label="Uyku" value={data.sleeps} />
+      <StatRow label="Uyanma" value={data.wakes} />
+      {data.av_deactivated !== undefined && data.av_deactivated > 0 && (
+        <div className="pt-1.5 border-t border-border">
+          <StatRow
+            label="AV devre dışı"
+            value={
+              <span className="text-red-600 dark:text-red-400">
+                {data.av_deactivated}
+              </span>
+            }
+          />
+        </div>
+      )}
+    </SignalCard>
+  );
+}
+
+function DeviceCard({ data }: { data: NonNullable<RichSignals["device"]> }) {
+  return (
+    <SignalCard
+      icon={Cpu}
+      title="Cihaz Durumu"
+      subtitle={`${data.uptime_hours.toFixed(1)} saat çalışma`}
+      accent="green"
+    >
+      <StatRow label="CPU ortalaması" value={`${data.cpu_avg_percent.toFixed(1)}%`} />
+      <StatRow label="RSS ortalaması" value={`${data.rss_avg_mb} MB`} />
+      <StatRow
+        label="Batarya"
+        value={
+          <span>
+            {data.battery_percent}%
+            {data.battery_charging && (
+              <span className="ml-1 text-green-600 dark:text-green-400">
+                ⚡
+              </span>
+            )}
+          </span>
+        }
+      />
+    </SignalCard>
+  );
+}
+
+function PrintCard({ data }: { data: NonNullable<RichSignals["print"]> }) {
+  return (
+    <SignalCard
+      icon={Printer}
+      title="Yazdırma"
+      subtitle={`${data.jobs} iş · ${data.pages} sayfa`}
+      accent="purple"
+    >
+      {data.top_printers?.slice(0, 4).map((p) => (
+        <div
+          key={p.printer}
+          className="flex items-center justify-between gap-2"
+        >
+          <span className="truncate text-foreground/80">{p.printer}</span>
+          <span className="tabular-nums text-muted-foreground">
+            {p.jobs}
+          </span>
+        </div>
+      ))}
+    </SignalCard>
+  );
+}
+
+function ClipboardCard({
+  data,
+}: {
+  data: NonNullable<RichSignals["clipboard"]>;
+}) {
+  return (
+    <SignalCard
+      icon={Clipboard}
+      title="Pano"
+      subtitle={`${data.metadata_events} olay`}
+      accent="slate"
+    >
+      {data.redaction_hits && data.redaction_hits.length > 0 ? (
+        data.redaction_hits.map((h) => (
+          <StatRow
+            key={h.rule}
+            label={h.rule}
+            value={
+              <span className="text-amber-600 dark:text-amber-400">
+                {h.count}
+              </span>
+            }
+          />
+        ))
+      ) : (
+        <div className="text-muted-foreground">Maskeleme yok</div>
+      )}
+    </SignalCard>
+  );
+}
+
+function KeystrokeCard({
+  data,
+}: {
+  data: NonNullable<RichSignals["keystroke"]>;
+}) {
+  return (
+    <SignalCard
+      icon={Lock}
+      title="Klavye (şifreli)"
+      subtitle={
+        data.dlp_enabled ? "DLP aktif" : "ADR 0013: içerik şifreli · admin kör"
+      }
+      accent={data.dlp_enabled ? "amber" : "slate"}
+    >
+      <StatRow
+        label="Toplam olay"
+        value={data.total_events.toLocaleString("tr-TR")}
+      />
+      <StatRow label="Şifreli blob" value={data.encrypted_blobs} />
+      <div className="pt-1.5 border-t border-border text-[10px] text-muted-foreground leading-tight">
+        ADR 0013 uyarınca ham içerik yöneticiler tarafından kriptografik olarak
+        okunamaz.
+      </div>
+    </SignalCard>
+  );
+}
+
+function LiveViewCard({
+  data,
+}: {
+  data: NonNullable<RichSignals["liveview"]>;
+}) {
+  return (
+    <SignalCard
+      icon={Eye}
+      title="Canlı İzleme"
+      subtitle={`${data.sessions} oturum`}
+      accent="purple"
+    >
+      {data.last_request_at && (
+        <StatRow
+          label="Son talep"
+          value={new Date(data.last_request_at).toLocaleString("tr-TR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            day: "2-digit",
+            month: "2-digit",
+          })}
+        />
+      )}
+      {data.last_requested_by && (
+        <StatRow label="Talep eden" value={data.last_requested_by} />
+      )}
+      <div className="pt-1.5 border-t border-border text-[10px] text-muted-foreground leading-tight">
+        HR çift-kontrol + hash-zincirli audit
+      </div>
+    </SignalCard>
+  );
+}
+
+function PolicyCard({ data }: { data: NonNullable<RichSignals["policy"]> }) {
+  return (
+    <SignalCard
+      icon={Ban}
+      title="Politika İhlalleri"
+      subtitle={`${data.blocked_app_attempts + data.blocked_web_attempts} girişim`}
+      accent="red"
+    >
+      <StatRow
+        label="Engellenen uygulama"
+        value={
+          <span className="text-red-600 dark:text-red-400">
+            {data.blocked_app_attempts}
+          </span>
+        }
+      />
+      <StatRow
+        label="Engellenen web"
+        value={
+          <span className="text-red-600 dark:text-red-400">
+            {data.blocked_web_attempts}
+          </span>
+        }
+      />
+    </SignalCard>
+  );
+}
+
+function TamperCard({ data }: { data: NonNullable<RichSignals["tamper"]> }) {
+  const healthy = data.findings === 0;
+  return (
+    <SignalCard
+      icon={ShieldAlert}
+      title="Anti-Tamper"
+      subtitle={healthy ? "Sağlıklı" : `${data.findings} bulgu`}
+      accent={healthy ? "green" : "red"}
+    >
+      <StatRow
+        label="Bulgu"
+        value={
+          <span
+            className={
+              healthy
+                ? "text-green-600 dark:text-green-400"
+                : "text-red-600 dark:text-red-400"
+            }
+          >
+            {data.findings}
+          </span>
+        }
+      />
+      {data.last_check && (
+        <StatRow
+          label="Son kontrol"
+          value={new Date(data.last_check).toLocaleString("tr-TR", {
+            hour: "2-digit",
+            minute: "2-digit",
+            day: "2-digit",
+            month: "2-digit",
+          })}
+        />
+      )}
+    </SignalCard>
   );
 }

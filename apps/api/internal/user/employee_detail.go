@@ -122,16 +122,18 @@ func queryEmployeeDetail(ctx context.Context, pool *pgxpool.Pool, tenantID, user
 
 	const todayQ = `
 		SELECT active_minutes, idle_minutes, screenshot_count, keystroke_count,
-		       productivity_score, top_apps, first_activity_at, last_activity_at
+		       productivity_score, top_apps,
+		       COALESCE(rich_signals, '{}'::jsonb),
+		       first_activity_at, last_activity_at
 		FROM employee_daily_stats
 		WHERE user_id = $1::uuid AND day = $2::date
 	`
-	var topAppsRaw []byte
+	var topAppsRaw, richRaw []byte
 	var firstAt, lastAt *time.Time
 	err := pool.QueryRow(ctx, todayQ, userID, day).Scan(
 		&detail.Today.ActiveMinutes, &detail.Today.IdleMinutes,
 		&detail.Today.ScreenshotCount, &detail.Today.KeystrokeCount,
-		&detail.Today.ProductivityScore, &topAppsRaw,
+		&detail.Today.ProductivityScore, &topAppsRaw, &richRaw,
 		&firstAt, &lastAt,
 	)
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
@@ -140,6 +142,9 @@ func queryEmployeeDetail(ctx context.Context, pool *pgxpool.Pool, tenantID, user
 	detail.Today.Day = day
 	if topAppsRaw != nil {
 		_ = json.Unmarshal(topAppsRaw, &detail.Today.TopApps)
+	}
+	if len(richRaw) > 0 {
+		detail.Today.RichSignals = json.RawMessage(richRaw)
 	}
 	if firstAt != nil {
 		detail.Today.FirstActivityAt = *firstAt
