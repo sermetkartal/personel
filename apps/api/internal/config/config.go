@@ -155,8 +155,17 @@ type TenantConfig struct {
 }
 
 type RateLimitConfig struct {
-	RequestsPerMinute int `koanf:"requests_per_minute"` // default 300
-	BurstSize         int `koanf:"burst_size"`          // default 50
+	RequestsPerMinute int `koanf:"requests_per_minute"` // per-IP, default 300
+	BurstSize         int `koanf:"burst_size"`          // per-IP, default 50
+	// TenantRequestsPerMinute is the second-layer per-tenant token-bucket
+	// rate (Faz 6 #71). Applied AFTER AuthMiddleware so the principal is
+	// populated. Must be >= 10× RequestsPerMinute because a single tenant
+	// has many users / sessions concurrently; a sanity check in validate()
+	// rejects configs that would gate tenants tighter than single IPs.
+	// A value of 0 disables the per-tenant layer (defensive default when
+	// upgrading from an older api.yaml that does not declare it).
+	TenantRequestsPerMinute int `koanf:"tenant_requests_per_minute"` // default 6000
+	TenantBurst             int `koanf:"tenant_burst"`               // default 200
 }
 
 // Load reads config from path, then overrides with PERSONEL_ env vars.
@@ -233,8 +242,10 @@ func defaults() *Config {
 			Timeout: 10 * time.Second,
 		},
 		RateLimit: RateLimitConfig{
-			RequestsPerMinute: 300,
-			BurstSize:         50,
+			RequestsPerMinute:       300,
+			BurstSize:               50,
+			TenantRequestsPerMinute: 6000,
+			TenantBurst:             200,
 		},
 	}
 }
@@ -278,6 +289,19 @@ func validate(c *Config) error {
 	// and the API will mount /v1/search handlers in degraded mode.
 	if c.OpenSearch.Enabled && c.OpenSearch.Addr == "" {
 		return fmt.Errorf("config: opensearch.addr is required when opensearch.enabled=true")
+	}
+	// Per-tenant rate limit (Faz 6 #71). A non-zero tenant limit must be
+	// >= 10× the per-IP limit because a tenant aggregates many users /
+	// sessions / devices. Operators who want to disable the layer can
+	// set tenant_requests_per_minute: 0 explicitly.
+	if c.RateLimit.TenantRequestsPerMinute > 0 {
+		if c.RateLimit.TenantRequestsPerMinute < 10*c.RateLimit.RequestsPerMinute {
+			return fmt.Errorf("config: rate_limit.tenant_requests_per_minute (%d) must be >= 10× rate_limit.requests_per_minute (%d)",
+				c.RateLimit.TenantRequestsPerMinute, c.RateLimit.RequestsPerMinute)
+		}
+		if c.RateLimit.TenantBurst <= 0 {
+			return fmt.Errorf("config: rate_limit.tenant_burst must be > 0 when tenant_requests_per_minute > 0")
+		}
 	}
 	return nil
 }

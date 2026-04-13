@@ -215,6 +215,45 @@ class TestClassifyBatch:
 
 
 # ---------------------------------------------------------------------------
+# POST /v1/classify/stream  (Faz 8 #82)
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyStream:
+    def test_stream_returns_ndjson(self, app_with_fallback: TestClient) -> None:
+        payload = {
+            "items": [
+                {"app_name": "Microsoft Excel", "window_title": "Q4.xlsx"},
+                {"app_name": "chrome.exe", "window_title": "YouTube", "url": "youtube.com"},
+                {"app_name": "Logo Tiger 3", "window_title": "Fatura"},
+            ]
+        }
+        resp = app_with_fallback.post("/v1/classify/stream", json=payload)
+        assert resp.status_code == 200
+        # Media type should be application/x-ndjson
+        assert "application/x-ndjson" in resp.headers["content-type"]
+        # Backend header exposed for observability
+        assert resp.headers.get("x-classifier-backend") == "fallback"
+        # Parse NDJSON line-by-line
+        lines = [ln for ln in resp.text.split("\n") if ln.strip()]
+        assert len(lines) == 3
+        decoded = [json.loads(ln) for ln in lines]
+        assert decoded[0]["category"] == "work"
+        assert decoded[1]["category"] == "distraction"
+        assert decoded[2]["category"] == "work"
+        for row in decoded:
+            assert row["backend"] == "fallback"
+            assert 0.0 <= row["confidence"] <= 1.0
+
+    def test_stream_rejects_oversized_batch(self, app_with_fallback: TestClient) -> None:
+        payload = {"items": [{"app_name": "app"}] * 1000}  # > batch_max_items
+        resp = app_with_fallback.post("/v1/classify/stream", json=payload)
+        # FastAPI validation kicks in first for pydantic max_length=128,
+        # which is 422. Anything >128 is rejected.
+        assert resp.status_code == 422
+
+
+# ---------------------------------------------------------------------------
 # GET /metrics
 # ---------------------------------------------------------------------------
 

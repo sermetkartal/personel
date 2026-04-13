@@ -224,6 +224,32 @@ const (
 	ActionPipelineReplay Action = "pipeline.replay"
 )
 
+// --- API keys (Faz 6 #72 — service-to-service credential) ---
+const (
+	// ActionAPIKeyCreated is emitted by the apikey service when a new
+	// service API key is issued. Details include the name, scopes,
+	// and whether the key is tenant-scoped or cross-tenant.
+	ActionAPIKeyCreated Action = "apikey.issued"
+
+	// ActionAPIKeyRevoked is emitted when an API key is revoked. The
+	// target is "apikey:{id}". No plaintext or hash is included.
+	ActionAPIKeyRevoked Action = "apikey.revoked"
+)
+
+// --- Audit stream (Faz 6 #66) ---
+const (
+	// ActionAuditStreamSubscribed is recorded when a principal opens
+	// a WebSocket to GET /v1/audit/stream. Captures filter, tenant,
+	// and whether the subscriber elevated to all_tenants (DPO only).
+	ActionAuditStreamSubscribed Action = "audit.stream.subscribed"
+
+	// ActionAuditStreamUnsubscribed is recorded on WebSocket close.
+	// Details.dropped surfaces any entries the fanout had to discard
+	// because the subscriber's consumer was behind; non-zero values
+	// indicate a slow client worth investigating.
+	ActionAuditStreamUnsubscribed Action = "audit.stream.unsubscribed"
+)
+
 // AllActions is the canonical list. The test in audit_test.go iterates this
 // slice and verifies every action appears in at least one registered handler.
 // Add new actions here in the same commit as the constant above.
@@ -317,6 +343,10 @@ var AllActions = []Action{
 	ActionDLPPEDEKBootstrapBatch,
 	ActionAgentSilenceAcknowledged,
 	ActionPipelineReplay,
+	ActionAuditStreamSubscribed,
+	ActionAuditStreamUnsubscribed,
+	ActionAPIKeyCreated,
+	ActionAPIKeyRevoked,
 }
 
 // ValidAction returns true if a is a known audit action.

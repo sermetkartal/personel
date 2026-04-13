@@ -237,6 +237,145 @@ class TestConfidenceThreshold:
         classifier = FallbackClassifier()
         assert classifier._confidence_threshold == 0.70
 
+    def test_matched_rule_confidence_at_or_above_threshold(
+        self, fallback_classifier: FallbackClassifier
+    ) -> None:
+        """All rule matches that return a non-unknown category must have
+        confidence >= 0.70 (ADR 0017 floor)."""
+        samples = [
+            item("SAP GUI", "SAP Logon", None),
+            item("Oracle ERP", "Oracle Fusion Cloud", None),
+            item("chrome.exe", "Jira - PRSNL-999", "jira.atlassian.com"),
+            item("chrome.exe", "Asana - My Tasks", "asana.com"),
+            item("chrome.exe", "Netflix - Home", "netflix.com"),
+        ]
+        for ci in samples:
+            result = fallback_classifier.classify(ci)
+            if result.category != "unknown":
+                assert result.confidence >= 0.70, (
+                    f"{ci.app_name}/{ci.url} returned {result.category} "
+                    f"with confidence {result.confidence} < 0.70"
+                )
+
+
+# ---------------------------------------------------------------------------
+# Faz 8 #82 — new rules
+# ---------------------------------------------------------------------------
+
+
+class TestTurkishBusinessExpanded:
+    """Turkish business software rules added in Faz 8 #82."""
+
+    def test_sap_logon(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("SAPLogon.exe", "SAP Logon 760"))
+        assert result.category == "work"
+        assert result.confidence >= 0.90
+
+    def test_sap_b1(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("SAP Business One", "SAP B1 - Satış"))
+        assert result.category == "work"
+
+    def test_oracle_erp(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("Oracle ERP", "Oracle Fusion Cloud ERP"))
+        assert result.category == "work"
+
+    def test_hitit_erp(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("Hitit Yazılım", "Hitit ERP - Muhasebe"))
+        assert result.category == "work"
+
+    def test_eta_sql(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("ETA SQL", "ETA SQL - Fatura"))
+        assert result.category == "work"
+
+    def test_zirve_yazilim(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("Zirve Müşavir", "Zirve Yazılım - Bordro"))
+        assert result.category == "work"
+
+    def test_vega_yazilim(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(item("Vega Yazılım", "Vega ERP - Muhasebe"))
+        assert result.category == "work"
+
+
+class TestCloudToolsExpanded:
+    """Cloud work tool rules added in Faz 8 #82."""
+
+    def test_jira_cloud_url(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "PRSNL-421 - Jira", "jira.atlassian.com")
+        )
+        assert result.category == "work"
+
+    def test_notion_url(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Product Roadmap - Notion", "notion.so")
+        )
+        assert result.category == "work"
+
+    def test_airtable(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Marketing Plan - Airtable", "airtable.com")
+        )
+        assert result.category == "work"
+
+    def test_asana(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "My Tasks - Asana", "asana.com")
+        )
+        assert result.category == "work"
+
+    def test_monday(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Sprint - monday.com", "monday.com")
+        )
+        assert result.category == "work"
+
+    def test_clickup(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Sprint 42 - ClickUp", "clickup.com")
+        )
+        assert result.category == "work"
+
+    def test_trello(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Kanban Board - Trello", "trello.com")
+        )
+        assert result.category == "work"
+
+
+class TestDistractionsExpanded:
+    """Distracting-category rules added in Faz 8 #82."""
+
+    def test_disney_plus(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Disney+ Watch Now", "disneyplus.com")
+        )
+        assert result.category == "distraction"
+
+    def test_eksi_sozluk(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "Ekşi Sözlük - Bugün", "eksisozluk.com")
+        )
+        assert result.category == "distraction"
+
+    def test_inci_sozluk(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "İnci Sözlük", "incisozluk.com")
+        )
+        assert result.category == "distraction"
+
+    def test_donanimhaber(self, fallback_classifier: FallbackClassifier) -> None:
+        result = fallback_classifier.classify(
+            item("chrome.exe", "DonanımHaber - Anasayfa", "donanimhaber.com")
+        )
+        assert result.category == "distraction"
+
+    def test_spotify_is_neutral(self, fallback_classifier: FallbackClassifier) -> None:
+        """Spotify now categorised as unknown (neutral background music)
+        rather than distraction — it's often on during focused work."""
+        result = fallback_classifier.classify(item("Spotify", "Spotify - Radiohead"))
+        # 'unknown' is the canonical 'neutral' bucket for the fallback classifier.
+        assert result.category == "unknown"
+
 
 # ---------------------------------------------------------------------------
 # Fixture-driven tests (30+ examples from classify_examples.json)

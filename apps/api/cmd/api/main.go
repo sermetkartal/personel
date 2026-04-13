@@ -163,6 +163,15 @@ func main() {
 	// --- 9. Build services ---
 	recorder := audit.NewRecorder(pool, log)
 
+	// Audit stream broker (Faz 6 #66). Constructed here so the single
+	// instance is shared between the Recorder (publisher side) and the
+	// /v1/audit/stream handler (consumer side). Every successful
+	// Recorder.Append call fans out to this broker AFTER the Postgres
+	// INSERT commits; the broker then dispatches to live WebSocket
+	// subscribers with KVKK keystroke-content stripping applied.
+	auditBroker := audit.NewBroker(log)
+	recorder.SetBroker(auditBroker)
+
 	tenantSvc := tenant.NewService(pool, recorder, log)
 	userSvc := user.NewService(pool, recorder, log)
 	endpointSvc := endpoint.NewService(pool, vc, recorder, log, cfg.Server.PublicURL, cfg.Server.GatewayURL)
@@ -386,6 +395,7 @@ func main() {
 		Incident:     incidentSvc,
 		BCP:          bcpSvc,
 		DBPool:       pool,
+		AuditBroker:  auditBroker,
 		Log:          log,
 	}, met)
 

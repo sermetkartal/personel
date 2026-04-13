@@ -1,0 +1,32 @@
+apiVersion: 1
+
+datasources:
+  - name: ClickHouse
+    uid: personel-clickhouse
+    type: grafana-clickhouse-datasource
+    access: proxy
+    url: http://personel-clickhouse:9000
+    isDefault: false
+    editable: false
+    jsonData:
+      defaultDatabase: personel
+      port: 9000
+      host: personel-clickhouse
+      protocol: native
+      secure: false
+      username: personel_app
+      # Faz 8 #89 — read-only account. The personel_app role has SELECT
+      # permissions on the personel.* tables relevant to the UAM dashboard;
+      # it does NOT have permissions on raw keystroke content tables.
+      # KVKK proportionality: Grafana must not be able to read anything
+      # the standard /v1/reports-preview path cannot.
+    secureJsonData:
+      password: ${CLICKHOUSE_APP_PASSWORD}
+    # Tenant isolation:
+    # Every dashboard query MUST filter by tenant_id = $tenant_id, where
+    # $tenant_id resolves to the Grafana org name. The org-to-tenant
+    # mapping is maintained by the operator (see
+    # docs/operations/grafana-tenant-isolation.md) — one Grafana org per
+    # Personel tenant, org name equals tenant UUID. This provisioning
+    # file is consumed by all orgs, so the datasource config itself is
+    # tenant-agnostic; isolation lives in the dashboard query layer.

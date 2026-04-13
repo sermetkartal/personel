@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/personel/api/internal/accessreview"
+	"github.com/personel/api/internal/apikey"
 	"github.com/personel/api/internal/audit"
 	"github.com/personel/api/internal/auth"
 	"github.com/personel/api/internal/backup"
@@ -54,6 +55,14 @@ type Services struct {
 	EndpointCmd  *endpoint.CommandService
 	Policy       *policy.Service
 	DSR          *dsr.Service
+	// DSRFulfillment runs KVKK m.11/b access exports and m.11/f
+	// crypto-erase (Faz 6 #69). Optional — if nil the /fulfill-*
+	// routes are not mounted.
+	DSRFulfillment *dsr.FulfillmentService
+	// APIKey provides the service-to-service credential layer
+	// (Faz 6 #72). Optional — if nil the /apikeys routes are not
+	// mounted and the ApiKey middleware is unavailable.
+	APIKey       *apikey.Service
 	LegalHold    *legalhold.Service
 	Destruction  *destruction.Service
 	LiveView     *liveview.Service
@@ -73,6 +82,12 @@ type Services struct {
 	BCP           *bcp.Service
 	Pipeline      *pipeline.Service
 	DBPool        *pgxpool.Pool
+	// AuditBroker fans audit entries to live WebSocket subscribers of
+	// /v1/audit/stream (Faz 6 #66). Nil-safe: when nil the route is
+	// mounted but returns 503 so the console sees a coherent degraded
+	// mode instead of a 404. main.go wires the same broker into
+	// Recorder.SetBroker so every successful append is fanned out.
+	AuditBroker   *audit.Broker
 	Log           *slog.Logger
 }
 
@@ -113,6 +128,17 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 	r.Use(CORSMiddleware(&svc.Cfg.HTTP))
 	r.Use(RateLimitMiddleware(svc.Cfg.RateLimit.RequestsPerMinute, svc.Cfg.RateLimit.BurstSize))
 
+	// Per-tenant rate limit (Faz 6 #71). Constructed once so the bucket
+	// map persists for the lifetime of the router; mounted further down
+	// inside the /v1 auth group because the principal is required.
+	// Zero rate disables the layer — the limiter itself short-circuits
+	// Allow in that case, so mounting is unconditional.
+	tenantLimiter := NewTenantLimiter(
+		svc.Cfg.RateLimit.TenantRequestsPerMinute,
+		svc.Cfg.RateLimit.TenantBurst,
+		svc.Log,
+	)
+
 	// Health and metrics — no auth required.
 	r.Get("/healthz", healthzHandler)
 	r.Get("/readyz", readyzHandler)
@@ -145,7 +171,20 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 	// API v1 — all routes require auth.
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(AuthMiddleware(svc.Verifier))
+		// Per-tenant rate limit runs BEFORE AuditContextMiddleware so a
+		// rogue tenant cannot flood the audit chain with 429 noise — the
+		// reject path is served by httpx.WriteError which does not touch
+		// the recorder. Mount order: Auth → TenantRateLimit → Audit.
+		r.Use(TenantRateLimitMiddleware(tenantLimiter))
 		r.Use(AuditContextMiddleware(svc.Recorder))
+
+		// --- Audit log streaming (Faz 6 #66) ---
+		// WebSocket at /v1/audit/stream. RBAC is enforced inside the
+		// handler (admin, dpo, investigator, auditor). The handler also
+		// records the subscription + disconnection in the audit log so
+		// an operator cannot silently observe every tenant's events.
+		// When AuditBroker is nil the handler returns 503.
+		r.Get("/audit/stream", audit.StreamHandler(svc.AuditBroker))
 
 		// --- Tenants ---
 		r.Route("/tenants", func(r chi.Router) {
@@ -273,9 +312,39 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 					r.Post("/respond", dsr.RespondHandler(svc.DSR))
 					r.Post("/extend", dsr.ExtendHandler(svc.DSR))
 					r.Post("/reject", dsr.RejectHandler(svc.DSR))
+
+					// --- Faz 6 #69: DSR fulfillment workflow ---
+					// POST /fulfill-access — KVKK m.11/b. DPO + Admin.
+					// POST /fulfill-erasure — KVKK m.11/f. DPO ONLY
+					// (even Admin is locked out; the DPO is personally
+					// accountable for the unrecoverable decision per
+					// KVKK art. 7). Route is no-op when fulfillment
+					// service is nil (Phase 1 dev setups).
+					if svc.DSRFulfillment != nil {
+						r.With(auth.RequireRole(auth.RoleDPO, auth.RoleAdmin)).
+							Post("/fulfill-access", dsr.FulfillAccessHandler(svc.DSRFulfillment))
+						r.With(auth.RequireRole(auth.RoleDPO)).
+							Post("/fulfill-erasure", dsr.FulfillErasureHandler(svc.DSRFulfillment))
+					}
 				})
 			})
 		})
+
+		// --- API Keys (Faz 6 #72) ---
+		// Service-to-service credential issuance. DPO + Admin can
+		// generate, list, and revoke. The plaintext key is returned
+		// ONCE on creation and never again — losing it requires
+		// revoke + re-create. Non-interactive callers present the
+		// key via `Authorization: ApiKey <plaintext>` against routes
+		// that mount apikey.Middleware in place of AuthMiddleware.
+		if svc.APIKey != nil {
+			r.Route("/apikeys", func(r chi.Router) {
+				r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO))
+				r.Post("/", apikey.CreateHandler(svc.APIKey))
+				r.Get("/", apikey.ListHandler(svc.APIKey))
+				r.Delete("/{keyID}", apikey.RevokeHandler(svc.APIKey))
+			})
+		}
 
 		// --- Legal Hold (DPO only) ---
 		r.Route("/legal-holds", func(r chi.Router) {
@@ -369,6 +438,21 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 					r.Get("/idle-active", nilH.CHIdleActiveHandler())
 					r.Get("/productivity", nilH.CHProductivityHandler())
 					r.Get("/app-blocks", nilH.CHAppBlocksHandler())
+				}
+
+				// --- Roadmap items #85, #86 — scoring endpoints.
+				// productivity-breakdown inherits the /ch RBAC set above
+				// (admin, manager, hr, dpo, investigator).
+				// risk-score is tighter: admin + dpo + investigator only,
+				// since a risk-score leak on a per-user basis is materially
+				// more sensitive than productivity analytics. The .With()
+				// call composes with the outer .Use().
+				if svc.DBPool != nil {
+					r.Get("/productivity-breakdown",
+						reports.ProductivityBreakdownHandler(svc.DBPool))
+					r.With(auth.RequireRole(
+						auth.RoleAdmin, auth.RoleDPO, auth.RoleInvestigator,
+					)).Get("/risk-score", reports.RiskScoreHandler(svc.DBPool))
 				}
 			})
 		})

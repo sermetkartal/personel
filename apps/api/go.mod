@@ -24,6 +24,7 @@ require (
 	go.opentelemetry.io/otel/exporters/stdout/stdouttrace v1.27.0
 	go.opentelemetry.io/otel/sdk v1.27.0
 	golang.org/x/oauth2 v0.21.0
+	nhooyr.io/websocket v1.8.11
 )
 
 require (

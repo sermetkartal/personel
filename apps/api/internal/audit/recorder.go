@@ -31,13 +31,23 @@ type Entry struct {
 // The stored procedure serializes appends with pg_advisory_xact_lock
 // so this method is safe for concurrent callers.
 type Recorder struct {
-	pool *pgxpool.Pool
-	log  *slog.Logger
+	pool   *pgxpool.Pool
+	log    *slog.Logger
+	broker *Broker // optional; nil-safe
 }
 
 // NewRecorder creates a Recorder backed by the given pool.
 func NewRecorder(pool *pgxpool.Pool, log *slog.Logger) *Recorder {
 	return &Recorder{pool: pool, log: log}
+}
+
+// SetBroker attaches an in-process fanout broker. After the next call to
+// Append, every successfully committed Entry is also fanned out to any
+// registered Subscribers. Safe to call once at main.go wiring time before
+// the HTTP server starts accepting requests. Nil is accepted and disables
+// fanout — existing tests that pass a bare Recorder continue to work.
+func (r *Recorder) SetBroker(b *Broker) {
+	r.broker = b
 }
 
 // Append writes one audit entry. It blocks until the stored procedure commits.
@@ -85,6 +95,15 @@ func (r *Recorder) Append(ctx context.Context, e Entry) (int64, error) {
 		slog.String("action", string(e.Action)),
 		slog.String("actor", e.Actor),
 	)
+
+	// Best-effort real-time fanout to WebSocket subscribers. The DB
+	// INSERT has already committed so failures here never propagate;
+	// Publish is non-blocking per subscriber. KVKK: StripSensitive is
+	// applied inside Publish — details with keystroke content never
+	// reach the wire regardless of what the caller placed in Details.
+	if r.broker != nil {
+		r.broker.Publish(e)
+	}
 	return id, nil
 }
 

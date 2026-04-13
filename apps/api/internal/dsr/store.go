@@ -62,6 +62,12 @@ func NewStore(pool *pgxpool.Pool) *Store {
 	return &Store{pool: pool}
 }
 
+// Pool exposes the underlying pool. This is only used by the
+// FulfillmentService (fulfillment.go) which needs direct DB access to
+// perform multi-table deletes and artifact persistence in a single
+// transaction. Not part of the canonical Store API.
+func (s *Store) Pool() *pgxpool.Pool { return s.pool }
+
 // Create inserts a new DSR record. Returns the assigned ID.
 func (s *Store) Create(ctx context.Context, r *Request) (string, error) {
 	id := ulid.Make().String()

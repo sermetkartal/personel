@@ -1,0 +1,287 @@
+{
+  "title": "Personel — UAM Showcase",
+  "uid": "personel-uam",
+  "tags": ["personel", "uam", "showcase"],
+  "timezone": "browser",
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "tenant_id",
+        "label": "Tenant",
+        "type": "constant",
+        "hide": 2,
+        "query": "${__org.name}",
+        "description": "Tenant scope — Grafana org name is mapped 1:1 to tenant UUID by the provisioning script. See docs/operations/grafana-tenant-isolation.md."
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Endpoints Online",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(personel_agents_online{tenant_id=\"$tenant_id\"})",
+          "legendFormat": "Online"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "yellow", "value": 1 },
+              { "color": "green", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Active Users Today",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "personel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT count(DISTINCT user_id) AS value FROM personel.events_enriched WHERE tenant_id = '$tenant_id' AND event_time >= toStartOfDay(now())"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Daily Event Count",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 0 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "personel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT count() AS value FROM personel.events_enriched WHERE tenant_id = '$tenant_id' AND event_time >= toStartOfDay(now())"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "DSR Backlog",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "personel_dsr_requests_by_state{tenant_id=\"$tenant_id\", state=\"open\"}",
+          "legendFormat": "Open"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "OCR Throughput (last 1h)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(personel_ocr_extractions_total{status=\"success\"}[1h]))",
+          "legendFormat": "ops/s"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Policy Violations (7d)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(increase(personel_policy_violations_total{tenant_id=\"$tenant_id\"}[7d]))",
+          "legendFormat": "Violations"
+        }
+      ],
+      "alert": {
+        "name": "Rising Policy Violations",
+        "conditions": [
+          {
+            "evaluator": { "params": [100], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "frequency": "1m",
+        "message": "7-day policy violations exceeded threshold (>100). Likely a misconfigured tenant policy or an insider event cluster.",
+        "noDataState": "no_data"
+      }
+    },
+    {
+      "id": 10,
+      "title": "Productivity Score — 7d Avg (Top 20 users)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "personel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT toStartOfDay(event_time) AS t, avg(productivity_score) AS score FROM personel.employee_signals WHERE tenant_id = '$tenant_id' AND event_time >= now() - INTERVAL 7 DAY GROUP BY t ORDER BY t"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 },
+          "unit": "none",
+          "min": 0,
+          "max": 100,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "orange", "value": 40 },
+              { "color": "green", "value": 60 }
+            ]
+          }
+        }
+      },
+      "alert": {
+        "name": "Low Productivity Average",
+        "conditions": [
+          {
+            "evaluator": { "params": [40], "type": "lt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "7d", "now"] },
+            "reducer": { "params": [], "type": "avg" },
+            "type": "query"
+          }
+        ],
+        "frequency": "30m",
+        "message": "7-day average productivity dropped below 40. Review scoring weights + employee feedback.",
+        "noDataState": "no_data"
+      }
+    },
+    {
+      "id": 11,
+      "title": "Top Apps (last 7d)",
+      "type": "bargauge",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 4 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "personel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT app_name, sum(focus_seconds) AS seconds FROM personel.app_focus_daily WHERE tenant_id = '$tenant_id' AND day >= today() - 7 GROUP BY app_name ORDER BY seconds DESC LIMIT 15"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "s" }
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      }
+    },
+    {
+      "id": 20,
+      "title": "Idle vs Active (stacked)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 13 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "personel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT toStartOfHour(event_time) AS t, sum(active_seconds) AS active, sum(idle_seconds) AS idle FROM personel.employee_signals WHERE tenant_id = '$tenant_id' AND event_time >= now() - INTERVAL 24 HOUR GROUP BY t ORDER BY t"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "stacking": { "mode": "normal" }, "fillOpacity": 60 },
+          "unit": "s"
+        }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Risk Tier Distribution",
+      "type": "piechart",
+      "gridPos": { "h": 9, "w": 6, "x": 12, "y": 13 },
+      "datasource": { "type": "grafana-clickhouse-datasource", "uid": "personel-clickhouse" },
+      "targets": [
+        {
+          "refId": "A",
+          "rawSql": "SELECT risk_tier AS tier, count() AS value FROM personel.user_risk_current WHERE tenant_id = '$tenant_id' GROUP BY risk_tier"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "donut"
+      }
+    },
+    {
+      "id": 22,
+      "title": "DLP Redactions (sparkline)",
+      "type": "timeseries",
+      "gridPos": { "h": 9, "w": 6, "x": 18, "y": 13 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(personel_ocr_redactions_total{tenant_id=\"$tenant_id\"}[5m])) by (kind)",
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "line", "fillOpacity": 10 },
+          "unit": "ops"
+        }
+      },
+      "alert": {
+        "name": "DLP Redaction Spike",
+        "conditions": [
+          {
+            "evaluator": { "params": [500], "type": "gt" },
+            "operator": { "type": "and" },
+            "query": { "params": ["A", "5m", "now"] },
+            "reducer": { "params": [], "type": "max" },
+            "type": "query"
+          }
+        ],
+        "frequency": "1m",
+        "message": "DLP redaction rate spiked above 500 ops in 5m. Likely a tenant-wide document leak event.",
+        "noDataState": "no_data"
+      }
+    },
+    {
+      "id": 30,
+      "title": "Live View Sessions (24h)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(personel_liveview_sessions_total{tenant_id=\"$tenant_id\"}[5m]))",
+          "legendFormat": "sessions/s"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "title": "Report Exports (by format)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 22 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(personel_reports_exports_total{tenant_id=\"$tenant_id\"}[15m])) by (format)",
+          "legendFormat": "{{format}}"
+        }
+      ]
+    }
+  ]
+}

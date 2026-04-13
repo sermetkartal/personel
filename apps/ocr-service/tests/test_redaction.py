@@ -278,3 +278,71 @@ class TestCompoundRedaction:
         assert result.summary.tckn == 0
         assert result.summary.iban == 0
         assert result.summary.credit_card == 0
+
+
+# ---------------------------------------------------------------------------
+# Faz 8 #83 — defence-in-depth tests for canonical pipeline
+# ---------------------------------------------------------------------------
+
+
+class TestLeakRegression:
+    """Ensure the redaction layer never lets original PII values pass through.
+
+    These tests are the KVKK invariant anchor: the response contract is
+    "no raw TCKN/IBAN/CC/phone/email in text_redacted". If this class ever
+    regresses, the canonical response breaks the contract.
+    """
+
+    SENSITIVE_SAMPLES: tuple[str, ...] = (
+        "12345678950",  # valid TCKN
+        "10000000078",  # valid TCKN
+        "TR330006100519786457841326",  # valid IBAN compact
+        "TR33 0006 1005 1978 6457 8413 26",  # valid IBAN spaced
+        "4111111111111111",  # Visa
+        "5500005555555559",  # Mastercard
+        "+90 532 123 45 67",  # phone plus-90
+        "0532 123 45 67",  # phone zero-prefix
+        "05321234567",  # phone compact
+        "ahmet@sirket.com.tr",  # email
+        "ali@test.com",  # email
+    )
+
+    def test_none_leak_through_text(self) -> None:
+        joined = " ".join(self.SENSITIVE_SAMPLES)
+        result = redact(joined)
+        for raw in self.SENSITIVE_SAMPLES:
+            assert raw not in result.text, (
+                f"PII sample leaked through redaction: {raw[:4]}*****"
+            )
+
+    def test_summary_totals_match_expected(self) -> None:
+        # 2 TCKN + 2 IBAN + 2 CC + 3 phone + 2 email
+        text = " ".join(self.SENSITIVE_SAMPLES)
+        result = redact(text)
+        assert result.summary.tckn == 2
+        assert result.summary.iban == 2
+        assert result.summary.credit_card == 2
+        # Phone matcher may fuse adjacent space-separated numbers but at
+        # least each of the three distinct formats gets caught once.
+        assert result.summary.phone >= 3
+        assert result.summary.email == 2
+
+
+class TestPhoneFormatMatrix:
+    """Faz 8 #83 explicit formats from the task brief."""
+
+    @pytest.mark.parametrize(
+        "sample",
+        [
+            "+90 532 123 45 67",
+            "+90 532 123 4567",
+            "0 532 123 45 67",
+            "0532 123 45 67",
+            "05321234567",
+            "0(532) 123 45 67",
+        ],
+    )
+    def test_phone_formats_redacted(self, sample: str) -> None:
+        result = redact(sample)
+        assert TAG_PHONE in result.text
+        assert result.summary.phone >= 1

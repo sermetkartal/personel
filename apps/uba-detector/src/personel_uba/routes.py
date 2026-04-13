@@ -32,7 +32,10 @@ from personel_uba.config import Settings, get_settings
 from personel_uba.logging import get_logger
 from personel_uba.metrics import API_REQUEST_DURATION, API_REQUESTS_TOTAL
 from personel_uba.schemas import (
+    ContributingFeature,
     HealthResponse,
+    LiveScoreRequest,
+    LiveScoreResponse,
     ReadinessResponse,
     RecomputeRequest,
     RecomputeResponse,
@@ -237,6 +240,140 @@ async def get_user_timeline(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve user timeline",
         ) from exc
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/uba/score  (Faz 8 #84 — live ClickHouse extraction path)
+# ---------------------------------------------------------------------------
+#
+# Accepts {tenant_id, user_id, window_hours?} and synchronously:
+#   1. Extracts the 7-feature raw vector via ClickHouseFeatureExtractor
+#   2. Runs the loaded IsolationForestDetector (if fitted)
+#   3. Returns LiveScoreResponse with advisory_only: true + KVKK notice
+#
+# KVKK m.11/g gate: every response MUST contain advisory_only=True and the
+# Turkish disclaimer. There is no branch of this handler where that can be
+# disabled. The schema enforces advisory_only via Literal[True].
+
+
+@uba_router.post(
+    "/score",
+    response_model=LiveScoreResponse,
+    summary="Synchronous UBA score with live ClickHouse features (advisory)",
+    description=(
+        "Computes an anomaly score for a single user by running the 7 "
+        "feature queries directly against events_raw. Use this for on-demand "
+        "DPO investigations. The batch path remains /v1/uba/users/{id}/score "
+        "which reads pre-computed uba_scores rows.\n\n"
+        "KVKK m.11/g: Response always carries advisory_only=true."
+    ),
+)
+async def live_score(
+    request_body: LiveScoreRequest,
+    settings: SettingsDep,
+    request: Request,
+) -> LiveScoreResponse:
+    from personel_uba.clickhouse_extractor import ClickHouseFeatureExtractor  # noqa: PLC0415
+
+    start_time = time.perf_counter()
+
+    extractor: ClickHouseFeatureExtractor | None = getattr(
+        request.app.state, "feature_extractor", None
+    )
+    if extractor is None:
+        _record_metric("POST", "/v1/uba/score", "503", start_time)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Feature extractor not initialised",
+        )
+
+    try:
+        feature_vec = extractor.extract(
+            tenant_id=request_body.tenant_id,
+            user_id=request_body.user_id,
+            window_hours=request_body.window_hours,
+        )
+    except ValueError as exc:
+        _record_metric("POST", "/v1/uba/score", "400", start_time)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "live_score.extract_failed",
+            tenant_id=request_body.tenant_id,
+            user_id=request_body.user_id,
+            error=str(exc),
+        )
+        _record_metric("POST", "/v1/uba/score", "500", start_time)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Feature extraction failed",
+        ) from exc
+
+    # Score via the fitted detector if available; otherwise return 0.0
+    # (advisory path: no data yet = low signal, NOT an error).
+    detector = getattr(request.app.state, "detector", None)
+    if detector is not None and getattr(detector, "is_fitted", False):
+        try:
+            anomaly_score = float(detector.score(feature_vec.to_list()))
+            # Clip defensively
+            anomaly_score = max(0.0, min(1.0, anomaly_score))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "live_score.model_score_failed",
+                error=str(exc),
+            )
+            anomaly_score = 0.0
+    else:
+        anomaly_score = 0.0
+
+    # Tier classification
+    try:
+        from personel_uba.tiers import classify_tier  # noqa: PLC0415
+
+        tier = classify_tier(anomaly_score)
+    except Exception:  # noqa: BLE001
+        tier = "normal" if anomaly_score < 0.3 else ("watch" if anomaly_score < 0.7 else "investigate")
+
+    # Contributing features: pick top-2 by raw magnitude (advisory-only
+    # explainability; not a replacement for SHAP). We don't normalise here
+    # since scoring.py owns the z-score path for batch jobs.
+    features_dict = feature_vec.to_dict()
+    sorted_features = sorted(features_dict.items(), key=lambda kv: kv[1], reverse=True)
+    top = sorted_features[:2]
+    max_val = top[0][1] if top and top[0][1] > 0 else 1.0
+    contributing = [
+        ContributingFeature(
+            feature=name,
+            weight=min(1.0, value / max_val) if max_val > 0 else 0.0,
+            direction="up",
+        )
+        for name, value in top
+        if value > 0
+    ]
+
+    response = LiveScoreResponse(
+        tenant_id=request_body.tenant_id,
+        user_id=request_body.user_id,
+        anomaly_score=anomaly_score,
+        risk_tier=tier,
+        features=features_dict,
+        contributing_features=contributing,
+        window_hours=request_body.window_hours,
+        computed_at=feature_vec.computed_at,
+    )
+    _record_metric("POST", "/v1/uba/score", "200", start_time)
+    logger.info(
+        "live_score.computed",
+        tenant_id=request_body.tenant_id,
+        user_id=request_body.user_id,
+        anomaly_score=anomaly_score,
+        risk_tier=tier,
+        window_hours=request_body.window_hours,
+    )
+    return response
 
 
 # ---------------------------------------------------------------------------

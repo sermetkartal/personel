@@ -411,6 +411,35 @@ func (c *Client) RevokeCert(ctx context.Context, serial string) error {
 	return nil
 }
 
+// DestroyTransitKey is the crypto-erase primitive used by the DSR
+// fulfilment service (Faz 6 #69). It forces destruction of a Vault
+// transit key, which — combined with deletion of the per-user PE-DEK
+// material in the backend stores — renders any remaining ciphertext
+// mathematically unrecoverable. This is the KVKK m.7 "right to
+// erasure" technical control: we cannot rewind tape backups, but by
+// destroying the wrapping key we guarantee the ciphertext they contain
+// is forever unreadable.
+//
+// Vault rejects DELETE on transit keys unless the key's configuration
+// has deletion_allowed=true. This endpoint assumes the DSR fulfilment
+// workflow has already put the key into that state via an
+// out-of-API runbook step OR that the PE-DEK keys were created with
+// deletion_allowed=true from the start (recommended — see ADR 0013 A4).
+//
+// A non-nil error means the crypto-erase did NOT happen; callers MUST
+// NOT mark the DSR as "fulfilled" in that case — the auditor needs to
+// see the partial state.
+func (c *Client) DestroyTransitKey(ctx context.Context, keyName string) error {
+	if keyName == "" {
+		return fmt.Errorf("vault: destroy transit key: empty key name")
+	}
+	path := fmt.Sprintf("transit/keys/%s", keyName)
+	if _, err := c.raw.Logical().DeleteWithContext(ctx, path); err != nil {
+		return fmt.Errorf("vault: destroy transit key %q: %w", keyName, err)
+	}
+	return nil
+}
+
 // GetEnrollmentRoleID returns the agent-enrollment AppRole role_id.
 func (c *Client) GetEnrollmentRoleID(ctx context.Context) (string, error) {
 	secret, err := c.raw.Logical().ReadWithContext(ctx, "auth/approle/role/agent-enrollment/role-id")

@@ -143,6 +143,54 @@ class RecomputeResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Live score request (Faz 8 #84) — real ClickHouse feature extraction path
+# ---------------------------------------------------------------------------
+
+
+class LiveScoreRequest(BaseModel):
+    """Request body for POST /v1/uba/score.
+
+    Unlike the GET endpoints which read pre-computed rows from uba_scores,
+    this endpoint runs the feature extraction + isolation forest synchronously
+    against live ClickHouse data for a single (tenant_id, user_id) pair.
+    """
+
+    model_config = ConfigDict(strict=True)
+
+    tenant_id: str = Field(min_length=1, max_length=64)
+    user_id: str = Field(min_length=1, max_length=256)
+    window_hours: int = Field(default=24, ge=1, le=720)
+
+
+class LiveScoreResponse(BaseModel):
+    """Response body for POST /v1/uba/score.
+
+    Every response carries ``advisory_only: true`` + the KVKK m.11/g
+    Turkish disclaimer. There is no way to disable the advisory flag.
+    """
+
+    model_config = ConfigDict(strict=True)
+
+    tenant_id: str
+    user_id: str
+    anomaly_score: float = Field(ge=0.0, le=1.0)
+    risk_tier: Literal["normal", "watch", "investigate"]
+    features: dict[str, float]
+    contributing_features: list[ContributingFeature] = Field(default_factory=list)
+    window_hours: int
+    computed_at: datetime
+    advisory_only: Literal[True] = True
+    notice: str = Field(
+        default=(
+            "Bu skor karar destek amaçlıdır. KVKK m.11/g uyarınca otomatik "
+            "karar verme yasaktır; insan incelemesi olmadan aleyhine işlem "
+            "yapılamaz."
+        )
+    )
+    disclaimer: str = Field(default=KVKK_DISCLAIMER)
+
+
+# ---------------------------------------------------------------------------
 # Health / readiness
 # ---------------------------------------------------------------------------
 

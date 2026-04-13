@@ -15,12 +15,13 @@ app state set in main.py startup.
 
 from __future__ import annotations
 
+import json
 import time
-from typing import Annotated
+from typing import Annotated, AsyncGenerator
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from personel_ml.classifier import BaseClassifier
@@ -179,6 +180,99 @@ async def classify_batch(
     HTTP_REQUEST_LATENCY.labels(method="POST", path="/v1/classify/batch").observe(elapsed)
 
     return BatchResponse(results=results, total=len(results), latency_ms=latency_ms)
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/classify/stream  (Faz 8 #82)
+# ---------------------------------------------------------------------------
+#
+# Newline-delimited JSON (NDJSON) streaming endpoint. Clients send a
+# ClassifyItem on each request (one-shot like /v1/classify), but the
+# server responds with a stream of `application/x-ndjson` rows — one
+# ClassifyResult per line — over a single HTTP connection.
+#
+# The practical benefit for the enricher: with HTTP/2 keep-alive, a single
+# long-lived stream avoids per-request TCP/TLS amortisation cost when the
+# pipeline is emitting 100+ events/second. The batch endpoint still works
+# for one-shot fan-out, but streaming is lower-latency.
+#
+# This endpoint accepts the same BatchRequest body as /v1/classify/batch,
+# but emits results incrementally instead of waiting for the full batch.
+# HTTP status is always 200; errors per item are encoded inline as NDJSON
+# rows with `{"error": "..."}`.
+
+
+@classify_router.post(
+    "/classify/stream",
+    summary="Stream classification results as NDJSON",
+    description=(
+        "Classify a batch of items and stream ClassifyResult JSON rows, one "
+        "per newline, as they are produced. Lower per-request overhead than "
+        "the batch endpoint when the caller holds a long-lived HTTP/2 "
+        "connection open. Response media type: application/x-ndjson."
+    ),
+    responses={
+        200: {"content": {"application/x-ndjson": {}}, "description": "NDJSON stream"},
+        422: {"model": ErrorDetail, "description": "Validation error"},
+    },
+)
+async def classify_stream(
+    batch: BatchRequest,
+    classifier: ClassifierDep,
+    request: Request,
+) -> StreamingResponse:
+    from personel_ml.config import get_settings
+
+    settings = get_settings()
+    if len(batch.items) > settings.batch_max_items:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "error": "batch_too_large",
+                "message": f"Batch size {len(batch.items)} exceeds maximum {settings.batch_max_items}",
+            },
+        )
+
+    BATCH_SIZE.observe(len(batch.items))
+
+    async def _row_generator() -> AsyncGenerator[bytes, None]:
+        t0 = time.monotonic()
+        produced = 0
+        for item in batch.items:
+            # Cooperative cancellation: if the client disconnected, stop
+            # burning CPU on classifications nobody will read.
+            if await request.is_disconnected():
+                logger.info("stream.client_disconnect", produced=produced)
+                break
+            try:
+                result = classifier.classify(item)
+                line = result.model_dump_json() + "\n"
+            except Exception as exc:
+                logger.warning(
+                    "stream.item_error",
+                    app_name=item.app_name,
+                    error=str(exc),
+                )
+                line = json.dumps({"error": "classify_failed", "message": str(exc)}) + "\n"
+            produced += 1
+            yield line.encode("utf-8")
+
+        elapsed = time.monotonic() - t0
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/classify/stream", status_code=200).inc()
+        HTTP_REQUEST_LATENCY.labels(method="POST", path="/v1/classify/stream").observe(elapsed)
+        logger.info(
+            "stream.done",
+            total=len(batch.items),
+            produced=produced,
+            backend=classifier.backend,
+            latency_ms=round(elapsed * 1000, 2),
+        )
+
+    return StreamingResponse(
+        _row_generator(),
+        media_type="application/x-ndjson",
+        headers={"X-Classifier-Backend": classifier.backend},
+    )
 
 
 # ---------------------------------------------------------------------------

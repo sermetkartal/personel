@@ -16,6 +16,7 @@ Shutdown sequence:
 
 from __future__ import annotations
 
+import os
 import signal
 import sys
 from contextlib import asynccontextmanager
@@ -51,33 +52,54 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         bind=f"{settings.bind_host}:{settings.bind_port}",
     )
 
-    # --- Try to load LlamaClassifier ---
-    llama_cls = LlamaClassifier(
-        model_path=settings.model_path,
-        model_version=settings.model_version,
-        n_threads=settings.n_threads,
-        n_ctx=settings.n_ctx,
-        n_batch=settings.n_batch,
-        n_gpu_layers=settings.n_gpu_layers,
-        max_tokens=settings.max_tokens,
-        temperature=settings.temperature,
-        confidence_threshold=settings.confidence_threshold,
-    )
+    # --- Decide whether to attempt Llama load ---
+    # Faz 8 #82: if MODEL_PATH is unset, blank, or the file does not exist,
+    # skip the llama.cpp load attempt entirely and run in fallback mode.
+    # This is expected behaviour on fresh installations — we log INFO, not
+    # ERROR, and NEVER return 5xx from /v1/classify as a result.
+    model_path = (settings.model_path or "").strip()
+    model_available = bool(model_path) and os.path.isfile(model_path)
 
-    try:
-        llama_cls.load()
-        app.state.classifier = llama_cls
-        logger.info("ml_classifier.backend", backend="llama", model_version=settings.model_version)
-    except Exception as exc:
-        logger.warning(
-            "ml_classifier.fallback_mode",
-            reason=str(exc),
-            note="Service running in degraded mode; all classifications use rule-based fallback.",
+    if not model_available:
+        logger.info(
+            "ml_classifier.model_unavailable",
+            model_path=model_path or "<unset>",
+            note=(
+                "ML model unavailable, using FallbackClassifier only. "
+                "Set PERSONEL_ML_MODEL_PATH to a valid GGUF file to enable "
+                "Llama inference."
+            ),
         )
         app.state.classifier = FallbackClassifier(
             confidence_threshold=settings.confidence_threshold,
             model_version="fallback",
         )
+    else:
+        llama_cls = LlamaClassifier(
+            model_path=model_path,
+            model_version=settings.model_version,
+            n_threads=settings.n_threads,
+            n_ctx=settings.n_ctx,
+            n_batch=settings.n_batch,
+            n_gpu_layers=settings.n_gpu_layers,
+            max_tokens=settings.max_tokens,
+            temperature=settings.temperature,
+            confidence_threshold=settings.confidence_threshold,
+        )
+        try:
+            llama_cls.load()
+            app.state.classifier = llama_cls
+            logger.info("ml_classifier.backend", backend="llama", model_version=settings.model_version)
+        except Exception as exc:
+            logger.warning(
+                "ml_classifier.fallback_mode",
+                reason=str(exc),
+                note="Llama load failed; running in degraded mode with rule-based fallback.",
+            )
+            app.state.classifier = FallbackClassifier(
+                confidence_threshold=settings.confidence_threshold,
+                model_version="fallback",
+            )
 
     logger.info("ml_classifier.ready")
 

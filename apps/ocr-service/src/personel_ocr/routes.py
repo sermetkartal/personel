@@ -32,6 +32,13 @@ from personel_ocr.metrics import (
     REDACTIONS_TOTAL,
     WORD_COUNT,
 )
+from personel_ocr.canonical import (
+    CanonicalBatchRequest,
+    CanonicalBatchResponse,
+    CanonicalExtractRequest,
+    CanonicalExtractResponse,
+)
+from personel_ocr.canonical_adapter import CanonicalAdapter
 from personel_ocr.pipeline import OCRPipeline
 from personel_ocr.schemas import (
     BatchExtractRequest,
@@ -234,6 +241,126 @@ async def extract_batch(
     HTTP_REQUEST_LATENCY.labels(method="POST", path="/v1/extract/batch").observe(elapsed)
 
     return BatchExtractResponse(results=results, total=len(results), latency_ms=latency_ms)
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/ocr/extract — canonical shape (Faz 8 #83)
+# ---------------------------------------------------------------------------
+
+
+@extract_router.post(
+    "/ocr/extract",
+    response_model=CanonicalExtractResponse,
+    responses={
+        422: {"model": ErrorDetail, "description": "Validation error"},
+        500: {"model": ErrorDetail, "description": "Extraction failed"},
+        503: {"model": ErrorDetail, "description": "No OCR engine available"},
+    },
+    summary="Extract text (canonical shape)",
+    description=(
+        "Faz 8 #83 canonical OCR response. Redaction is applied BEFORE the "
+        "response is assembled; text_redacted and words[*].text are KVKK-safe. "
+        "Set confidence_per_word=true to receive per-word (redacted) output."
+    ),
+)
+async def extract_canonical(
+    req: CanonicalExtractRequest,
+    pipeline: PipelineDep,
+    request: Request,
+) -> CanonicalExtractResponse:
+    t0 = time.monotonic()
+    log = logger.bind(
+        screenshot_id=req.screenshot_id,
+        tenant_id=req.tenant_id,
+        backend_hint=req.backend_hint,
+    )
+    try:
+        adapter = CanonicalAdapter(pipeline)
+        resp = adapter.extract(req)
+
+        elapsed = time.monotonic() - t0
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/extract", status_code=200).inc()
+        HTTP_REQUEST_LATENCY.labels(method="POST", path="/v1/ocr/extract").observe(elapsed)
+        log.info("ocr_extract.done", word_count=resp.word_count, backend=resp.backend)
+        return resp
+    except ValueError as exc:
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/extract", status_code=422).inc()
+        log.warning("ocr_extract.bad_input", error_class=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"error": "invalid_input", "message": str(exc)},
+        ) from exc
+    except RuntimeError as exc:
+        msg = str(exc)
+        if "not available" in msg.lower():
+            HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/extract", status_code=503).inc()
+            log.warning("ocr_extract.engine_unavailable")
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={"error": "engine_unavailable", "message": "No OCR engine available"},
+            ) from exc
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/extract", status_code=500).inc()
+        log.error("ocr_extract.error")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "extraction_failed", "message": "OCR extraction failed"},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/extract", status_code=500).inc()
+        log.error("ocr_extract.unexpected", error_class=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "extraction_failed", "message": "OCR extraction failed"},
+        ) from exc
+
+
+# ---------------------------------------------------------------------------
+# POST /v1/ocr/batch — canonical batch (Faz 8 #83)
+# ---------------------------------------------------------------------------
+
+
+@extract_router.post(
+    "/ocr/batch",
+    response_model=CanonicalBatchResponse,
+    responses={
+        413: {"model": ErrorDetail, "description": "Payload too large (10 MB cap)"},
+        422: {"model": ErrorDetail, "description": "Validation error"},
+    },
+    summary="Batch extract (canonical shape, parallel)",
+    description=(
+        "Parallel batch extraction. Up to 50 items / 10 MB total. Each item "
+        "is processed on a worker thread; item-level errors are captured as "
+        "empty results rather than aborting the batch."
+    ),
+)
+async def extract_canonical_batch(
+    batch: CanonicalBatchRequest,
+    pipeline: PipelineDep,
+    request: Request,
+) -> CanonicalBatchResponse:
+    t0 = time.monotonic()
+    try:
+        adapter = CanonicalAdapter(pipeline)
+        resp = adapter.extract_batch(batch)
+        elapsed = time.monotonic() - t0
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/batch", status_code=200).inc()
+        HTTP_REQUEST_LATENCY.labels(method="POST", path="/v1/ocr/batch").observe(elapsed)
+        return resp
+    except ValueError as exc:
+        # Size cap rejection — explicit 413 so clients can back off.
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/batch", status_code=413).inc()
+        logger.warning("ocr_batch.too_large", error_class=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail={"error": "payload_too_large", "message": str(exc)},
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        HTTP_REQUEST_TOTAL.labels(method="POST", path="/v1/ocr/batch", status_code=500).inc()
+        logger.error("ocr_batch.error", error_class=type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "extraction_failed", "message": "Batch extraction failed"},
+        ) from exc
 
 
 # ---------------------------------------------------------------------------

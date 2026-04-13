@@ -72,6 +72,30 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
 
     application.state.clickhouse = ch_client
 
+    # Faz 8 #84 — real ClickHouse feature extractor for POST /v1/uba/score
+    # Shares the CH connection details with the read-only ClickHouseClient
+    # but uses its own clickhouse-connect client so parameterised queries
+    # can be issued without contaminating the legacy client.
+    try:
+        from personel_uba.clickhouse_extractor import ClickHouseFeatureExtractor  # noqa: PLC0415
+
+        application.state.feature_extractor = ClickHouseFeatureExtractor(
+            host=settings.clickhouse_host,
+            port=settings.clickhouse_port,
+            database=settings.clickhouse_database,
+            username=settings.clickhouse_user,
+            password=settings.clickhouse_password.get_secret_value(),
+            secure=settings.clickhouse_secure,
+        )
+        logger.info("feature_extractor_initialised")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("feature_extractor_init_failed", error=str(exc))
+        application.state.feature_extractor = None
+
+    # Phase 2.6: detector is not yet populated at startup; /v1/uba/score
+    # falls back to anomaly_score=0.0 until a trained model is attached.
+    application.state.detector = None
+
     # Background scoring job (Phase 2.7: wire up APScheduler here)
     background_task: asyncio.Task | None = None
     # background_task = asyncio.create_task(_scoring_loop(settings, ch_client))
@@ -87,6 +111,14 @@ async def lifespan(application: FastAPI) -> AsyncGenerator[None, None]:
             pass
 
     ch_client.close()
+
+    extractor = getattr(application.state, "feature_extractor", None)
+    if extractor is not None:
+        try:
+            extractor.close()
+        except Exception:  # noqa: BLE001
+            pass
+
     logger.info("uba_service_stopped")
 
 
