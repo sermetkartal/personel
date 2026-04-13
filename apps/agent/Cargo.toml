@@ -76,6 +76,8 @@ windows = { version = "0.54", features = [
     "Win32_Storage_FileSystem",
     "Win32_System_Diagnostics_Debug",
     "Win32_System_Diagnostics_Etw",
+    # EVENT_TRACE_LOGFILEW (file_system collector ETW consumer) requires this.
+    "Win32_System_Time",
     "Win32_System_Registry",
     "Win32_System_Services",
     # GetStdHandle / STD_ERROR_HANDLE for is_service_context()
@@ -97,6 +99,12 @@ windows = { version = "0.54", features = [
     "Win32_Graphics_Printing",
     # GlobalLock / GlobalSize / GlobalUnlock for clipboard CF_UNICODETEXT read-back
     "Win32_System_Memory",
+    # Network collector — TCP/UDP table enumeration via IP Helper.
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_Networking_WinSock",
+    # Network collector — process name lookup for flow attribution
+    # (K32GetModuleFileNameExW lives in ProcessStatus).
+    "Win32_System_ProcessStatus",
 ] }
 
 # windows-service crate wraps the SCM API for service lifecycle management.
