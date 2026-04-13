@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.0 — Faz 1 + Faz 2 (items 1-20) COMPLETE. 14 yeni collector scaffold'ı + 131 yeni unit test. Faz 3 (items 21-28, ekran capture iyileştirmeleri) sıradaki — 2026-04-13
+> Versiyon: 2.1 — Faz 1+2+3+4 COMPLETE (items 1-40 / 190). Agent stability + operational kapanışı tamam. Sıradaki: Faz 5 backend production hardening (#41-61) — 2026-04-13
 
 ---
 
@@ -588,6 +588,7 @@ Wave bitince:
 
 **AWAITING CUSTOMER ACTION** (otonom çalışan Claude Code kapatamaz):
 
+- [ ] **`.github/workflows/build-agent.yml` push** — Faz 4 #40 code signing CI workflow lokal `C:\personel\.github\workflows\build-agent.yml`'de hazır ama oturumun OAuth token'ında `workflow` scope yok. Manuel `git add .github/workflows/build-agent.yml && git commit && git push` kullanıcı tarafından `workflow`-scope'lu token ile yapılmalı.
 - [ ] EV Code Signing Certificate satın alma (~$700/yıl Sectigo)
 - [ ] Penetration test contract (third-party, ~₺50-80K)
 - [ ] Code audit contract (third-party, ~₺80-150K)
