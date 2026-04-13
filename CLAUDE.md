@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.1 — Faz 1+2+3+4 COMPLETE (items 1-40 / 190). Agent stability + operational kapanışı tamam. Sıradaki: Faz 5 backend production hardening (#41-61) — 2026-04-13
+> Versiyon: 2.2 — Faz 1+2+3+4 COMPLETE; Faz 5 Wave 1 partial: 9/21 (items 41,42,47,50,53,54,55,56,58). Cluster items (43-46, 48, 51, 52) AWAITING ikinci makine. Toplam 49/190. — 2026-04-13
 
 ---
 
@@ -589,6 +589,16 @@ Wave bitince:
 **AWAITING CUSTOMER ACTION** (otonom çalışan Claude Code kapatamaz):
 
 - [ ] **`.github/workflows/build-agent.yml` push** — Faz 4 #40 code signing CI workflow lokal `C:\personel\.github\workflows\build-agent.yml`'de hazır ama oturumun OAuth token'ında `workflow` scope yok. Manuel `git add .github/workflows/build-agent.yml && git commit && git push` kullanıcı tarafından `workflow`-scope'lu token ile yapılmalı.
+- [ ] **Faz 5 cluster items** — ikinci pilot makine (Ubuntu) gerekiyor:
+  - #43 Postgres replica + streaming replication
+  - #44 ClickHouse 2-node + Keeper
+  - #45 ClickHouse replication test + failover drill
+  - #46 NATS JetStream cluster (3-node Raft)
+  - #48 MinIO distributed (4-node erasure)
+  - #51 OpenSearch cluster setup
+  - #52 Keycloak HA (2-node + Infinispan)
+- [ ] **Faz 5 Wave 1 operator handoff** — 9 maddenin script + runbook'ları repo'da hazır ama Ubuntu pilot'a deploy edilmedi. Sıralı operator action listesi `C:\Users\kartal\AppData\Local\Temp\faz5w1-commit.txt` veya commit `88502db` mesajında. Özetle: vault prod ceremony → postgres TLS → NATS auth → MinIO WORM → all-services TLS → cert/secret rotation timers → healthcheck override → backup automation. Her madde için `docs/operations/*-migration.md` Türkçe runbook.
+- [ ] **Faz 5 Wave 1 #59 #60 #61** — Restore drill (RTO/RPO ölç), off-site backup mirror, PITR — Wave 1 backup scaffold içinde restore-orchestrator + WAL archive var, ama gerçek RTO ölçümü ve off-site replikasyon (#60) ikinci makine olmadan eksik.
 - [ ] EV Code Signing Certificate satın alma (~$700/yıl Sectigo)
 - [ ] Penetration test contract (third-party, ~₺50-80K)
 - [ ] Code audit contract (third-party, ~₺80-150K)
