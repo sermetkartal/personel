@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.9 — Faz 1 COMPLETE (items 1-6 ✅). events_raw stream'de gerçek agent batch'i akıyor. Faz 2 Wave 1 başlıyor — 2026-04-13
+> Versiyon: 2.0 — Faz 1 + Faz 2 (items 1-20) COMPLETE. 14 yeni collector scaffold'ı + 131 yeni unit test. Faz 3 (items 21-28, ekran capture iyileştirmeleri) sıradaki — 2026-04-13
 
 ---
 
@@ -122,6 +122,39 @@ PATH += $env:USERPROFILE\.cargo\bin; $env:USERPROFILE\.dotnet\tools; C:\Program 
 - Override compose: `infra/compose/docker-compose.dev-override.yaml` (config volume mounts + service_started deps)
 
 ---
+
+### ✅ FAZ 2 TAMAMLANDI — Collector fleet (2026-04-13)
+
+Items 7-20 hepsi. Üç wave'de paralel rust-engineer agent'ları:
+
+**Wave 1** (items 7-8):
+- `file_system.rs` — ETW Microsoft-Windows-Kernel-File real-time consumer, two-tier coalescing, KVKK sensitive file SHA-256, NT→DOS path cache
+- `network.rs` — GetExtendedTcpTable + GetExtendedUdpTable polling (v4+v6), PID→name LRU, DNS correlation plumbing, 10s dedup
+
+**Wave 2** (items 9-12):
+- `browser_history.rs` — Chromium (Chrome/Edge/Brave) History SQLite, per-profile cursor, copy-first locked-DB workaround
+- `firefox_history.rs` — places.sqlite with PRTime parse (different from WebKit), directory-walk profile enum
+- `cloud_storage.rs` — ReadDirectoryChangesW watchers over OneDrive/Dropbox/Drive/iCloud/Box roots + HKCU registry override
+- `email_metadata.rs` — PST/OST size-delta Phase 1 scaffold + Phase 2 MAPI COM TODO
+
+**Wave 3** (items 13-20):
+- `office_activity.rs` — Office MRU registry (Word/Excel/PowerPoint × 14.0/15.0/16.0), bracket-anchored path parse
+- `system_events.rs` — WTS session notifications + WM_POWERBROADCAST + WMI AntiVirusProduct via powershell
+- `bluetooth_devices.rs` — BluetoothFindFirstDevice/Next 30s poll + diff + COD classify
+- `mtp_devices.rs` — SetupAPI PORTABLE_DEVICES Phase 1 + WPD COM Phase 2 TODO
+- `device_status.rs` — CPU/RAM/disk/battery/uptime/screen/locked snapshot 60s
+- `geo_ip.rs` — maxminddb 0.24 reader (mmdb file not shipped per license), 24h dedup over GetExtendedTcpTable sampling
+- `window_url_extraction.rs` — 1Hz foreground window title parse, hand-rolled URL heuristic, Edge/Chrome multi-tab marker strip
+- `clipboard_content_redacted.rs` — ADR 0013 dormant scaffold + Turkish TCKN/IBAN/Luhn/email/phone redaction helpers with real checksum validation
+
+**Metrik**: 14 yeni collector dosyası, ~8150 satır kod, 131 yeni unit test (tamamı geçiyor). Cargo check temiz. Pre-existing 21 warning (clipboard/idle/keystroke/print/process_app/screen/usb) dokunulmadı.
+
+**EventKind enum** (personel-core/src/event.rs) upfront 16 yeni variant ile genişletildi: BrowserHistoryVisited, BrowserFirefoxHistoryVisited, BrowserUrlExtracted, CloudStorageSyncEvent, EmailMetadataObserved, OfficeRecentFileOpened, SystemPowerStateChanged, SystemLogin, SystemLogout, SystemAvDeactivated, BluetoothDevicePaired, BluetoothDeviceUnpaired, MtpDeviceAttached, MtpDeviceRemoved, DeviceStatusSnapshot, NetworkGeoIpResolved.
+
+**Faz 2 kalan iş** (Wave 4+, henüz başlanmadı):
+- `apps/agent/crates/personel-agent/src/service.rs` şu an yalnızca 12 orijinal collector'ı CollectorRegistry'e register ediyor; 14 yeni collector'ı registry'e eklemek lazım
+- Event proto payloads: yeni collectors hand-rolled JSON details emit ediyor, Wave 5'te proto şemaları yazılacak (proto/personel/v1/events.proto'ya variant'lar + EventMeta alanları)
+- Phase 1→2 promosyonları: email_metadata MAPI COM, mtp_devices WPD COM, clipboard_content_redacted DLP activation, geo_ip mmdb wiring (her biri ayrı agent)
 
 ### ✅ FAZ 1 TAMAMLANDI (2026-04-13)
 
