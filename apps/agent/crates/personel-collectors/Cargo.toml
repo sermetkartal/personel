@@ -37,6 +37,15 @@ rusqlite     = { workspace = true }
 # download it). Pinned to 0.24 — stable, well-established, matches the API
 # shape used in geo_ip.rs (Reader::open_readfile + lookup::<Country>).
 maxminddb    = "0.24"
+# Faz 3 #25: SHA-256 over raw RGB bytes for per-monitor frame deduplication.
+# Previously Windows-only; hoisted here so the cross-platform screen.rs unit
+# tests (frame_dedup_hash_equality) can build on macOS/Linux as well.
+sha2         = { workspace = true }
+# Faz 3 #24: lossy WebP encoding (~50% smaller than JPEG q75 for typical
+# desktop screenshots). libwebp C sources are vendored and compiled via `cc`
+# at build time; Windows requires the MSVC Build Tools which are a hard
+# prerequisite for the agent anyway (DXGI/D3D11 linkage).
+webp         = "0.3"
 
 # Windows-only dep: collectors that still call Windows-specific personel-os
 # modules (ETW, WFP, DXGI) not yet lifted into the facade. Those modules
@@ -44,7 +53,6 @@ maxminddb    = "0.24"
 [target.'cfg(target_os = "windows")'.dependencies]
 personel-os  = { path = "../personel-os" }
 windows      = { workspace = true }
-sha2         = { workspace = true }
 
 [dev-dependencies]
 # sha2 used in tests_logic.rs for USB device path hash tests (all platforms).

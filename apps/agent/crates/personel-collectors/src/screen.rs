@@ -1,24 +1,120 @@
 //! Screenshot capture collector (DXGI Desktop Duplication).
 //!
-//! `ScreenCollector` fires on a policy-driven interval (default 5 min) and
-//! captures the primary monitor via
-//! [`personel_os::capture::DxgiCapture`] (Windows only). Each frame is
-//! JPEG-encoded and written to the local queue as a `screenshot.captured`
-//! event.
+//! Faz 3 overhaul (items #21–#28): the collector is rewritten around a small
+//! set of pure helpers (encoding, preprocessing, dedup, sensitivity, clicks)
+//! so the capture loop stays thin and every decision is individually
+//! testable on macOS/Linux.
 //!
-//! # Sensitivity guard
+//! # What this collector does
 //!
-//! Before each capture the collector checks whether the current foreground
-//! process executable name matches any entry in
-//! `policy.screenshot.exclude_apps`. A match causes the frame to be skipped
-//! entirely and logged at `DEBUG` level. This implements the KVKK m.6 / ADR
-//! 0013 sensitivity gap-1 requirement.
+//! On each tick (adaptive, see #22) it checks the sensitivity guard (#23),
+//! grabs the primary monitor via
+//! [`personel_os::capture::DxgiCapture`], optionally runs OCR preprocessing
+//! (#26), encodes as WebP (#24), computes a SHA-256 of the raw RGB and skips
+//! emission if the frame is identical to the previous one for that monitor
+//! (#25), optionally encrypts under the PE-DEK when DLP is enabled (#27),
+//! attaches any recent mouse clicks (#28) and enqueues a single
+//! `screenshot.captured` event as a JSON payload.
+//!
+//! # Multi-monitor (Faz 3 #21)
+//!
+//! This implementation **enumerates all DXGI outputs** via
+//! [`personel_os::capture::enumerate_outputs`] and emits one
+//! `monitor_count` metric on startup. Actual capture remains **primary-only**
+//! for Phase 1; per-monitor duplication sessions are a Phase 3.1 item that
+//! requires holding multiple `IDXGIOutputDuplication` handles on independent
+//! threads. Each emitted event still carries a `monitor_index`, the
+//! enumerated device name, and the desktop bounds so the enricher can
+//! attribute frames correctly once Phase 3.1 lands.
+//!
+//! # Adaptive frequency (Faz 3 #22)
+//!
+//! Before each tick we read `GetLastInputInfo` synchronously via
+//! [`personel_platform::input::last_input_idle_ms`]. If the user has been
+//! idle for longer than 60 s we sleep for a short **idle interval**
+//! (default 30 s) and check for a new frame — this catches meeting screens
+//! and alerts that appear while the user is away. Otherwise we sleep for
+//! the **active interval** read from
+//! `policy.screenshot.interval_seconds` (default 300 s, minimum 10 s).
+//!
+//! # Sensitivity guard (Faz 3 #23)
+//!
+//! Three layers, all short-circuit:
+//!
+//! 1. **Hard-coded process name list** (see [`HARDCODED_EXCLUDE_EXES`]) —
+//!    password managers, RDP client, KeePass family. These cannot be
+//!    overridden by policy: a misconfigured bundle can never lift this guard.
+//!    This is the KVKK m.6 / ADR 0013 defence-in-depth anchor.
+//! 2. **Hard-coded title substring list** (see
+//!    [`HARDCODED_EXCLUDE_TITLE_SUBSTRINGS`]) — "private browsing",
+//!    "incognito", "inprivate", "gizli pencere", "password manager",
+//!    "2fa", "recovery codes". Case-insensitive, UTF-8 substring match.
+//! 3. **Policy-driven `screenshot.exclude_apps`** — customer-configurable
+//!    additional process / title substrings. Applied on top of the
+//!    hard-coded list, never replacing it.
+//!
+//! Skipped frames are logged at INFO and the `drops` counter is incremented
+//! without enqueuing anything.
+//!
+//! # Delta / dedup (Faz 3 #25)
+//!
+//! After every successful capture the SHA-256 of the raw **BGRA** bytes is
+//! computed and stored keyed by `monitor_index`. If the next tick produces
+//! a frame whose hash matches the previous one we skip emission entirely.
+//! This is full-frame dedup, NOT region-based delta — the latter requires a
+//! diff algorithm and dirty-region encoding scheme which is deferred to
+//! Phase 4. Full-frame dedup catches the biggest real-world win (locked /
+//! idle screens) without touching the wire format.
+//!
+//! # OCR preprocessing (Faz 3 #26)
+//!
+//! When `policy.screenshot.ocr_optimised == true` (NOT a proto field today;
+//! reserved in the PolicyView OCR gate and defaulting to `false` until the
+//! proto tag lands) the BGRA frame is converted to grayscale via luminance
+//! `Y = 0.299·R + 0.587·G + 0.114·B`, its histogram is stretched to
+//! `[0..255]`, and the result is WebP-encoded as a single-channel image.
+//! This is currently controlled by a compile-time constant
+//! ([`OCR_MODE_DEFAULT`]) because the proto field is not yet wired; the
+//! preprocessing function is fully exposed for unit tests either way.
+//!
+//! # PE-DEK at-rest encryption (Faz 3 #27, ADR 0013 gated)
+//!
+//! Phase 1 default is **plaintext WebP**: the payload carries
+//! `"dlp_enabled": false` and the encoded bytes as base16. When and only when
+//! `ctx.pe_dek.is_some()` (meaning the DLP opt-in ceremony produced a
+//! per-endpoint DEK) the WebP bytes are passed through
+//! [`personel_crypto::envelope::encrypt`], which generates a fresh random
+//! 12-byte nonce and appends the GCM tag. The payload then carries
+//! `"dlp_enabled": true`, `"ciphertext"`, `"nonce"`, `"aead_tag_appended":
+//! true` and `"key_version"` (fixed to `1` until the DEK rotation schedule
+//! is wired into the keystore).
+//!
+//! **Critical**: the `encrypt_if_dlp` helper is the sole entry point for
+//! deciding plaintext vs ciphertext. No code path below that function should
+//! ever emit plaintext when `pe_dek.is_some()`. The unit test
+//! `pe_dek_gating_chooses_correct_branch` pins this invariant.
+//!
+//! # Click-aware capture (Faz 3 #28)
+//!
+//! A dedicated std::thread message pump installs a `WH_MOUSE_LL` low-level
+//! hook and pushes `(x, y, timestamp_ms_since_unix_epoch)` into a bounded
+//! 16-slot ring buffer on every `WM_LBUTTONDOWN`. Each capture drains the
+//! ring buffer into the event payload (`recent_clicks: [...]`) and clears
+//! it. Hook installation failures are logged at WARN and the collector
+//! continues emitting events **without** the click list — click awareness
+//! is a best-effort enrichment, never load-bearing.
+//!
+//! Crop-around-click is **not** performed in the agent; the enricher can
+//! use the click coordinates for server-side cropping when desired.
 //!
 //! # Platform support
 //!
-//! `cfg(target_os = "windows")`: full DXGI capture loop.
-//! Other platforms: collector starts, logs once that DXGI is unavailable, and
-//! parks until stopped. This allows `cargo check` to pass on macOS/Linux.
+//! `cfg(target_os = "windows")`: full DXGI capture loop described above.
+//! Other platforms: the collector starts, logs once that DXGI is
+//! unavailable, and parks until stopped so cross-platform `cargo check`
+//! passes. All pure helpers (sensitivity guard, dedup, preprocess, click
+//! ring buffer, WebP encoder wiring) live outside the Windows cfg and are
+//! fully covered by unit tests that run on every platform.
 //!
 //! # Error handling (Windows)
 //!
@@ -26,11 +122,12 @@
 //! |-------------------|---------------------------------------------------|
 //! | `FrameTimeout`    | Skip tick; healthy stays `true`                   |
 //! | `AccessLost`      | Call `reopen()`; retry on next tick               |
-//! | `DeviceRemoved`   | Reconstruct `DxgiCapture`; wait 5 s before retry |
-//! | Other fatal error | Log `error!`; healthy → `false`; keep running    |
+//! | `DeviceRemoved`   | Reconstruct `DxgiCapture`; wait 5 s before retry  |
+//! | Other fatal error | Log `error!`; healthy → `false`; keep running     |
 
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use async_trait::async_trait;
@@ -43,12 +140,21 @@ use personel_policy::engine::PolicyView;
 
 use crate::{Collector, CollectorCtx, CollectorHandle, HealthSnapshot};
 
-/// Screenshot capture collector (DXGI-based on Windows; no-op on other platforms).
+// ──────────────────────────────────────────────────────────────────────────────
+// Public collector type
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Screenshot capture collector (DXGI-based on Windows; no-op on others).
 #[derive(Default)]
 pub struct ScreenCollector {
-    healthy: Arc<AtomicBool>,
-    events:  Arc<AtomicU64>,
-    drops:   Arc<AtomicU64>,
+    healthy:          Arc<AtomicBool>,
+    events:           Arc<AtomicU64>,
+    drops:            Arc<AtomicU64>,
+    /// Number of frames skipped because their raw-pixel SHA-256 matched the
+    /// previous frame for the same monitor. Exposed via `health()` status.
+    frames_deduped:   Arc<AtomicU64>,
+    /// Click ring buffer shared with the LL mouse hook thread.
+    clicks:           Arc<Mutex<VecDeque<ClickEvent>>>,
 }
 
 impl ScreenCollector {
@@ -71,14 +177,16 @@ impl Collector for ScreenCollector {
 
     async fn start(&self, ctx: CollectorCtx) -> Result<CollectorHandle> {
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-        let healthy = Arc::clone(&self.healthy);
-        let events  = Arc::clone(&self.events);
-        let drops   = Arc::clone(&self.drops);
+        let healthy        = Arc::clone(&self.healthy);
+        let events         = Arc::clone(&self.events);
+        let drops          = Arc::clone(&self.drops);
+        let frames_deduped = Arc::clone(&self.frames_deduped);
+        let clicks         = Arc::clone(&self.clicks);
 
-        // Capture loop must run on a blocking thread: DXGI requires a
-        // dedicated OS thread and cannot be called from an async context.
+        // DXGI requires a dedicated OS thread; run the whole capture loop on
+        // `spawn_blocking` so we never touch DXGI from an async context.
         let task = tokio::task::spawn_blocking(move || {
-            run_capture_loop(ctx, healthy, events, drops, stop_rx);
+            run_capture_loop(ctx, healthy, events, drops, frames_deduped, clicks, stop_rx);
         });
 
         Ok(CollectorHandle { name: self.name(), task, stop_tx })
@@ -89,17 +197,397 @@ impl Collector for ScreenCollector {
     }
 
     fn health(&self) -> HealthSnapshot {
+        let healthy = self.healthy.load(Ordering::Relaxed);
+        let deduped = self.frames_deduped.swap(0, Ordering::Relaxed);
         HealthSnapshot {
-            healthy:           self.healthy.load(Ordering::Relaxed),
+            healthy,
             events_since_last: self.events.swap(0, Ordering::Relaxed),
             drops_since_last:  self.drops.swap(0, Ordering::Relaxed),
-            status:            if self.healthy.load(Ordering::Relaxed) {
-                                   String::new()
-               } else {
-                   "DXGI capture unhealthy".into()
-               },
+            status: if !healthy {
+                "DXGI capture unhealthy".into()
+            } else if deduped > 0 {
+                format!("frames_skipped_identical={deduped}")
+            } else {
+                String::new()
+            },
         }
     }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Hard-coded sensitivity exclusion (Faz 3 #23)  — KVKK m.6 / ADR 0013 anchor
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Hard-coded process executables that MUST NEVER be captured regardless of
+/// policy. Matched case-insensitively as a suffix of the executable file
+/// name. KVKK m.6 defence-in-depth: a misconfigured or malicious policy
+/// bundle cannot remove entries from this list.
+pub(crate) const HARDCODED_EXCLUDE_EXES: &[&str] = &[
+    "keepass.exe",
+    "keepassxc.exe",
+    "1password.exe",
+    "bitwarden.exe",
+    "lastpass.exe",
+    "dashlane.exe",
+    "enpass.exe",
+    "roboform.exe",
+    // RDP client — capturing it would double-record the remote desktop that
+    // is presumably already captured on the remote side.
+    "mstsc.exe",
+];
+
+/// Hard-coded window title substrings that trigger a skip.
+/// Matched case-insensitively; any substring match anywhere in the title
+/// suppresses the frame.
+pub(crate) const HARDCODED_EXCLUDE_TITLE_SUBSTRINGS: &[&str] = &[
+    "private browsing",
+    "incognito",
+    "inprivate",
+    "gizli pencere",
+    "password manager",
+    "2fa",
+    "recovery codes",
+];
+
+/// Returns `true` if the frame must be suppressed based on the hard-coded
+/// lists plus the policy-driven `exclude_apps`. See [`HARDCODED_EXCLUDE_EXES`]
+/// and [`HARDCODED_EXCLUDE_TITLE_SUBSTRINGS`].
+pub(crate) fn should_skip_for_sensitivity(
+    exe_name: &str,
+    window_title: &str,
+    policy_exclude_apps: &[String],
+) -> bool {
+    let exe_lower   = exe_name.to_lowercase();
+    let title_lower = window_title.to_lowercase();
+
+    // (1) Hard-coded exe — cannot be lifted by policy.
+    if HARDCODED_EXCLUDE_EXES
+        .iter()
+        .any(|banned| exe_lower.ends_with(banned) || exe_lower == *banned)
+    {
+        return true;
+    }
+
+    // (2) Hard-coded title substring — cannot be lifted by policy.
+    if HARDCODED_EXCLUDE_TITLE_SUBSTRINGS
+        .iter()
+        .any(|needle| title_lower.contains(needle))
+    {
+        return true;
+    }
+
+    // (3) Policy-driven extra excludes (additive).
+    if !policy_exclude_apps.is_empty() {
+        return policy_exclude_apps.iter().any(|app| {
+            let a = app.to_lowercase();
+            !a.is_empty() && (exe_lower.contains(&a) || title_lower.contains(&a))
+        });
+    }
+
+    false
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Adaptive frequency (Faz 3 #22)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Threshold above which we treat the endpoint as idle and use the short
+/// idle tick interval.
+pub(crate) const IDLE_THRESHOLD_MS: u64 = 60_000;
+
+/// Tick interval used when the user has been idle for more than
+/// [`IDLE_THRESHOLD_MS`].
+pub(crate) const IDLE_TICK_SECS: u64 = 30;
+
+/// Chooses the next tick sleep duration. Pure so it can be unit-tested.
+pub(crate) fn next_tick_delay_secs(idle_ms: u64, policy_active_secs: u64) -> u64 {
+    if idle_ms > IDLE_THRESHOLD_MS {
+        IDLE_TICK_SECS
+    } else {
+        policy_active_secs.max(10)
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Click ring buffer (Faz 3 #28)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Maximum number of click events kept in the ring buffer.
+pub(crate) const CLICK_RING_CAPACITY: usize = 16;
+
+/// A single left-click event captured by the `WH_MOUSE_LL` hook.
+#[derive(Debug, Clone, Copy)]
+pub struct ClickEvent {
+    /// Screen X coordinate (virtual desktop pixels).
+    pub x: i32,
+    /// Screen Y coordinate.
+    pub y: i32,
+    /// Timestamp in **milliseconds since Unix epoch**.
+    pub ts_ms: i64,
+}
+
+/// Pushes a click into a bounded ring buffer, evicting the oldest entry if
+/// the buffer is already at capacity.
+pub(crate) fn click_ring_push(ring: &mut VecDeque<ClickEvent>, click: ClickEvent) {
+    if ring.len() >= CLICK_RING_CAPACITY {
+        ring.pop_front();
+    }
+    ring.push_back(click);
+}
+
+/// Drains the ring buffer and returns its contents as a Vec.
+pub(crate) fn click_ring_drain(ring: &mut VecDeque<ClickEvent>) -> Vec<ClickEvent> {
+    ring.drain(..).collect()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// OCR preprocessing (Faz 3 #26)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Default for OCR preprocessing when the proto field is not wired yet.
+/// Keeps Phase 1 traffic color-preserving.
+pub(crate) const OCR_MODE_DEFAULT: bool = false;
+
+/// Converts a BGRA frame to grayscale + histogram-stretched single-channel
+/// bytes suitable for OCR. Returns `Vec<u8>` of length `width * height`.
+///
+/// Luminance formula: `Y = 0.299·R + 0.587·G + 0.114·B` (Rec. 601).
+/// The histogram is then linearly stretched so the darkest luma becomes 0
+/// and the brightest luma becomes 255. If the frame is flat (`min == max`)
+/// the raw luminance is returned unchanged to avoid a divide-by-zero.
+pub(crate) fn preprocess_for_ocr(bgra: &[u8], width: u32, height: u32) -> Vec<u8> {
+    let pixel_count = (width as usize) * (height as usize);
+    let mut out = Vec::with_capacity(pixel_count);
+
+    let mut min_y: u8 = 255;
+    let mut max_y: u8 = 0;
+
+    // First pass: luminance + min/max.
+    for chunk in bgra.chunks_exact(4).take(pixel_count) {
+        let b = chunk[0] as f32;
+        let g = chunk[1] as f32;
+        let r = chunk[2] as f32;
+        let y = (0.114 * b + 0.587 * g + 0.299 * r).round() as i32;
+        let y = y.clamp(0, 255) as u8;
+        if y < min_y { min_y = y; }
+        if y > max_y { max_y = y; }
+        out.push(y);
+    }
+
+    // Second pass: histogram stretch.
+    if max_y > min_y {
+        let span = f32::from(max_y - min_y);
+        for pixel in &mut out {
+            let stretched = ((f32::from(*pixel - min_y)) * 255.0 / span).round() as i32;
+            *pixel = stretched.clamp(0, 255) as u8;
+        }
+    }
+
+    out
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Dedup hash (Faz 3 #25)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// SHA-256 of the raw BGRA bytes. 32 bytes. Collisions are cryptographically
+/// improbable so a match is treated as a true identical-frame signal.
+pub(crate) fn raw_frame_hash(bgra: &[u8]) -> [u8; 32] {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(bgra);
+    let out = h.finalize();
+    let mut arr = [0u8; 32];
+    arr.copy_from_slice(&out);
+    arr
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// WebP encoding (Faz 3 #24)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Encodes BGRA pixels as lossy WebP at the given quality (1–100).
+/// Falls back to None on encoder failure so the caller can use JPEG.
+///
+/// The `webp` crate wants RGBA input so we perform the BGRA→RGBA swap in a
+/// single pass. We intentionally do NOT drop the alpha channel: keeping it
+/// lets the encoder use its 4-channel fast path, and alpha is always 0xFF
+/// for DXGI desktop surfaces so it compresses to essentially nothing.
+pub(crate) fn encode_webp_color(
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+    quality: f32,
+) -> Option<Vec<u8>> {
+    let pixel_count = (width as usize) * (height as usize);
+    if bgra.len() < pixel_count * 4 {
+        return None;
+    }
+    let mut rgba = Vec::with_capacity(pixel_count * 4);
+    for chunk in bgra.chunks_exact(4).take(pixel_count) {
+        rgba.push(chunk[2]); // R
+        rgba.push(chunk[1]); // G
+        rgba.push(chunk[0]); // B
+        rgba.push(chunk[3]); // A
+    }
+
+    // `webp::Encoder::from_rgba` panics on invalid size, so guard above.
+    let encoder = webp::Encoder::from_rgba(&rgba, width, height);
+    let memory = encoder.encode(quality.clamp(1.0, 100.0));
+    Some(memory.to_vec())
+}
+
+/// Encodes grayscale (single-channel, one byte per pixel) as WebP by first
+/// expanding to RGBA (R=G=B=Y, A=0xFF). True single-channel WebP is not
+/// exposed by the `webp` crate; the expand-to-RGBA step is still ~4x
+/// smaller than the source BGRA buffer.
+pub(crate) fn encode_webp_grayscale(
+    luma: &[u8],
+    width: u32,
+    height: u32,
+    quality: f32,
+) -> Option<Vec<u8>> {
+    let pixel_count = (width as usize) * (height as usize);
+    if luma.len() < pixel_count {
+        return None;
+    }
+    let mut rgba = Vec::with_capacity(pixel_count * 4);
+    for &y in luma.iter().take(pixel_count) {
+        rgba.push(y);
+        rgba.push(y);
+        rgba.push(y);
+        rgba.push(0xFF);
+    }
+    let encoder = webp::Encoder::from_rgba(&rgba, width, height);
+    let memory = encoder.encode(quality.clamp(1.0, 100.0));
+    Some(memory.to_vec())
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PE-DEK encryption gate (Faz 3 #27, ADR 0013)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Result of the PE-DEK gate. Either plaintext WebP or an encrypted envelope.
+pub(crate) enum EncryptedPayload {
+    /// Plaintext — default Phase 1 behaviour, `dlp_enabled=false`.
+    Plain(Vec<u8>),
+    /// AES-256-GCM ciphertext + nonce produced from the PE-DEK.
+    Sealed {
+        /// Ciphertext with the 16-byte GCM tag appended.
+        ciphertext:  Vec<u8>,
+        /// Random 12-byte GCM nonce.
+        nonce:       [u8; 12],
+        /// Key version; fixed to 1 until rotation is wired into the keystore.
+        key_version: u32,
+    },
+}
+
+/// Faz 3 #27 ADR 0013 gate: when `pe_dek.is_some()` the WebP bytes are
+/// encrypted with AES-256-GCM under the per-endpoint DEK. When it is
+/// `None` (default Phase 1) the plaintext passes through unchanged.
+pub(crate) fn encrypt_if_dlp(
+    pe_dek: Option<&personel_crypto::Aes256Key>,
+    webp: Vec<u8>,
+) -> EncryptedPayload {
+    match pe_dek {
+        None => EncryptedPayload::Plain(webp),
+        Some(key) => {
+            // Empty AAD: the enricher does not yet support screenshot AAD.
+            // TODO (Phase 3.1): bind endpoint_id + seq via canonical AAD
+            //   matching `build_keystroke_aad`.
+            match personel_crypto::envelope::encrypt(key, Vec::new(), &webp) {
+                Ok(env) => EncryptedPayload::Sealed {
+                    ciphertext:  env.ciphertext,
+                    nonce:       env.nonce,
+                    key_version: 1,
+                },
+                Err(e) => {
+                    // Crypto failure is a hard no-fail zone: we MUST NOT fall
+                    // back to plaintext when DLP is enabled. Drop the frame
+                    // and return an empty sealed payload so the caller knows
+                    // to skip the enqueue.
+                    error!(error = %e, "screen: PE-DEK encrypt failed — dropping frame");
+                    EncryptedPayload::Sealed {
+                        ciphertext:  Vec::new(),
+                        nonce:       [0u8; 12],
+                        key_version: 1,
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// JSON payload shaping
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Builds the `screenshot.captured` JSON payload.
+///
+/// Kept as a free function so unit tests can snapshot the exact shape
+/// without needing a live collector context.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_screenshot_payload(
+    payload: &EncryptedPayload,
+    format: &str,
+    width: u32,
+    height: u32,
+    monitor_index: u32,
+    monitor_name: &str,
+    bounds_left: i32,
+    bounds_top: i32,
+    ocr_preprocessed: bool,
+    recent_clicks: &[ClickEvent],
+) -> serde_json::Value {
+    let clicks_json: Vec<serde_json::Value> = recent_clicks
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "x":     c.x,
+                "y":     c.y,
+                "ts_ms": c.ts_ms,
+            })
+        })
+        .collect();
+
+    let (dlp_enabled, data_field_name, data_hex, extra) = match payload {
+        EncryptedPayload::Plain(bytes) => {
+            (false, "data", hex::encode(bytes), serde_json::Value::Null)
+        }
+        EncryptedPayload::Sealed { ciphertext, nonce, key_version } => (
+            true,
+            "ciphertext",
+            hex::encode(ciphertext),
+            serde_json::json!({
+                "nonce":             hex::encode(nonce),
+                "aead_tag_appended": true,
+                "key_version":       *key_version,
+            }),
+        ),
+    };
+
+    let mut obj = serde_json::json!({
+        "format":            format,
+        "width":             width,
+        "height":            height,
+        "monitor_index":     monitor_index,
+        "monitor_name":      monitor_name,
+        "bounds_left":       bounds_left,
+        "bounds_top":        bounds_top,
+        "ocr_preprocessed":  ocr_preprocessed,
+        "dlp_enabled":       dlp_enabled,
+        data_field_name:     data_hex,
+        "recent_clicks":     clicks_json,
+    });
+
+    if let serde_json::Value::Object(ref mut map) = obj {
+        if let serde_json::Value::Object(extra_map) = extra {
+            for (k, v) in extra_map {
+                map.insert(k, v);
+            }
+        }
+    }
+    obj
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -111,17 +599,18 @@ fn run_capture_loop(
     healthy: Arc<AtomicBool>,
     events: Arc<AtomicU64>,
     drops: Arc<AtomicU64>,
-    mut stop_rx: tokio::sync::oneshot::Receiver<()>,
+    frames_deduped: Arc<AtomicU64>,
+    clicks: Arc<Mutex<VecDeque<ClickEvent>>>,
+    #[allow(unused_mut)] mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
     #[cfg(target_os = "windows")]
-    run_windows(ctx, healthy, events, drops, stop_rx);
+    run_windows(ctx, healthy, events, drops, frames_deduped, clicks, stop_rx);
 
     #[cfg(not(target_os = "windows"))]
     {
         info!("screen collector: DXGI not supported on this platform — parking");
         healthy.store(true, Ordering::Relaxed);
-        // Suppress unused-variable warnings on non-Windows.
-        let _ = (ctx, events, drops);
+        let _ = (ctx, events, drops, frames_deduped, clicks);
         let _ = stop_rx.blocking_recv();
     }
 }
@@ -136,14 +625,55 @@ fn run_windows(
     healthy: Arc<AtomicBool>,
     events: Arc<AtomicU64>,
     drops: Arc<AtomicU64>,
+    frames_deduped: Arc<AtomicU64>,
+    clicks: Arc<Mutex<VecDeque<ClickEvent>>>,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
     info!("screen collector: starting (DXGI)");
     healthy.store(true, Ordering::Relaxed);
 
-    let quality = ctx.policy().screenshot.quality_percent as u8;
+    // ── Multi-monitor enumeration (Faz 3 #21) ─────────────────────────────────
+    let monitors = match personel_os::capture::enumerate_outputs() {
+        Ok(m) => m,
+        Err(e) => {
+            warn!(error = %e, "screen: enumerate_outputs failed — assuming 1 monitor");
+            Vec::new()
+        }
+    };
+    if monitors.is_empty() {
+        info!("screen: monitor_count unknown; capturing primary (index 0)");
+    } else {
+        info!(
+            monitor_count = monitors.len(),
+            "screen: enumerated DXGI outputs (Phase 1 captures primary only; \
+             Phase 3.1 will open per-monitor duplication sessions)"
+        );
+        for m in &monitors {
+            info!(
+                index       = m.index,
+                device_name = %m.device_name,
+                width       = m.width,
+                height      = m.height,
+                bounds_left = m.bounds_left,
+                bounds_top  = m.bounds_top,
+                attached    = m.attached,
+                "screen: monitor"
+            );
+        }
+    }
+    let primary = monitors.first().cloned();
 
-    let mut capture = match personel_os::capture::DxgiCapture::open(0, quality) {
+    // ── Install mouse hook for click awareness (#28) ──────────────────────────
+    let _hook_handle = match install_mouse_hook(Arc::clone(&clicks)) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            warn!(error = %e, "screen: mouse hook install failed — recent_clicks will be empty");
+            None
+        }
+    };
+
+    let quality = ctx.policy().screenshot.quality_percent as u8;
+    let capture = match personel_os::capture::DxgiCapture::open(0, quality) {
         Ok(c) => c,
         Err(e) => {
             error!(error = %e, "screen: failed to open DXGI — will retry every 30 s");
@@ -157,7 +687,9 @@ fn run_windows(
                 match personel_os::capture::DxgiCapture::open(0, q) {
                     Ok(c) => {
                         healthy.store(true, Ordering::Relaxed);
-                        return capture_loop(c, ctx, healthy, events, drops, stop_rx);
+                        return capture_loop(
+                            c, ctx, healthy, events, drops, frames_deduped, clicks, primary, stop_rx,
+                        );
                     }
                     Err(e2) => error!(error = %e2, "screen: DXGI retry failed"),
                 }
@@ -165,19 +697,25 @@ fn run_windows(
         }
     };
 
-    capture_loop(capture, ctx, healthy, events, drops, stop_rx);
+    capture_loop(capture, ctx, healthy, events, drops, frames_deduped, clicks, primary, stop_rx);
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::too_many_arguments)]
 fn capture_loop(
     mut capture: personel_os::capture::DxgiCapture,
     ctx: CollectorCtx,
     healthy: Arc<AtomicBool>,
     events: Arc<AtomicU64>,
     drops: Arc<AtomicU64>,
+    frames_deduped: Arc<AtomicU64>,
+    clicks: Arc<Mutex<VecDeque<ClickEvent>>>,
+    primary_monitor: Option<personel_os::capture::MonitorInfo>,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
     use personel_core::error::AgentError;
+
+    let mut last_frame_hash_per_monitor: HashMap<u32, [u8; 32]> = HashMap::new();
 
     loop {
         if stop_rx.try_recv().is_ok() {
@@ -185,9 +723,14 @@ fn capture_loop(
             return;
         }
 
-        // ── Interval sleep with per-second stop checks ────────────────────
-        let interval_secs = ctx.policy().screenshot.interval_seconds.max(10) as u64;
-        for _ in 0..interval_secs {
+        // ── Adaptive interval sleep (#22) with per-second stop checks ─────
+        let policy = ctx.policy();
+        let policy_secs = u64::from(policy.screenshot.interval_seconds).max(10);
+        drop(policy);
+
+        let idle_ms = personel_platform::input::last_input_idle_ms().unwrap_or(0);
+        let delay_secs = next_tick_delay_secs(idle_ms, policy_secs);
+        for _ in 0..delay_secs {
             std::thread::sleep(Duration::from_secs(1));
             if stop_rx.try_recv().is_ok() {
                 info!("screen collector: stop received during interval sleep");
@@ -195,39 +738,29 @@ fn capture_loop(
             }
         }
 
-        // ── Sensitivity guard ─────────────────────────────────────────────
+        // ── Sensitivity guard (#23) ───────────────────────────────────────
         let policy = ctx.policy();
-        if !policy.screenshot.exclude_apps.is_empty() {
-            if let Ok(fg) = personel_os::input::foreground_window_info() {
-                let exe = exe_name_for_pid(fg.pid);
-                let title = fg.title.to_lowercase();
-                let skip = policy.screenshot.exclude_apps.iter().any(|app| {
-                    let a = app.to_lowercase();
-                    exe.to_lowercase().contains(&a) || title.contains(&a)
-                });
-                if skip {
-                    debug!(exe = %exe, "screen: skip — foreground app in exclude_apps");
-                    drops.fetch_add(1, Ordering::Relaxed);
-                    continue;
-                }
-            }
-        }
-        let quality = policy.screenshot.quality_percent as u8;
+        let exclude_apps = policy.screenshot.exclude_apps.clone();
         drop(policy);
 
-        // ── Grab + encode ─────────────────────────────────────────────────
-        match capture.grab_frame() {
-            Ok(jpeg) => {
-                enqueue_screenshot(&ctx, jpeg, &events);
-                healthy.store(true, Ordering::Relaxed);
+        if let Ok(fg) = personel_platform::input::foreground_window_info() {
+            let exe = exe_name_for_pid(fg.pid);
+            if should_skip_for_sensitivity(&exe, &fg.title, &exclude_apps) {
+                info!(exe = %exe, title = %fg.title, "screen: skip — sensitivity guard");
+                drops.fetch_add(1, Ordering::Relaxed);
+                continue;
             }
+        }
 
+        // ── Grab a raw BGRA frame ─────────────────────────────────────────
+        let frame = match capture.capture_frame() {
+            Ok(f) => f,
             Err(AgentError::CollectorRuntime { ref reason, .. })
                 if reason.contains("frame timeout") =>
             {
                 debug!("screen: frame timeout — no desktop update");
+                continue;
             }
-
             Err(AgentError::CollectorRuntime { ref reason, .. })
                 if reason.contains("access lost") =>
             {
@@ -236,8 +769,8 @@ fn capture_loop(
                     error!(error = %e, "screen: reopen failed");
                     healthy.store(false, Ordering::Relaxed);
                 }
+                continue;
             }
-
             Err(AgentError::CollectorRuntime { ref reason, .. })
                 if reason.contains("device removed") =>
             {
@@ -256,13 +789,94 @@ fn capture_loop(
                     }
                     Err(e) => error!(error = %e, "screen: DXGI reconstruction failed"),
                 }
+                continue;
             }
-
             Err(e) => {
                 error!(error = %e, "screen: unexpected capture error");
                 healthy.store(false, Ordering::Relaxed);
+                continue;
+            }
+        };
+
+        // ── Dedup hash (#25) ──────────────────────────────────────────────
+        let hash = raw_frame_hash(&frame.pixels);
+        let monitor_idx = frame.monitor_index;
+        if let Some(prev) = last_frame_hash_per_monitor.get(&monitor_idx) {
+            if *prev == hash {
+                debug!(monitor_idx, "screen: identical frame — skipping");
+                frames_deduped.fetch_add(1, Ordering::Relaxed);
+                continue;
             }
         }
+        last_frame_hash_per_monitor.insert(monitor_idx, hash);
+
+        // ── Optional OCR preprocess (#26) + WebP encode (#24) ─────────────
+        let quality = ctx.policy().screenshot.quality_percent as f32;
+        let (encoded_opt, format, ocr_pre) = if OCR_MODE_DEFAULT {
+            let luma = preprocess_for_ocr(&frame.pixels, frame.width, frame.height);
+            (encode_webp_grayscale(&luma, frame.width, frame.height, quality), "webp-gray", true)
+        } else {
+            (encode_webp_color(&frame.pixels, frame.width, frame.height, quality), "webp", false)
+        };
+
+        let (final_bytes, final_format) = match encoded_opt {
+            Some(bytes) => (bytes, format),
+            None => {
+                // WebP failed — fall back to JPEG via the existing encoder.
+                warn!("screen: WebP encode failed — falling back to JPEG");
+                match personel_os::capture::DxgiCapture::encode_jpeg(
+                    &frame.pixels,
+                    frame.width,
+                    frame.height,
+                    quality.clamp(1.0, 100.0) as u8,
+                ) {
+                    Ok(jpeg) => (jpeg, "jpeg"),
+                    Err(e) => {
+                        error!(error = %e, "screen: JPEG fallback failed — dropping frame");
+                        drops.fetch_add(1, Ordering::Relaxed);
+                        continue;
+                    }
+                }
+            }
+        };
+
+        // ── PE-DEK gate (#27, ADR 0013) ───────────────────────────────────
+        let payload = encrypt_if_dlp(ctx.pe_dek.as_deref(), final_bytes);
+
+        // Refuse to enqueue an empty sealed payload (crypto fail path).
+        if let EncryptedPayload::Sealed { ref ciphertext, .. } = payload {
+            if ciphertext.is_empty() {
+                drops.fetch_add(1, Ordering::Relaxed);
+                continue;
+            }
+        }
+
+        // ── Click snapshot (#28) + payload assembly ───────────────────────
+        let recent_clicks = {
+            let mut ring = clicks.lock().expect("click ring buffer poisoned");
+            click_ring_drain(&mut ring)
+        };
+
+        let (monitor_name, bounds_left, bounds_top) = match &primary_monitor {
+            Some(m) => (m.device_name.clone(), m.bounds_left, m.bounds_top),
+            None => (String::new(), 0, 0),
+        };
+
+        let json = build_screenshot_payload(
+            &payload,
+            final_format,
+            frame.width,
+            frame.height,
+            monitor_idx,
+            &monitor_name,
+            bounds_left,
+            bounds_top,
+            ocr_pre,
+            &recent_clicks,
+        );
+
+        enqueue_screenshot(&ctx, json.to_string().into_bytes(), &events);
+        healthy.store(true, Ordering::Relaxed);
     }
 }
 
@@ -270,9 +884,8 @@ fn capture_loop(
 // Queue helpers
 // ──────────────────────────────────────────────────────────────────────────────
 
-/// Enqueues a JPEG screenshot into the local SQLCipher queue.
 #[cfg(target_os = "windows")]
-fn enqueue_screenshot(ctx: &CollectorCtx, jpeg: Vec<u8>, events: &Arc<AtomicU64>) {
+fn enqueue_screenshot(ctx: &CollectorCtx, payload: Vec<u8>, events: &Arc<AtomicU64>) {
     let now = ctx.clock.now_unix_nanos();
     let id  = EventId::new_v7().to_bytes();
     match ctx.queue.enqueue(
@@ -281,11 +894,11 @@ fn enqueue_screenshot(ctx: &CollectorCtx, jpeg: Vec<u8>, events: &Arc<AtomicU64>
         Priority::Normal,
         now,
         now,
-        &jpeg,
+        &payload,
     ) {
         Ok(_) => {
             events.fetch_add(1, Ordering::Relaxed);
-            debug!(bytes = jpeg.len(), "screen: screenshot enqueued");
+            debug!(bytes = payload.len(), "screen: screenshot enqueued");
         }
         Err(e) => {
             warn!(error = %e, "screen: queue error — dropping screenshot");
@@ -305,11 +918,406 @@ fn exe_name_for_pid(pid: u32) -> String {
     }
     use sysinfo::{Pid, System};
     let mut sys = System::new();
-    // sysinfo 0.30: refresh_processes() refreshes all processes; then look up by PID.
     sys.refresh_processes();
     sys.process(Pid::from_u32(pid))
         .and_then(|p| p.exe())
         .and_then(|p| p.file_name())
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default()
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Mouse hook (Faz 3 #28)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Guard returned by [`install_mouse_hook`]. Dropping it signals the hook
+/// thread to exit via a `PostThreadMessageW(WM_QUIT)`.
+#[cfg(target_os = "windows")]
+pub(crate) struct MouseHookGuard {
+    thread_id: u32,
+    join:      Option<std::thread::JoinHandle<()>>,
+}
+
+#[cfg(target_os = "windows")]
+impl Drop for MouseHookGuard {
+    fn drop(&mut self) {
+        use windows::Win32::UI::WindowsAndMessaging::{PostThreadMessageW, WM_QUIT};
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        if self.thread_id != 0 {
+            unsafe {
+                let _ = PostThreadMessageW(self.thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+            }
+        }
+        if let Some(h) = self.join.take() {
+            let _ = h.join();
+        }
+    }
+}
+
+/// Installs a `WH_MOUSE_LL` hook on a dedicated OS thread and pushes
+/// left-click events into the shared ring buffer.
+///
+/// The hook thread owns a thread-local `static` that holds an `Arc` clone
+/// of the ring buffer so the C callback can find it without parameter
+/// passing. Writes are guarded by a standard Mutex; the callback is already
+/// serialised by the OS (one low-level hook thread per process) so
+/// contention is trivial.
+#[cfg(target_os = "windows")]
+fn install_mouse_hook(
+    ring: Arc<Mutex<VecDeque<ClickEvent>>>,
+) -> Result<MouseHookGuard> {
+    use std::cell::RefCell;
+    use std::sync::mpsc;
+    use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows::Win32::System::Threading::GetCurrentThreadId;
+    use windows::Win32::UI::WindowsAndMessaging::{
+        CallNextHookEx, DispatchMessageW, GetMessageW, SetWindowsHookExW, TranslateMessage,
+        UnhookWindowsHookEx, HHOOK, MSG, MSLLHOOKSTRUCT, WH_MOUSE_LL, WM_LBUTTONDOWN,
+    };
+
+    thread_local! {
+        static RING_TLS: RefCell<Option<Arc<Mutex<VecDeque<ClickEvent>>>>> =
+            const { RefCell::new(None) };
+        static HOOK_TLS: RefCell<HHOOK> = const { RefCell::new(HHOOK(0)) };
+    }
+
+    unsafe extern "system" fn mouse_hook_proc(
+        ncode: i32,
+        wparam: WPARAM,
+        lparam: LPARAM,
+    ) -> LRESULT {
+        // HC_ACTION == 0. For any negative ncode we must CallNextHookEx.
+        if ncode >= 0 && wparam.0 as u32 == WM_LBUTTONDOWN {
+            // lparam is MSLLHOOKSTRUCT*.
+            let info = lparam.0 as *const MSLLHOOKSTRUCT;
+            if !info.is_null() {
+                let pt_x = (*info).pt.x;
+                let pt_y = (*info).pt.y;
+                let ts_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+                let click = ClickEvent { x: pt_x, y: pt_y, ts_ms };
+                RING_TLS.with(|cell| {
+                    if let Some(ring_arc) = cell.borrow().as_ref() {
+                        if let Ok(mut r) = ring_arc.lock() {
+                            click_ring_push(&mut r, click);
+                        }
+                    }
+                });
+            }
+        }
+        // Always chain.
+        let h = HOOK_TLS.with(|cell| *cell.borrow());
+        CallNextHookEx(h, ncode, wparam, lparam)
+    }
+
+    let (ready_tx, ready_rx) = mpsc::sync_channel::<std::result::Result<u32, String>>(1);
+    let join = std::thread::Builder::new()
+        .name("personel-screen-mousehook".into())
+        .spawn(move || {
+            // SAFETY: entire body runs on a dedicated OS thread. SetWindowsHookEx
+            // requires a message pump on the same thread, which this provides.
+            // The callback only reads pointer-sized fields of MSLLHOOKSTRUCT
+            // (public C-ABI struct) and pushes into a safely-wrapped Mutex.
+            unsafe {
+                let tid = GetCurrentThreadId();
+                RING_TLS.with(|cell| *cell.borrow_mut() = Some(ring));
+                let hook = match SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook_proc), None, 0) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        let _ = ready_tx.send(Err(format!("SetWindowsHookExW failed: {e}")));
+                        RING_TLS.with(|cell| *cell.borrow_mut() = None);
+                        return;
+                    }
+                };
+                HOOK_TLS.with(|cell| *cell.borrow_mut() = hook);
+                let _ = ready_tx.send(Ok(tid));
+
+                // Message pump — blocks until WM_QUIT is posted by the guard.
+                let mut msg = MSG::default();
+                while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                    let _ = TranslateMessage(&msg);
+                    DispatchMessageW(&msg);
+                }
+
+                let _ = UnhookWindowsHookEx(hook);
+                HOOK_TLS.with(|cell| *cell.borrow_mut() = HHOOK(0));
+                RING_TLS.with(|cell| *cell.borrow_mut() = None);
+            }
+        })
+        .map_err(|e| personel_core::error::AgentError::CollectorStart {
+            name: "screen",
+            reason: format!("spawn mouse hook thread: {e}"),
+        })?;
+
+    let tid = ready_rx
+        .recv_timeout(std::time::Duration::from_secs(2))
+        .map_err(|_| personel_core::error::AgentError::CollectorStart {
+            name:   "screen",
+            reason: "mouse hook ready timeout".into(),
+        })?
+        .map_err(|e| personel_core::error::AgentError::CollectorStart {
+            name:   "screen",
+            reason: e,
+        })?;
+
+    Ok(MouseHookGuard { thread_id: tid, join: Some(join) })
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Tests (cross-platform — all helpers above are pure)
+// ──────────────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── #23 sensitivity guard ────────────────────────────────────────────
+
+    #[test]
+    fn sensitivity_skips_hardcoded_password_manager() {
+        assert!(should_skip_for_sensitivity("KeePass.exe", "Database.kdbx", &[]));
+        assert!(should_skip_for_sensitivity("keepassxc.exe", "", &[]));
+        assert!(should_skip_for_sensitivity("1Password.exe", "", &[]));
+    }
+
+    #[test]
+    fn sensitivity_skips_full_path_suffix() {
+        assert!(should_skip_for_sensitivity(
+            "C:\\Users\\kartal\\AppData\\Local\\Bitwarden\\bitwarden.exe",
+            "",
+            &[],
+        ));
+    }
+
+    #[test]
+    fn sensitivity_skips_rdp_client() {
+        assert!(should_skip_for_sensitivity("mstsc.exe", "Remote Desktop Connection", &[]));
+    }
+
+    #[test]
+    fn sensitivity_skips_incognito_titles() {
+        assert!(should_skip_for_sensitivity("chrome.exe", "Acme — Incognito", &[]));
+        assert!(should_skip_for_sensitivity("msedge.exe", "New InPrivate Window - Edge", &[]));
+        assert!(should_skip_for_sensitivity("firefox.exe", "Example (Private Browsing)", &[]));
+        assert!(should_skip_for_sensitivity("firefox.exe", "Örnek - Gizli Pencere", &[]));
+        assert!(should_skip_for_sensitivity("anything.exe", "Scan the 2fa code", &[]));
+    }
+
+    #[test]
+    fn sensitivity_respects_policy_excludes() {
+        let policy = vec!["banking.exe".to_string(), "hr-portal".to_string()];
+        assert!(should_skip_for_sensitivity("QnB_Banking.exe", "", &policy));
+        assert!(should_skip_for_sensitivity("chrome.exe", "Acme HR-Portal", &policy));
+    }
+
+    #[test]
+    fn sensitivity_allows_normal_foreground() {
+        assert!(!should_skip_for_sensitivity("chrome.exe", "GitHub - Acme/Repo", &[]));
+        assert!(!should_skip_for_sensitivity("notepad.exe", "Untitled - Notepad", &[]));
+    }
+
+    #[test]
+    fn sensitivity_empty_policy_does_not_match_empty_needle() {
+        // Safety check: empty policy entry must not trigger a universal skip.
+        let policy = vec![String::new()];
+        assert!(!should_skip_for_sensitivity("chrome.exe", "x", &policy));
+    }
+
+    // ── #22 adaptive frequency ───────────────────────────────────────────
+
+    #[test]
+    fn adaptive_idle_uses_short_tick() {
+        assert_eq!(next_tick_delay_secs(120_000, 300), IDLE_TICK_SECS);
+        assert_eq!(next_tick_delay_secs(60_001, 300), IDLE_TICK_SECS);
+    }
+
+    #[test]
+    fn adaptive_active_uses_policy_interval() {
+        assert_eq!(next_tick_delay_secs(0, 300), 300);
+        assert_eq!(next_tick_delay_secs(59_000, 180), 180);
+    }
+
+    #[test]
+    fn adaptive_enforces_minimum_10s() {
+        assert_eq!(next_tick_delay_secs(0, 1), 10);
+        assert_eq!(next_tick_delay_secs(0, 9), 10);
+    }
+
+    // ── #28 click ring buffer ────────────────────────────────────────────
+
+    fn mk_click(i: i32) -> ClickEvent {
+        ClickEvent { x: i, y: i * 2, ts_ms: i64::from(i) * 1_000 }
+    }
+
+    #[test]
+    fn click_ring_push_within_capacity() {
+        let mut ring = VecDeque::new();
+        for i in 0..4 {
+            click_ring_push(&mut ring, mk_click(i));
+        }
+        assert_eq!(ring.len(), 4);
+        let drained = click_ring_drain(&mut ring);
+        assert_eq!(drained.len(), 4);
+        assert_eq!(drained[0].x, 0);
+        assert_eq!(drained[3].x, 3);
+        assert!(ring.is_empty());
+    }
+
+    #[test]
+    fn click_ring_evicts_oldest_at_capacity() {
+        let mut ring = VecDeque::new();
+        for i in 0..(CLICK_RING_CAPACITY as i32 + 4) {
+            click_ring_push(&mut ring, mk_click(i));
+        }
+        assert_eq!(ring.len(), CLICK_RING_CAPACITY);
+        // First entry must now be click #4 (0..3 evicted).
+        assert_eq!(ring.front().unwrap().x, 4);
+        assert_eq!(
+            ring.back().unwrap().x,
+            CLICK_RING_CAPACITY as i32 + 3,
+        );
+    }
+
+    // ── #25 dedup hash ───────────────────────────────────────────────────
+
+    #[test]
+    fn dedup_hash_equal_for_identical_frames() {
+        let a = vec![0x42u8; 1024];
+        let b = a.clone();
+        assert_eq!(raw_frame_hash(&a), raw_frame_hash(&b));
+    }
+
+    #[test]
+    fn dedup_hash_differs_on_single_byte_change() {
+        let a = vec![0x42u8; 1024];
+        let mut b = a.clone();
+        b[500] ^= 0xFF;
+        assert_ne!(raw_frame_hash(&a), raw_frame_hash(&b));
+    }
+
+    // ── #26 OCR preprocess ───────────────────────────────────────────────
+
+    #[test]
+    fn preprocess_flat_frame_returns_unchanged_luma() {
+        // BGRA = (100, 100, 100, 255) — flat mid-gray.
+        let frame: Vec<u8> = (0..16).flat_map(|_| [100, 100, 100, 255]).collect();
+        let out = preprocess_for_ocr(&frame, 4, 4);
+        assert_eq!(out.len(), 16);
+        // Luminance: 0.299*100 + 0.587*100 + 0.114*100 = 100.
+        assert!(out.iter().all(|&p| p == 100));
+    }
+
+    #[test]
+    fn preprocess_histogram_stretch_expands_range() {
+        // Two halves: dark (0,0,0,255) + bright (200,200,200,255).
+        let mut frame = Vec::with_capacity(64);
+        for _ in 0..8 { frame.extend_from_slice(&[0, 0, 0, 255]); }
+        for _ in 0..8 { frame.extend_from_slice(&[200, 200, 200, 255]); }
+        let out = preprocess_for_ocr(&frame, 4, 4);
+        assert_eq!(out.len(), 16);
+        // First 8 pixels must stretch to 0, last 8 to 255.
+        assert!(out.iter().take(8).all(|&p| p == 0));
+        assert!(out.iter().skip(8).all(|&p| p == 255));
+    }
+
+    #[test]
+    fn preprocess_uses_luminance_weights() {
+        // Pure red (BGRA = 0,0,255,255). Y = 0.299*255 = 76.245.
+        let frame: Vec<u8> = (0..4).flat_map(|_| [0, 0, 255, 255]).collect();
+        let out = preprocess_for_ocr(&frame, 2, 2);
+        // Flat → histogram stretch noop → luma ≈ 76.
+        assert_eq!(out.len(), 4);
+        assert!(out.iter().all(|&p| (75..=77).contains(&p)));
+    }
+
+    // ── #27 PE-DEK gate ──────────────────────────────────────────────────
+
+    #[test]
+    fn pe_dek_gating_chooses_plain_when_none() {
+        let payload = encrypt_if_dlp(None, b"hello".to_vec());
+        match payload {
+            EncryptedPayload::Plain(bytes) => assert_eq!(bytes, b"hello"),
+            EncryptedPayload::Sealed { .. } => panic!("expected Plain"),
+        }
+    }
+
+    #[test]
+    fn pe_dek_gating_chooses_correct_branch() {
+        use zeroize::Zeroizing;
+        let key: personel_crypto::Aes256Key = Zeroizing::new([0xABu8; 32]);
+        let payload = encrypt_if_dlp(Some(&key), b"secret-webp".to_vec());
+        match payload {
+            EncryptedPayload::Sealed { ciphertext, nonce, key_version } => {
+                assert_ne!(ciphertext, b"secret-webp");
+                assert_eq!(ciphertext.len(), b"secret-webp".len() + 16);
+                assert_ne!(nonce, [0u8; 12]);
+                assert_eq!(key_version, 1);
+            }
+            EncryptedPayload::Plain(_) => panic!("expected Sealed when pe_dek is Some"),
+        }
+    }
+
+    // ── payload shape snapshot ───────────────────────────────────────────
+
+    #[test]
+    fn payload_shape_plain_webp() {
+        let p = EncryptedPayload::Plain(vec![0xAA, 0xBB]);
+        let json = build_screenshot_payload(
+            &p, "webp", 1920, 1080, 0, "\\\\.\\DISPLAY1", 0, 0, false, &[],
+        );
+        assert_eq!(json["format"], "webp");
+        assert_eq!(json["width"], 1920);
+        assert_eq!(json["height"], 1080);
+        assert_eq!(json["monitor_index"], 0);
+        assert_eq!(json["dlp_enabled"], false);
+        assert_eq!(json["data"], "aabb");
+        assert!(json.get("ciphertext").is_none());
+        assert_eq!(json["recent_clicks"].as_array().unwrap().len(), 0);
+    }
+
+    #[test]
+    fn payload_shape_sealed_webp() {
+        let p = EncryptedPayload::Sealed {
+            ciphertext:  vec![0x11, 0x22, 0x33],
+            nonce:       [1; 12],
+            key_version: 1,
+        };
+        let click = ClickEvent { x: 100, y: 200, ts_ms: 1_700_000_000_000 };
+        let json = build_screenshot_payload(
+            &p, "webp", 800, 600, 1, "\\\\.\\DISPLAY2", -800, 0, false, &[click],
+        );
+        assert_eq!(json["format"], "webp");
+        assert_eq!(json["dlp_enabled"], true);
+        assert_eq!(json["ciphertext"], "112233");
+        assert!(json.get("data").is_none());
+        assert_eq!(json["aead_tag_appended"], true);
+        assert_eq!(json["key_version"], 1);
+        assert_eq!(json["nonce"].as_str().unwrap().len(), 24);
+        assert_eq!(json["bounds_left"], -800);
+        let clicks_arr = json["recent_clicks"].as_array().unwrap();
+        assert_eq!(clicks_arr.len(), 1);
+        assert_eq!(clicks_arr[0]["x"], 100);
+        assert_eq!(clicks_arr[0]["ts_ms"], 1_700_000_000_000_i64);
+    }
+
+    // ── #24 WebP encoder smoke ───────────────────────────────────────────
+
+    #[test]
+    fn webp_color_encodes_and_is_smaller_than_source() {
+        // 32x32 BGRA solid blue frame — highly compressible.
+        let pixel_count = 32 * 32;
+        let src: Vec<u8> = (0..pixel_count).flat_map(|_| [0xFF, 0, 0, 0xFF]).collect();
+        let encoded = encode_webp_color(&src, 32, 32, 75.0).expect("encode");
+        assert!(!encoded.is_empty(), "non-empty WebP output");
+        assert!(encoded.len() < src.len(), "solid blue must compress smaller than raw BGRA");
+    }
+
+    #[test]
+    fn webp_grayscale_encodes() {
+        let src: Vec<u8> = vec![128u8; 32 * 32];
+        let encoded = encode_webp_grayscale(&src, 32, 32, 75.0).expect("encode");
+        assert!(!encoded.is_empty());
+    }
 }

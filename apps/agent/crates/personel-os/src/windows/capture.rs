@@ -400,3 +400,104 @@ impl DxgiCapture {
         })
     }
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Multi-monitor enumeration helper (Faz 3 #21)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Metadata for a single DXGI output (one monitor).
+#[derive(Debug, Clone)]
+pub struct MonitorInfo {
+    /// Ordinal index among outputs on the primary adapter (0 = primary).
+    pub index:        u32,
+    /// Device name as reported by `DXGI_OUTPUT_DESC::DeviceName`.
+    pub device_name:  String,
+    /// Desktop-coordinate left edge (signed — monitors left of primary
+    /// have negative X).
+    pub bounds_left:  i32,
+    /// Desktop-coordinate top edge.
+    pub bounds_top:   i32,
+    /// Monitor width in pixels.
+    pub width:        u32,
+    /// Monitor height in pixels.
+    pub height:       u32,
+    /// Whether the output is attached to the desktop.
+    pub attached:     bool,
+}
+
+/// Enumerates all DXGI outputs on the primary adapter.
+///
+/// Faz 3 #21 pragmatic implementation: returns metadata for every monitor
+/// but does NOT open duplication sessions. Callers decide which monitors to
+/// actually capture; the current Phase 1 collector loop still opens a single
+/// primary-monitor `DxgiCapture` and logs the enumerated count.
+///
+/// # Errors
+///
+/// Returns `AgentError::CollectorRuntime` if D3D11 device creation or DXGI
+/// adapter enumeration fails. Per-output errors are tolerated and the output
+/// is simply skipped.
+pub fn enumerate_outputs() -> Result<Vec<MonitorInfo>> {
+    // SAFETY: identical contract to `DxgiCapture::open_impl` — all raw COM
+    // pointers are immediately wrapped in windows-rs smart pointers, every
+    // HRESULT is checked, and no raw pointer escapes this function.
+    unsafe { enumerate_outputs_impl() }
+        .map_err(|e| AgentError::CollectorRuntime { name: "screen", reason: e.to_string() })
+}
+
+unsafe fn enumerate_outputs_impl() -> std::result::Result<Vec<MonitorInfo>, CaptureError> {
+    let mut device_opt: Option<ID3D11Device> = None;
+    let mut context_opt: Option<ID3D11DeviceContext> = None;
+    D3D11CreateDevice(
+        None,
+        D3D_DRIVER_TYPE_HARDWARE,
+        None,
+        Default::default(),
+        None,
+        D3D11_SDK_VERSION,
+        Some(&mut device_opt),
+        None,
+        Some(&mut context_opt),
+    )
+    .map_err(|e| CaptureError::Hresult(e.code().0))?;
+
+    let device = device_opt.ok_or(CaptureError::Hresult(0x8000_FFFF_u32 as i32))?;
+    let dxgi_device: IDXGIDevice = device.cast()
+        .map_err(|e| CaptureError::Hresult(e.code().0))?;
+    let adapter = dxgi_device.GetAdapter()
+        .map_err(|e| CaptureError::Hresult(e.code().0))?;
+
+    let mut out: Vec<MonitorInfo> = Vec::new();
+    let mut idx: u32 = 0;
+    loop {
+        match adapter.EnumOutputs(idx) {
+            Ok(output) => {
+                let mut desc = DXGI_OUTPUT_DESC::default();
+                if output.GetDesc(&mut desc).is_err() {
+                    idx += 1;
+                    continue;
+                }
+                let device_name = String::from_utf16_lossy(
+                    &desc.DeviceName.iter().copied().take_while(|c| *c != 0).collect::<Vec<_>>(),
+                );
+                out.push(MonitorInfo {
+                    index:       idx,
+                    device_name,
+                    bounds_left: desc.DesktopCoordinates.left,
+                    bounds_top:  desc.DesktopCoordinates.top,
+                    width:  (desc.DesktopCoordinates.right  - desc.DesktopCoordinates.left) as u32,
+                    height: (desc.DesktopCoordinates.bottom - desc.DesktopCoordinates.top) as u32,
+                    attached: desc.AttachedToDesktop.as_bool(),
+                });
+                idx += 1;
+            }
+            // `DXGI_ERROR_NOT_FOUND` means end of outputs — expected.
+            Err(_) => break,
+        }
+        // Safety valve: something is broken if an adapter reports >16 outputs.
+        if idx >= 16 {
+            break;
+        }
+    }
+    Ok(out)
+}
