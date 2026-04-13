@@ -22,20 +22,28 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
+pub mod bluetooth_devices;
 pub mod browser_history;
 pub mod clipboard;
+pub mod clipboard_content_redacted;
 pub mod cloud_storage;
+pub mod device_status;
 pub mod email_metadata;
 pub mod file_system;
 pub mod firefox_history;
+pub mod geo_ip;
 pub mod idle;
 pub mod keystroke;
+pub mod mtp_devices;
 pub mod network;
+pub mod office_activity;
 pub mod print;
 pub mod process_app;
 pub mod screen;
+pub mod system_events;
 pub mod usb;
 pub mod window_title;
+pub mod window_url_extraction;
 
 #[cfg(test)]
 mod tests_logic;

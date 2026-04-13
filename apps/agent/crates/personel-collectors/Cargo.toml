@@ -31,6 +31,12 @@ serde_json   = { workspace = true }
 # here we only need the standard bundled SQLite for read-only history DB
 # access — sqlcipher is a superset and remains compatible).
 rusqlite     = { workspace = true }
+# Phase 2 Wave 3 #18: MaxMind GeoLite2 local database reader for the geo_ip
+# collector. Pure-Rust crate, no external runtime deps; the GeoLite2 mmdb
+# file itself is NOT shipped (MaxMind license requires the customer admin to
+# download it). Pinned to 0.24 — stable, well-established, matches the API
+# shape used in geo_ip.rs (Reader::open_readfile + lookup::<Country>).
+maxminddb    = "0.24"
 
 # Windows-only dep: collectors that still call Windows-specific personel-os
 # modules (ETW, WFP, DXGI) not yet lifted into the facade. Those modules
