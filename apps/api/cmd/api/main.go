@@ -50,6 +50,7 @@ import (
 	"github.com/personel/api/internal/postgres"
 	"github.com/personel/api/internal/reports"
 	"github.com/personel/api/internal/screenshots"
+	"github.com/personel/api/internal/search"
 	"github.com/personel/api/internal/silence"
 	"github.com/personel/api/internal/tenant"
 	"github.com/personel/api/internal/transparency"
@@ -195,6 +196,38 @@ func main() {
 
 	reportsSvc := reports.NewService(ch)
 
+	// Roadmap item #68 — real CH aggregation handlers behind /v1/reports/ch.
+	// Built on top of the same `ch` connection used by reportsSvc so no
+	// additional pool/config is required; nil-safe inside handlers.
+	reportsCHClient := clickhouseclient.NewClient(ch)
+	reportsCHHandlers := reports.NewCHHandlers(reportsCHClient)
+
+	// --- Roadmap item #67 — Search (OpenSearch full-text) ---
+	// Degraded-mode graceful: if the cluster is unreachable at boot,
+	// NewClient returns an error and we pass nil into NewService so
+	// /v1/search/* returns 503 until the cluster is back online. The
+	// API boot must not block on the search tier.
+	var searchClient *search.Client
+	if cfg.OpenSearch.Enabled {
+		sc, serr := search.NewClient(ctx, search.Config{
+			Addr:     cfg.OpenSearch.Addr,
+			Username: cfg.OpenSearch.Username,
+			Password: cfg.OpenSearch.Password,
+			Timeout:  cfg.OpenSearch.Timeout,
+		}, log)
+		if serr != nil {
+			log.Warn("search: client init failed; /v1/search/* will return 503",
+				slog.String("error", serr.Error()),
+				slog.String("addr", cfg.OpenSearch.Addr),
+			)
+		} else {
+			searchClient = sc
+		}
+	} else {
+		log.Info("search: disabled by config; /v1/search/* will return 503")
+	}
+	searchSvc := search.NewService(searchClient, log)
+
 	screenshotsSvc := screenshots.NewService(mc, recorder, cfg.MinIO.PresignTTL, log)
 
 	transSvc := transparency.NewService(pool, lvSvc, log)
@@ -310,6 +343,8 @@ func main() {
 		Destruction:  destSvc,
 		LiveView:     lvSvc,
 		Reports:      reportsSvc,
+		ReportsCH:    reportsCHHandlers,
+		Search:       searchSvc,
 		Screenshots:  screenshotsSvc,
 		Transparency: transSvc,
 		Silence:      silenceSvc,

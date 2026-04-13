@@ -82,6 +82,17 @@ observability:
   service_name: "personel-admin-api"
   service_version: "0.1.0"
 
+opensearch:
+  # Faz 6 #67 — full-text search backend for audit + events.
+  # When enabled=false the /v1/search/* routes still mount but return
+  # 503 until the cluster comes online. Pilot vm3 runs OpenSearch 2.x
+  # in dev mode on port 9200 with the security plugin disabled.
+  addr: "http://opensearch:9200"
+  enabled: true
+  username: ""
+  password: ""
+  timeout: 10s
+
 livekit:
   host: "http://localhost:7880"
   api_key: "devkey"

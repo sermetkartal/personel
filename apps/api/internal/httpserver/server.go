@@ -34,6 +34,7 @@ import (
 	"github.com/personel/api/internal/reports"
 	"github.com/personel/api/internal/reportspg"
 	"github.com/personel/api/internal/screenshots"
+	"github.com/personel/api/internal/search"
 	"github.com/personel/api/internal/silence"
 	"github.com/personel/api/internal/tenant"
 	"github.com/personel/api/internal/transparency"
@@ -54,6 +55,8 @@ type Services struct {
 	Destruction  *destruction.Service
 	LiveView     *liveview.Service
 	Reports      *reports.Service
+	ReportsCH    *reports.CHHandlers
+	Search       *search.Service
 	Screenshots  *screenshots.Service
 	Transparency *transparency.Service
 	Silence      *silence.Service
@@ -284,7 +287,59 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			r.Get("/idle-active", reports.IdleActiveHandler(svc.Reports))
 			r.Get("/endpoint-activity", reports.EndpointActivityHandler(svc.Reports))
 			r.Get("/app-blocks", reports.AppBlocksHandler(svc.Reports))
+
+			// --- Roadmap item #68 — real CH aggregation queries
+			// Parallel /ch/ subpath. Uses the same RBAC as the parent
+			// /reports group PLUS HR + Investigator (they have legitimate
+			// access to cross-user aggregates for KVKK DSR fulfilment and
+			// investigation workflows). 503 when the CH client is nil.
+			r.Route("/ch", func(r chi.Router) {
+				r.Use(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleManager, auth.RoleHR,
+					auth.RoleDPO, auth.RoleInvestigator,
+				))
+				if svc.ReportsCH != nil {
+					r.Get("/top-apps", svc.ReportsCH.CHTopAppsHandler())
+					r.Get("/idle-active", svc.ReportsCH.CHIdleActiveHandler())
+					r.Get("/productivity", svc.ReportsCH.CHProductivityHandler())
+					r.Get("/app-blocks", svc.ReportsCH.CHAppBlocksHandler())
+				} else {
+					// Mount empty 503 responders so the console sees a
+					// coherent degraded mode rather than a 404.
+					nilH := reports.NewCHHandlers(nil)
+					r.Get("/top-apps", nilH.CHTopAppsHandler())
+					r.Get("/idle-active", nilH.CHIdleActiveHandler())
+					r.Get("/productivity", nilH.CHProductivityHandler())
+					r.Get("/app-blocks", nilH.CHAppBlocksHandler())
+				}
+			})
 		})
+
+		// --- Search (Faz 6 #67 — OpenSearch full-text) ---
+		// /v1/search/audit — audit log full-text search. Gated to the
+		// roles that have a legitimate need to investigate admin actions:
+		// Admin (system owner), DPO (KVKK m.11 compliance), Investigator
+		// (incident response), Auditor (read-only compliance).
+		//
+		// /v1/search/events — ClickHouse-mirrored fleet telemetry search.
+		// Widens the RBAC to Manager + HR because they need to be able to
+		// search employee application/file activity for performance
+		// reviews and HR investigations. Keystroke content is redacted
+		// server-side regardless of role (ADR 0013 invariant).
+		if svc.Search != nil {
+			r.Route("/search", func(r chi.Router) {
+				r.With(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleDPO,
+					auth.RoleInvestigator, auth.RoleAuditor,
+				)).Get("/audit", search.AuditHandler(svc.Search))
+
+				r.With(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleDPO,
+					auth.RoleInvestigator, auth.RoleAuditor,
+					auth.RoleManager, auth.RoleHR,
+				)).Get("/events", search.EventsHandler(svc.Search))
+			})
+		}
 
 		// --- Reports preview (Postgres-backed, Phase 1 dev/demo) ---
 		// Reads from employee_daily_stats + employee_hourly_stats so the

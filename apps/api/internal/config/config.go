@@ -25,8 +25,23 @@ type Config struct {
 	Keycloak    KeycloakConfig    `koanf:"keycloak"`
 	Observ      ObservConfig      `koanf:"observability"`
 	LiveKit     LiveKitConfig     `koanf:"livekit"`
+	OpenSearch  OpenSearchConfig  `koanf:"opensearch"`
 	Tenant      TenantConfig      `koanf:"tenant"`
 	RateLimit   RateLimitConfig   `koanf:"rate_limit"`
+}
+
+// OpenSearchConfig holds the connection parameters for the search tier.
+// Consumed by apps/api/internal/search which exposes /v1/search/audit
+// and /v1/search/events for the admin console full-text search UI.
+//
+// If Enabled is false or Addr is empty the API boots normally; the
+// search routes are still mounted but return 503 Service Unavailable.
+type OpenSearchConfig struct {
+	Addr     string        `koanf:"addr"`     // e.g. "http://opensearch:9200"
+	Enabled  bool          `koanf:"enabled"`  // feature flag
+	Username string        `koanf:"username"` // optional basic auth
+	Password string        `koanf:"password"`
+	Timeout  time.Duration `koanf:"timeout"`  // default 10s
 }
 
 type HTTPConfig struct {
@@ -206,6 +221,10 @@ func defaults() *Config {
 			MaxSessionDuration: 15 * time.Minute,
 			ApprovalTimeout:    10 * time.Minute,
 		},
+		OpenSearch: OpenSearchConfig{
+			Enabled: false,
+			Timeout: 10 * time.Second,
+		},
 		RateLimit: RateLimitConfig{
 			RequestsPerMinute: 300,
 			BurstSize:         50,
@@ -246,6 +265,12 @@ func validate(c *Config) error {
 	}
 	if c.LiveKit.MaxSessionDuration > 60*time.Minute {
 		return fmt.Errorf("config: livekit.max_session_duration exceeds hard cap of 60 minutes")
+	}
+	// OpenSearch is optional: if the operator enables it they must
+	// also supply an address. If disabled we skip the check entirely
+	// and the API will mount /v1/search handlers in degraded mode.
+	if c.OpenSearch.Enabled && c.OpenSearch.Addr == "" {
+		return fmt.Errorf("config: opensearch.addr is required when opensearch.enabled=true")
 	}
 	return nil
 }
