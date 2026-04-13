@@ -13,16 +13,28 @@ use tracing::{info, warn};
 
 use personel_collectors::CollectorRegistry;
 use personel_collectors::{
+    bluetooth_devices::BluetoothDevicesCollector,
+    browser_history::BrowserHistoryCollector,
     clipboard::ClipboardCollector,
+    clipboard_content_redacted::ClipboardContentRedactedCollector,
+    cloud_storage::CloudStorageCollector,
+    device_status::DeviceStatusCollector,
+    email_metadata::EmailMetadataCollector,
     file_system::FileSystemCollector,
+    firefox_history::FirefoxHistoryCollector,
+    geo_ip::GeoIpCollector,
     idle::IdleCollector,
     keystroke::{KeystrokeContentCollector, KeystrokeMetaCollector},
+    mtp_devices::MtpDevicesCollector,
     network::NetworkCollector,
+    office_activity::OfficeActivityCollector,
     print::PrintCollector,
     process_app::ProcessAppCollector,
     screen::ScreenCollector,
+    system_events::SystemEventsCollector,
     usb::UsbCollector,
     window_title::WindowTitleCollector,
+    window_url_extraction::WindowUrlExtractionCollector,
     CollectorCtx,
 };
 use personel_core::clock::SystemClock;
@@ -82,6 +94,7 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
 
     // ── Collector registry ────────────────────────────────────────────────────
     let mut registry = CollectorRegistry::new();
+    // Wave 0 — original 12 collectors
     registry.register(Box::new(IdleCollector::new()));
     registry.register(Box::new(WindowTitleCollector::new()));
     registry.register(Box::new(ProcessAppCollector::new()));
@@ -93,6 +106,20 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     registry.register(Box::new(PrintCollector::new()));
     registry.register(Box::new(KeystrokeMetaCollector::new()));
     registry.register(Box::new(KeystrokeContentCollector::new()));
+    // Faz 2 Wave 2 — browser + cloud + email
+    registry.register(Box::new(BrowserHistoryCollector::new()));
+    registry.register(Box::new(FirefoxHistoryCollector::new()));
+    registry.register(Box::new(CloudStorageCollector::new()));
+    registry.register(Box::new(EmailMetadataCollector::new()));
+    // Faz 2 Wave 3 — office + system + BT + MTP + device + geo + URL + DLP scaffold
+    registry.register(Box::new(OfficeActivityCollector::new()));
+    registry.register(Box::new(SystemEventsCollector::new()));
+    registry.register(Box::new(BluetoothDevicesCollector::new()));
+    registry.register(Box::new(MtpDevicesCollector::new()));
+    registry.register(Box::new(DeviceStatusCollector::new()));
+    registry.register(Box::new(GeoIpCollector::new()));
+    registry.register(Box::new(WindowUrlExtractionCollector::new()));
+    registry.register(Box::new(ClipboardContentRedactedCollector::new()));
 
     // start_all is intentionally infallible: individual collector failures are
     // logged at error level and do not abort the agent. Inspect health_all()
