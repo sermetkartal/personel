@@ -32,7 +32,7 @@
 pub mod queue;
 pub mod schema;
 
-pub use queue::{EventQueue, QueueConfig, QueuedEvent, QueueStats};
+pub use queue::{EventQueue, EvictionReport, QueueConfig, QueueStats, QueuedEvent};
 
 // The conversion `From<rusqlite::Error> for AgentError` now lives in
 // personel-core behind the `rusqlite` feature, which we enable in our

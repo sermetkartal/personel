@@ -127,8 +127,8 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::sync::{Arc, Mutex, OnceLock};
+use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 use tracing::{debug, error, info, warn};
@@ -155,6 +155,9 @@ pub struct ScreenCollector {
     frames_deduped:   Arc<AtomicU64>,
     /// Click ring buffer shared with the LL mouse hook thread.
     clicks:           Arc<Mutex<VecDeque<ClickEvent>>>,
+    /// Faz 4 #33 — set to `true` while screen capture is suspended due to a
+    /// low battery + on-battery condition. Surfaced via `health().status`.
+    battery_suspended: Arc<AtomicBool>,
 }
 
 impl ScreenCollector {
@@ -177,16 +180,26 @@ impl Collector for ScreenCollector {
 
     async fn start(&self, ctx: CollectorCtx) -> Result<CollectorHandle> {
         let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
-        let healthy        = Arc::clone(&self.healthy);
-        let events         = Arc::clone(&self.events);
-        let drops          = Arc::clone(&self.drops);
-        let frames_deduped = Arc::clone(&self.frames_deduped);
-        let clicks         = Arc::clone(&self.clicks);
+        let healthy           = Arc::clone(&self.healthy);
+        let events            = Arc::clone(&self.events);
+        let drops             = Arc::clone(&self.drops);
+        let frames_deduped    = Arc::clone(&self.frames_deduped);
+        let clicks            = Arc::clone(&self.clicks);
+        let battery_suspended = Arc::clone(&self.battery_suspended);
 
         // DXGI requires a dedicated OS thread; run the whole capture loop on
         // `spawn_blocking` so we never touch DXGI from an async context.
         let task = tokio::task::spawn_blocking(move || {
-            run_capture_loop(ctx, healthy, events, drops, frames_deduped, clicks, stop_rx);
+            run_capture_loop(
+                ctx,
+                healthy,
+                events,
+                drops,
+                frames_deduped,
+                clicks,
+                battery_suspended,
+                stop_rx,
+            );
         });
 
         Ok(CollectorHandle { name: self.name(), task, stop_tx })
@@ -199,12 +212,16 @@ impl Collector for ScreenCollector {
     fn health(&self) -> HealthSnapshot {
         let healthy = self.healthy.load(Ordering::Relaxed);
         let deduped = self.frames_deduped.swap(0, Ordering::Relaxed);
+        let battery_suspended = self.battery_suspended.load(Ordering::Relaxed);
         HealthSnapshot {
             healthy,
             events_since_last: self.events.swap(0, Ordering::Relaxed),
             drops_since_last:  self.drops.swap(0, Ordering::Relaxed),
             status: if !healthy {
                 "DXGI capture unhealthy".into()
+            } else if battery_suspended {
+                // Operational reason for the silence — not a health failure.
+                "captures_suspended_battery_low".into()
             } else if deduped > 0 {
                 format!("frames_skipped_identical={deduped}")
             } else {
@@ -305,6 +322,230 @@ pub(crate) fn next_tick_delay_secs(idle_ms: u64, policy_active_secs: u64) -> u64
         IDLE_TICK_SECS
     } else {
         policy_active_secs.max(10)
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Battery aware (Faz 4 #33)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Threshold at or below which captures are suspended while on battery.
+pub(crate) const BATTERY_LOW_PERCENT: u8 = 20;
+
+/// Time-to-live for the cached `(on_battery, percent)` reading. The Win32
+/// `GetSystemPowerStatus` call is cheap but spamming it every tick adds zero
+/// value: battery levels move on the order of seconds, not milliseconds.
+pub(crate) const BATTERY_CACHE_TTL: Duration = Duration::from_secs(30);
+
+/// Cached power status reading + last-poll timestamp.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct BatteryCache {
+    /// `true` when on battery (AC line offline).
+    pub on_battery: bool,
+    /// Battery percentage 0..=100. `100` is used when no battery is present
+    /// (desktop PC) so the low-battery branch is never taken.
+    pub percent:    u8,
+    /// Wall-clock instant of the last successful `GetSystemPowerStatus` call.
+    pub last_poll:  Instant,
+}
+
+impl BatteryCache {
+    fn fresh() -> Self {
+        let (on_battery, percent) = read_battery_state();
+        Self { on_battery, percent, last_poll: Instant::now() }
+    }
+}
+
+static BATTERY_CACHE: OnceLock<Mutex<BatteryCache>> = OnceLock::new();
+
+/// Reads the current power state from the OS.
+///
+/// Returns `(on_battery, percent)`. On non-Windows this is a stub that
+/// reports `(false, 100)` so the battery-skip branch is never taken on dev
+/// builds — the screen capture loop is Windows-only anyway.
+#[cfg(target_os = "windows")]
+fn read_battery_state() -> (bool, u8) {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut sps = SYSTEM_POWER_STATUS::default();
+    // SAFETY: pointer valid for one struct.
+    let res = unsafe { GetSystemPowerStatus(&mut sps) };
+    if res.is_err() {
+        // On API failure assume AC + full battery — never spuriously suspend.
+        return (false, 100);
+    }
+    // ACLineStatus: 0 = offline (on battery), 1 = online (AC), 255 = unknown.
+    let on_battery = sps.ACLineStatus == 0;
+    // BatteryFlag bit 128 = no battery present (desktop) → treat as full.
+    let no_battery = sps.BatteryFlag & 128 != 0 || sps.BatteryFlag == 255;
+    if no_battery {
+        return (false, 100);
+    }
+    // BatteryLifePercent: 0..100, 255 = unknown → assume full.
+    let percent = if sps.BatteryLifePercent <= 100 {
+        sps.BatteryLifePercent
+    } else {
+        100
+    };
+    (on_battery, percent)
+}
+
+#[cfg(not(target_os = "windows"))]
+fn read_battery_state() -> (bool, u8) {
+    (false, 100)
+}
+
+/// Pure decision helper, fully testable: returns `Some("battery_low")` when
+/// the cached reading shows we are on battery and at or below
+/// [`BATTERY_LOW_PERCENT`], `None` otherwise.
+pub(crate) fn battery_skip_reason(cache: BatteryCache) -> Option<&'static str> {
+    if cache.on_battery && cache.percent <= BATTERY_LOW_PERCENT {
+        Some("battery_low")
+    } else {
+        None
+    }
+}
+
+/// Checks the battery skip condition with a cached 30 s poll cadence.
+/// Returns `Some("battery_low")` if captures should be suspended this tick.
+///
+/// Safe on every platform: on non-Windows the underlying read returns
+/// `(false, 100)` which can never trip the threshold.
+pub(crate) fn should_skip_for_battery() -> Option<&'static str> {
+    let cell = BATTERY_CACHE.get_or_init(|| Mutex::new(BatteryCache::fresh()));
+    let mut guard = cell.lock().expect("battery cache poisoned");
+    if guard.last_poll.elapsed() >= BATTERY_CACHE_TTL {
+        let (on_battery, percent) = read_battery_state();
+        guard.on_battery = on_battery;
+        guard.percent    = percent;
+        guard.last_poll  = Instant::now();
+    }
+    battery_skip_reason(*guard)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Game mode detection (Faz 4 #34)
+// ──────────────────────────────────────────────────────────────────────────────
+
+/// Reduced tick interval used while a full-screen exclusive application
+/// (game, video player, slideshow) holds the foreground. 30 minutes.
+pub(crate) const GAME_MODE_TICK_SECS: u64 = 30 * 60;
+
+/// Pure helper testable on every platform: returns `true` if the foreground
+/// window covers the entire primary monitor AND has the typical full-screen
+/// exclusive style (`WS_POPUP` set, `WS_BORDER` clear). Also returns `true`
+/// when the foreground process executable matches a short list of known
+/// fullscreen players (`wmplayer.exe`, `vlc.exe`, `mpc-hc.exe`,
+/// `powerpnt.exe` in slideshow context).
+pub(crate) fn is_game_mode_for(
+    win_left: i32,
+    win_top: i32,
+    win_right: i32,
+    win_bottom: i32,
+    primary_w: i32,
+    primary_h: i32,
+    style_popup: bool,
+    style_border: bool,
+    exe_name: &str,
+) -> bool {
+    let exe_lower = exe_name.to_lowercase();
+    const KNOWN_FULLSCREEN_EXES: &[&str] = &[
+        "wmplayer.exe",
+        "vlc.exe",
+        "mpc-hc.exe",
+        "mpc-hc64.exe",
+    ];
+    if KNOWN_FULLSCREEN_EXES
+        .iter()
+        .any(|known| exe_lower.ends_with(known) || exe_lower == *known)
+    {
+        return true;
+    }
+
+    // PowerPoint in slideshow mode — title-driven detection happens in the
+    // caller via the popup/border style heuristic since the slideshow window
+    // class is `screenClass` with WS_POPUP set; falling through to the rect
+    // check below catches it.
+
+    let covers_primary = win_left <= 0
+        && win_top <= 0
+        && win_right >= primary_w
+        && win_bottom >= primary_h;
+
+    covers_primary && style_popup && !style_border
+}
+
+/// Detects whether the current foreground application is running in a
+/// full-screen exclusive mode that should suppress aggressive screen
+/// capture. Always returns `false` on non-Windows.
+#[cfg(target_os = "windows")]
+fn detect_game_mode() -> bool {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, GWL_STYLE, SM_CXSCREEN, SM_CYSCREEN,
+        WS_BORDER, WS_POPUP,
+    };
+
+    let fg = match personel_platform::input::foreground_window_info() {
+        Ok(fg) if fg.hwnd != 0 => fg,
+        _ => return false,
+    };
+    let exe = exe_name_for_pid(fg.pid);
+
+    // SAFETY: hwnd is the foreground window we just queried; if it has been
+    // destroyed in the racing instant the API returns an error and we
+    // bail out without dereferencing anything.
+    let hwnd = HWND(fg.hwnd as isize);
+    let mut rect = RECT::default();
+    let rect_ok = unsafe { GetWindowRect(hwnd, &mut rect).is_ok() };
+    if !rect_ok {
+        return false;
+    }
+
+    let primary_w = unsafe { GetSystemMetrics(SM_CXSCREEN) };
+    let primary_h = unsafe { GetSystemMetrics(SM_CYSCREEN) };
+    if primary_w <= 0 || primary_h <= 0 {
+        return false;
+    }
+
+    // GetWindowLongPtrW returns 0 on failure; we treat 0 as "no style flags
+    // set" which is harmless — both popup and border bits will be `false`
+    // and the rect-only branch will gate the decision.
+    let style_bits = unsafe { GetWindowLongPtrW(hwnd, GWL_STYLE) } as u32;
+    let style_popup  = (style_bits & WS_POPUP.0) != 0;
+    let style_border = (style_bits & WS_BORDER.0) != 0;
+
+    is_game_mode_for(
+        rect.left,
+        rect.top,
+        rect.right,
+        rect.bottom,
+        primary_w,
+        primary_h,
+        style_popup,
+        style_border,
+        &exe,
+    )
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_game_mode() -> bool {
+    false
+}
+
+/// Wrapper around [`next_tick_delay_secs`] that stretches the chosen
+/// interval to [`GAME_MODE_TICK_SECS`] when a full-screen exclusive
+/// application is detected and the would-be tick is shorter than that.
+/// Pure so the whole branching matrix can be unit-tested.
+pub(crate) fn next_tick_delay_secs_with_game_mode(
+    idle_ms: u64,
+    policy_active_secs: u64,
+    game_mode: bool,
+) -> u64 {
+    let base = next_tick_delay_secs(idle_ms, policy_active_secs);
+    if game_mode && base < GAME_MODE_TICK_SECS {
+        GAME_MODE_TICK_SECS
+    } else {
+        base
     }
 }
 
@@ -594,6 +835,7 @@ pub(crate) fn build_screenshot_payload(
 // Platform dispatch
 // ──────────────────────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 fn run_capture_loop(
     ctx: CollectorCtx,
     healthy: Arc<AtomicBool>,
@@ -601,16 +843,26 @@ fn run_capture_loop(
     drops: Arc<AtomicU64>,
     frames_deduped: Arc<AtomicU64>,
     clicks: Arc<Mutex<VecDeque<ClickEvent>>>,
+    battery_suspended: Arc<AtomicBool>,
     #[allow(unused_mut)] mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
     #[cfg(target_os = "windows")]
-    run_windows(ctx, healthy, events, drops, frames_deduped, clicks, stop_rx);
+    run_windows(
+        ctx,
+        healthy,
+        events,
+        drops,
+        frames_deduped,
+        clicks,
+        battery_suspended,
+        stop_rx,
+    );
 
     #[cfg(not(target_os = "windows"))]
     {
         info!("screen collector: DXGI not supported on this platform — parking");
         healthy.store(true, Ordering::Relaxed);
-        let _ = (ctx, events, drops, frames_deduped, clicks);
+        let _ = (ctx, events, drops, frames_deduped, clicks, battery_suspended);
         let _ = stop_rx.blocking_recv();
     }
 }
@@ -620,6 +872,7 @@ fn run_capture_loop(
 // ──────────────────────────────────────────────────────────────────────────────
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::too_many_arguments)]
 fn run_windows(
     ctx: CollectorCtx,
     healthy: Arc<AtomicBool>,
@@ -627,6 +880,7 @@ fn run_windows(
     drops: Arc<AtomicU64>,
     frames_deduped: Arc<AtomicU64>,
     clicks: Arc<Mutex<VecDeque<ClickEvent>>>,
+    battery_suspended: Arc<AtomicBool>,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
     info!("screen collector: starting (DXGI)");
@@ -688,7 +942,16 @@ fn run_windows(
                     Ok(c) => {
                         healthy.store(true, Ordering::Relaxed);
                         return capture_loop(
-                            c, ctx, healthy, events, drops, frames_deduped, clicks, primary, stop_rx,
+                            c,
+                            ctx,
+                            healthy,
+                            events,
+                            drops,
+                            frames_deduped,
+                            clicks,
+                            battery_suspended,
+                            primary,
+                            stop_rx,
                         );
                     }
                     Err(e2) => error!(error = %e2, "screen: DXGI retry failed"),
@@ -697,7 +960,18 @@ fn run_windows(
         }
     };
 
-    capture_loop(capture, ctx, healthy, events, drops, frames_deduped, clicks, primary, stop_rx);
+    capture_loop(
+        capture,
+        ctx,
+        healthy,
+        events,
+        drops,
+        frames_deduped,
+        clicks,
+        battery_suspended,
+        primary,
+        stop_rx,
+    );
 }
 
 #[cfg(target_os = "windows")]
@@ -710,6 +984,7 @@ fn capture_loop(
     drops: Arc<AtomicU64>,
     frames_deduped: Arc<AtomicU64>,
     clicks: Arc<Mutex<VecDeque<ClickEvent>>>,
+    battery_suspended: Arc<AtomicBool>,
     primary_monitor: Option<personel_os::capture::MonitorInfo>,
     mut stop_rx: tokio::sync::oneshot::Receiver<()>,
 ) {
@@ -723,13 +998,21 @@ fn capture_loop(
             return;
         }
 
-        // ── Adaptive interval sleep (#22) with per-second stop checks ─────
+        // ── Adaptive interval sleep (#22) + game mode stretch (#34) ───────
         let policy = ctx.policy();
         let policy_secs = u64::from(policy.screenshot.interval_seconds).max(10);
         drop(policy);
 
         let idle_ms = personel_platform::input::last_input_idle_ms().unwrap_or(0);
-        let delay_secs = next_tick_delay_secs(idle_ms, policy_secs);
+        let game_mode = detect_game_mode();
+        let delay_secs =
+            next_tick_delay_secs_with_game_mode(idle_ms, policy_secs, game_mode);
+        if game_mode {
+            debug!(
+                delay_secs,
+                "screen: game/full-screen mode detected — stretching tick"
+            );
+        }
         for _ in 0..delay_secs {
             std::thread::sleep(Duration::from_secs(1));
             if stop_rx.try_recv().is_ok() {
@@ -738,7 +1021,9 @@ fn capture_loop(
             }
         }
 
-        // ── Sensitivity guard (#23) ───────────────────────────────────────
+        // ── Sensitivity guard (#23) — KVKK m.6 / ADR 0013 anchor.
+        // MUST run before the operational battery skip so a sensitive
+        // foreground app is never silently bypassed by the energy heuristic.
         let policy = ctx.policy();
         let exclude_apps = policy.screenshot.exclude_apps.clone();
         drop(policy);
@@ -750,6 +1035,27 @@ fn capture_loop(
                 drops.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
+        }
+
+        // ── Battery aware (#33) ───────────────────────────────────────────
+        // Operational skip — runs AFTER the KVKK sensitivity guard so a
+        // misconfigured battery state can never bypass the m.6 anchor.
+        // Skip frames are NOT counted into `frames_deduped`; this is a
+        // distinct operational category surfaced via `health().status`.
+        if let Some(reason) = should_skip_for_battery() {
+            if !battery_suspended.swap(true, Ordering::Relaxed) {
+                info!(reason, "screen: suspending captures — battery low on battery power");
+            }
+            // Sleep an extra interval to avoid spinning while suspended.
+            for _ in 0..30 {
+                std::thread::sleep(Duration::from_secs(1));
+                if stop_rx.try_recv().is_ok() {
+                    return;
+                }
+            }
+            continue;
+        } else if battery_suspended.swap(false, Ordering::Relaxed) {
+            info!("screen: resuming captures — AC restored or battery recovered");
         }
 
         // ── Grab a raw BGRA frame ─────────────────────────────────────────
@@ -1143,6 +1449,114 @@ mod tests {
     fn adaptive_enforces_minimum_10s() {
         assert_eq!(next_tick_delay_secs(0, 1), 10);
         assert_eq!(next_tick_delay_secs(0, 9), 10);
+    }
+
+    // ── #33 battery aware ────────────────────────────────────────────────
+
+    fn mk_battery_cache(on_battery: bool, percent: u8) -> BatteryCache {
+        BatteryCache {
+            on_battery,
+            percent,
+            last_poll: Instant::now(),
+        }
+    }
+
+    #[test]
+    fn battery_skip_only_when_on_battery_and_low() {
+        // On AC at any percent → no skip.
+        assert_eq!(battery_skip_reason(mk_battery_cache(false, 5)), None);
+        assert_eq!(battery_skip_reason(mk_battery_cache(false, 100)), None);
+        // On battery above threshold → no skip.
+        assert_eq!(battery_skip_reason(mk_battery_cache(true, 50)), None);
+        assert_eq!(battery_skip_reason(mk_battery_cache(true, 21)), None);
+    }
+
+    #[test]
+    fn battery_skip_at_threshold_boundary() {
+        // 20% on battery is the inclusive boundary.
+        assert_eq!(battery_skip_reason(mk_battery_cache(true, 20)), Some("battery_low"));
+        assert_eq!(battery_skip_reason(mk_battery_cache(true, 19)), Some("battery_low"));
+        assert_eq!(battery_skip_reason(mk_battery_cache(true, 1)),  Some("battery_low"));
+        assert_eq!(battery_skip_reason(mk_battery_cache(true, 0)),  Some("battery_low"));
+    }
+
+    #[test]
+    fn battery_skip_runtime_helper_is_safe_on_all_platforms() {
+        // On non-Windows the cached read is (false, 100) and must never trip.
+        // On Windows hitting GetSystemPowerStatus on a CI machine is also fine.
+        // Either way the call must not panic.
+        let _ = should_skip_for_battery();
+    }
+
+    // ── #34 game mode detection ──────────────────────────────────────────
+
+    #[test]
+    fn game_mode_true_for_fullscreen_popup_no_border() {
+        // 1920x1080 popup window with no border, exact primary coverage.
+        assert!(is_game_mode_for(0, 0, 1920, 1080, 1920, 1080, true, false, "game.exe"));
+    }
+
+    #[test]
+    fn game_mode_true_when_window_extends_past_primary() {
+        // Some games over-extend the rect by 1px on each side.
+        assert!(is_game_mode_for(-1, -1, 1921, 1081, 1920, 1080, true, false, "game.exe"));
+    }
+
+    #[test]
+    fn game_mode_false_for_normal_windowed_app() {
+        // Centred 800x600 normal window with border on a 1920x1080 monitor.
+        assert!(!is_game_mode_for(560, 240, 1360, 840, 1920, 1080, false, true, "notepad.exe"));
+    }
+
+    #[test]
+    fn game_mode_false_for_maximized_with_border() {
+        // Maximised but still has WS_BORDER → not exclusive fullscreen.
+        assert!(!is_game_mode_for(0, 0, 1920, 1080, 1920, 1080, true, true, "chrome.exe"));
+    }
+
+    #[test]
+    fn game_mode_false_for_popup_smaller_than_primary() {
+        // Popup style + no border but only covers half the screen.
+        assert!(!is_game_mode_for(0, 0, 960, 540, 1920, 1080, true, false, "tooltip.exe"));
+    }
+
+    #[test]
+    fn game_mode_true_for_known_fullscreen_player_regardless_of_rect() {
+        assert!(is_game_mode_for(100, 100, 200, 200, 1920, 1080, false, true, "vlc.exe"));
+        assert!(is_game_mode_for(100, 100, 200, 200, 1920, 1080, false, true, "C:\\PROGRA~1\\VLC\\vlc.exe"));
+        assert!(is_game_mode_for(0, 0, 0, 0, 1920, 1080, false, false, "wmplayer.exe"));
+        assert!(is_game_mode_for(0, 0, 0, 0, 1920, 1080, false, false, "mpc-hc64.exe"));
+    }
+
+    #[test]
+    fn game_mode_tick_stretches_to_30min() {
+        // Active, normal policy 5 min → would tick at 300, game mode → 1800.
+        assert_eq!(
+            next_tick_delay_secs_with_game_mode(0, 300, true),
+            GAME_MODE_TICK_SECS
+        );
+        // Idle, would tick at 30 → game mode also stretches to 1800.
+        assert_eq!(
+            next_tick_delay_secs_with_game_mode(120_000, 300, true),
+            GAME_MODE_TICK_SECS
+        );
+    }
+
+    #[test]
+    fn game_mode_tick_passthrough_when_off() {
+        // Game mode off → behave exactly like next_tick_delay_secs.
+        assert_eq!(next_tick_delay_secs_with_game_mode(0, 300, false), 300);
+        assert_eq!(next_tick_delay_secs_with_game_mode(120_000, 300, false), IDLE_TICK_SECS);
+    }
+
+    #[test]
+    fn game_mode_tick_does_not_shorten_longer_intervals() {
+        // If the policy already specifies a longer interval (e.g. 1 hour),
+        // game mode must NOT shorten it.
+        assert_eq!(
+            next_tick_delay_secs_with_game_mode(0, 7200, true),
+            7200
+        );
     }
 
     // ── #28 click ring buffer ────────────────────────────────────────────

@@ -25,6 +25,10 @@ pub mod apply;
 pub mod manifest;
 pub mod package;
 pub mod swap;
+pub mod version_checker;
 
 pub use package::{verify_update_package, UpdateError, UpdateMetadata};
 pub use swap::{apply_update, rollback_update};
+pub use version_checker::{
+    compare_semver, run_version_checker, UpdateManifest, VersionCheckerConfig,
+};

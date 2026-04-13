@@ -27,6 +27,8 @@
 #[cfg(target_os = "windows")]
 mod health_monitor;
 mod ipc;
+#[cfg(target_os = "windows")]
+mod uninstall_protect;
 
 use std::time::Duration;
 
@@ -72,6 +74,14 @@ async fn main() -> Result<()> {
     {
         health_monitor::spawn_health_monitor();
         info!("health monitor spawned");
+
+        // Uninstall + service-tampering protection (Faz 4 Wave 2 #37).
+        // Runs on its own dedicated std::thread (sync SCM polls) and
+        // emits findings to watchdog.log alongside the heartbeat-based
+        // detector above. Independent of the tokio runtime so a hung
+        // tokio reactor does not blind tamper detection.
+        uninstall_protect::spawn_uninstall_protection();
+        info!("uninstall protection spawned");
     }
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();

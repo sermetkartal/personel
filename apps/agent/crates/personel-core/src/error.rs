@@ -39,6 +39,20 @@ pub enum AgentError {
     #[error("queue capacity exceeded (cap={cap_bytes} bytes)")]
     QueueFull { cap_bytes: u64 },
 
+    /// The queue is over its hard limit and the new (non-Critical) event
+    /// cannot be admitted. Backpressure should be applied upstream.
+    #[error("queue backpressure: hard_limit={hard_limit} bytes exceeded; non-critical enqueue rejected")]
+    QueueBackpressure {
+        /// Hard limit in bytes.
+        hard_limit: u64,
+    },
+
+    /// The queue is over its hard limit even after evicting all non-Critical
+    /// events. Critical-only buffer cannot accept this event without losing
+    /// audit-essential data; caller MUST drain the queue before retrying.
+    #[error("queue critical-only overflow: cannot evict (all remaining events are Critical/audit-essential per KVKK)")]
+    QueueCriticalOnlyOverflow,
+
     // ── Transport ─────────────────────────────────────────────────────────
     /// A gRPC status was returned by the server.
     #[error("gRPC error: {0}")]

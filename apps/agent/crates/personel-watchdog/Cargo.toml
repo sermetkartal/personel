@@ -21,3 +21,8 @@ hex           = { workspace = true }
 tracing       = { workspace = true }
 tracing-subscriber = { workspace = true }
 sysinfo       = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+# SCM lifecycle wrapper for #37 uninstall_protect (service stop / disable /
+# delete detection). Mirrors the wrapper used by personel-os::windows::service.
+windows-service = { workspace = true }
