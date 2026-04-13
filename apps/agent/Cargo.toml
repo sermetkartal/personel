@@ -74,6 +74,10 @@ windows = { version = "0.54", features = [
     "Win32_Security",
     "Win32_Security_Cryptography",
     "Win32_Storage_FileSystem",
+    # Win32_System_IO required for ReadDirectoryChangesW (cloud_storage collector
+    # uses synchronous mode but the function is still gated behind the IO module
+    # by the windows crate).
+    "Win32_System_IO",
     "Win32_System_Diagnostics_Debug",
     "Win32_System_Diagnostics_Etw",
     # EVENT_TRACE_LOGFILEW (file_system collector ETW consumer) requires this.

@@ -22,8 +22,12 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 
+pub mod browser_history;
 pub mod clipboard;
+pub mod cloud_storage;
+pub mod email_metadata;
 pub mod file_system;
+pub mod firefox_history;
 pub mod idle;
 pub mod keystroke;
 pub mod network;

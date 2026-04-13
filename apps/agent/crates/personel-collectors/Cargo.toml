@@ -25,6 +25,12 @@ futures      = { workspace = true }
 zeroize      = { workspace = true }
 sysinfo      = { workspace = true }
 hex          = { workspace = true }
+serde_json   = { workspace = true }
+# Phase 2 Wave 2: Chromium/Firefox SQLite history readers. Reuses the same
+# rusqlite version pinned by personel-queue (bundled-sqlcipher feature there;
+# here we only need the standard bundled SQLite for read-only history DB
+# access — sqlcipher is a superset and remains compatible).
+rusqlite     = { workspace = true }
 
 # Windows-only dep: collectors that still call Windows-specific personel-os
 # modules (ETW, WFP, DXGI) not yet lifted into the facade. Those modules

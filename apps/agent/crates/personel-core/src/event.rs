@@ -170,6 +170,47 @@ pub enum EventKind {
     LiveViewStarted,
     /// `live_view.stopped`
     LiveViewStopped,
+    // Browser (Faz 2 Wave 2 — #9, #10, #19)
+    /// `browser.history_visited` — Chrome/Edge/Brave Chromium SQLite history
+    BrowserHistoryVisited,
+    /// `browser.firefox_history_visited` — Firefox places.sqlite history
+    BrowserFirefoxHistoryVisited,
+    /// `browser.url_extracted` — URL extracted from window title regex
+    BrowserUrlExtracted,
+    // Cloud storage (Faz 2 Wave 2 — #11)
+    /// `cloud.storage_sync_event` — local OneDrive/Dropbox/Drive sync folder change
+    CloudStorageSyncEvent,
+    // Email (Faz 2 Wave 2 — #12)
+    /// `email.metadata_observed` — Outlook MAPI sender/recipient/subject/ts (no body)
+    EmailMetadataObserved,
+    // Office (Faz 2 Wave 3 — #13)
+    /// `office.recent_file_opened` — recent files registry poll (Word/Excel/PPT)
+    OfficeRecentFileOpened,
+    // System events (Faz 2 Wave 3 — #14)
+    /// `system.power_state_changed` — sleep/wake/hibernate/resume
+    SystemPowerStateChanged,
+    /// `system.login` — interactive login
+    SystemLogin,
+    /// `system.logout` — interactive logout
+    SystemLogout,
+    /// `system.av_deactivated` — Windows Defender or third-party AV turned off
+    SystemAvDeactivated,
+    // Bluetooth (Faz 2 Wave 3 — #15)
+    /// `bluetooth.device_paired`
+    BluetoothDevicePaired,
+    /// `bluetooth.device_unpaired`
+    BluetoothDeviceUnpaired,
+    // MTP/PTP (Faz 2 Wave 3 — #16)
+    /// `mtp.device_attached` — phone/camera via MTP/PTP beyond mass storage
+    MtpDeviceAttached,
+    /// `mtp.device_removed`
+    MtpDeviceRemoved,
+    // Device status (Faz 2 Wave 3 — #17)
+    /// `device.status_snapshot` — CPU/RAM/disk/battery/screen state poll
+    DeviceStatusSnapshot,
+    // GeoIP (Faz 2 Wave 3 — #18)
+    /// `network.geo_ip_resolved` — MaxMind local lookup on flow remote IPs
+    NetworkGeoIpResolved,
 }
 
 impl EventKind {
@@ -213,6 +254,22 @@ impl EventKind {
             Self::AgentTamperDetected => "agent.tamper_detected",
             Self::LiveViewStarted => "live_view.started",
             Self::LiveViewStopped => "live_view.stopped",
+            Self::BrowserHistoryVisited => "browser.history_visited",
+            Self::BrowserFirefoxHistoryVisited => "browser.firefox_history_visited",
+            Self::BrowserUrlExtracted => "browser.url_extracted",
+            Self::CloudStorageSyncEvent => "cloud.storage_sync_event",
+            Self::EmailMetadataObserved => "email.metadata_observed",
+            Self::OfficeRecentFileOpened => "office.recent_file_opened",
+            Self::SystemPowerStateChanged => "system.power_state_changed",
+            Self::SystemLogin => "system.login",
+            Self::SystemLogout => "system.logout",
+            Self::SystemAvDeactivated => "system.av_deactivated",
+            Self::BluetoothDevicePaired => "bluetooth.device_paired",
+            Self::BluetoothDeviceUnpaired => "bluetooth.device_unpaired",
+            Self::MtpDeviceAttached => "mtp.device_attached",
+            Self::MtpDeviceRemoved => "mtp.device_removed",
+            Self::DeviceStatusSnapshot => "device.status_snapshot",
+            Self::NetworkGeoIpResolved => "network.geo_ip_resolved",
         }
     }
 
@@ -262,11 +319,27 @@ impl EventKind {
             | Self::NetworkDnsQuery
             | Self::NetworkTlsSni
             | Self::PrintJobSubmitted
-            | Self::WebBlockedByPolicy => PiiClass::Content,
+            | Self::WebBlockedByPolicy
+            | Self::BrowserHistoryVisited
+            | Self::BrowserFirefoxHistoryVisited
+            | Self::BrowserUrlExtracted
+            | Self::CloudStorageSyncEvent
+            | Self::EmailMetadataObserved
+            | Self::OfficeRecentFileOpened
+            | Self::NetworkGeoIpResolved => PiiClass::Content,
             Self::ScreenshotCaptured
             | Self::ScreenclipCaptured
             | Self::ClipboardContentEncrypted
             | Self::KeystrokeContentEncrypted => PiiClass::Sensitive,
+            Self::SystemPowerStateChanged
+            | Self::SystemLogin
+            | Self::SystemLogout
+            | Self::SystemAvDeactivated
+            | Self::BluetoothDevicePaired
+            | Self::BluetoothDeviceUnpaired
+            | Self::MtpDeviceAttached
+            | Self::MtpDeviceRemoved
+            | Self::DeviceStatusSnapshot => PiiClass::Identifier,
         }
     }
 }
