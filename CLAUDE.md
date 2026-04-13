@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 1.7 — Pilot stack bring-up (Ubuntu 192.168.5.44) + Windows agent MSI build — 2026-04-12
+> Versiyon: 1.8 — Faz 1 items 1-5 done, item 5 ~85% (enroll + mTLS + auth e2e ✅; queue→stream drain bug open); item 6 blocked — 2026-04-13
 
 ---
 
@@ -123,16 +123,25 @@ PATH += $env:USERPROFILE\.cargo\bin; $env:USERPROFILE\.dotnet\tools; C:\Program 
 
 ---
 
-### 🚧 KAPATILACAK ZINCIR — Şu an kırık yerler
+### 🚧 KAPATILACAK ZINCIR — Şu an kırık yerler (2026-04-13 güncelleme)
 
-1. **Vault PKI engine kurulmadı** → enroll fail → agent başlamıyor
-2. **Tenant ID custom claim Keycloak'ta yok** → multi-tenant test edilemez
-3. **Windows agent enroll → service start → event akışı** uçtan uca test edilmemiş
-4. **`personel-collectors`** içinde `file_system` ve `network` synthetic stub
-5. **Browser/email/cloud/system events** collector hiç yok
-6. **MSI custom action enroll.exe**: TENANT_TOKEN olmadan koşmuyor (condition gating doğru ama enroll çalışmıyor)
+Faz 1 Madde 1-5 çalışma durumu:
 
-İlk çözülecek (Faz 1): bu 6 madde.
+1. ✅ **Vault PKI engine kurulmuş**: `pki` at `pki`, role `agent-cert` (client auth), role `server-cert` (both), AppRole `agent-enrollment` with policy `agent-enroll`, api-service + gateway-service AppRoles policy'leri ile
+2. ✅ **Keycloak `tenant_id` mapper**: user profile şemasına attribute eklendi, protocol mapper oluşturuldu, admin user tenant `be459dac-1a79-4054-b6e1-fa934a927315`a bağlı
+3. ⚠️ **Windows agent uçtan uca**: %85 — enroll → real Vault cert (hex serial, lowercase) → service start → all 12 collectors boot → mTLS handshake to gateway → gateway auth `stream: agent connected` VERIFIED. **Kırık**: agent queue `pending=4, in_flight=0` — bidi stream açık ama publish loop queue'yu drain etmiyor. Events NATS'a gitmiyor. Sonraki oturum için rust-engineer analizi lazım (`apps/agent/crates/personel-transport/src/client.rs` stream send path)
+4. `personel-collectors` içinde `file_system` ve `network` synthetic stub — Faz 2
+5. Browser/email/cloud/system events collector hiç yok — Faz 2
+6. ✅ **MSI enroll.exe**: çalışıyor — combined token (base64url JSON) parse + CSR üretim + POST /v1/agent-enroll + DPAPI seal + config.toml TOML schema (AgentConfig with `[enrollment]` section + `root_ca_path`)
+
+**Madde 6 (NATS smoke)** bloke: Madde 5 publish path düzelene kadar events_raw stream'i boş. 5 stream var, consumer'lar yapılandırılmış (events_raw, events_sensitive, live_view_control, agent_health, pki_events).
+
+**Yeni tespit edilen tech debt** (CLAUDE.md §10'a taşınacak):
+- **Schema drift**: `audit.append_event` iki farklı signature (init.sql vs migration 004) — migration 0029 overload ile köprülendi
+- **Gateway endpoint query**: `e.revoked` + `e.hw_fingerprint` sütunları init.sql şemasında yok — `NOT is_active` + `hardware_fingerprint` olarak patch'lendi, kalıcı unification lazım
+- **Cert serial format drift**: Vault `a1:b2:...` vs TLS extract `a1b2...` — API artık `formatSerialHex` ile normalleştiriyor
+- **Gateway TLS malzemesi**: `/etc/personel/tls/gateway.crt` artık Vault-PKI'dan geliyor (role `server-cert`), tenant_ca.crt + root_ca.crt da aynı CA'dan — bootstrap script bu rotasyonu yapmıyor, manuel pilot-ops adımı
+- **Gateway Dockerfile Go version**: `apps/gateway/Dockerfile` (alternatif) 1.22'yi pinliyor ama `go.mod` 1.25 istiyor → `infra/compose/gateway/Dockerfile` yolu kullanılıyor, 1.25-alpine pinli
 
 ---
 
@@ -512,7 +521,21 @@ Wave bitince:
 
 **Otonom çalışırken karşılaştığın tasarım kararlarını buraya ekle**:
 
-(başlangıçta boş — Faz 1'den itibaren doldurulacak)
+**Faz 1 session (2026-04-13) seçimleri**:
+
+- **Enrollment token format**: Admin API `/v1/endpoints/enroll` artık `{role_id, secret_id, enroll_url}` JSON'unu base64url-no-pad ile kodlayan tek bir `token` string'i döndürüyor. Operatör bunu `enroll.exe --token <opaque>` ile verir. `enroll_url` token'ın içinde authoritative — MSI-baked URL yok (GPO deployment'ında da değişmiyor).
+- **Gateway cert source**: Gateway PKI `server-cert` role'ünden (hem client hem server flag) cert alıyor. Aynı Vault PKI root'u hem server cert'ini üretiyor hem de client cert doğrulaması için trust anchor. Phase 1 basitliği — Phase 2'de ayrı root + intermediate chain.
+- **Cert serial format**: DB'de lowercase contiguous hex (kolonsuz), Vault issuance sonrası `formatSerialHex` ile normalize ediliyor. Gateway auth interceptor TLS cert'ten BigInt→hex'i doğrudan karşılaştırıyor.
+- **DPAPI key storage**: agent private key PKCS#8 DER + DPAPI LocalMachine scope. service.rs unseal → PEM wrap → tonic Identity. Dev-mode fallback: bytes passthrough, warning log.
+- **Audit append_event overload**: migration 0029 init.sql signature'ı bridge ediyor (`p_actor text, p_actor_ip inet, p_actor_ua text, p_tenant_id uuid, ...`). Go recorder.go değişmedi. Unification kalıcı borç.
+
+**Sonraki oturum ilk iş**:
+
+1. **Madde 5 closeout**: `apps/agent/crates/personel-transport/src/client.rs` `run_bidi` / `run_stream` publish path — neden queue→stream drain olmuyor? Muhtemel: key-version handshake (Hello) protocol agent tarafında gönderilmiyor ya da gateway cevabı bekleniyor. `grpcserver/handshake.go` + `stream.rs` trace. Beklenen fix: agent tarafı Hello mesajı gönderim + response handling.
+2. **Madde 6**: publish düzelince `docker exec personel-nats wget -qO- http://127.0.0.1:8222/jsz?streams=1` → events_raw `messages > 0` doğrulayın
+3. **Madde 7-20 (Faz 2 Wave 1-3)**: rust-engineer x14 paralel spawn — file_system/network real + browser/firefox/cloud/email + office/system/bluetooth/mtp/device/geo/url/clipboard collectors
+
+**Re-enroll akışı ihtiyacı**: agent Rust değişikliklerinden sonra `C:\ProgramData\Personel\agent\*` temizlenip fresh enroll yapılmalı. Önceki config root_ca_path içermiyor.
 
 **AWAITING CUSTOMER ACTION** (otonom çalışan Claude Code kapatamaz):
 
