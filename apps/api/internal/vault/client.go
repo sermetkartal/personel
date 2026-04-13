@@ -238,6 +238,130 @@ func (c *Client) IssueEnrollmentSecretID(ctx context.Context) (string, error) {
 	return sid, nil
 }
 
+// LoginWithAppRole authenticates against auth/approle/login with the
+// supplied role_id + secret_id and returns a NEW vault SDK client whose
+// token is the freshly issued single-use enrollment token. The returned
+// client shares TLS configuration with the receiver but has an
+// independent token, so subsequent operations against it will not stomp
+// on the Admin API's own AppRole token.
+//
+// This is the entry point used by the unauthenticated POST
+// /v1/agent-enroll handler. The token associated with the returned
+// client should have just enough policy to call pki/sign/agent-cert
+// once and nothing else (see policy agent-enroll.hcl).
+func (c *Client) LoginWithAppRole(ctx context.Context, roleID, secretID string) (*vaultapi.Client, error) {
+	// Clone the underlying configuration so the new client inherits the
+	// same address + TLS settings without sharing the token.
+	clone, err := c.raw.Clone()
+	if err != nil {
+		return nil, fmt.Errorf("vault: clone client: %w", err)
+	}
+	// Drop any inherited token before login so a stale token cannot mask
+	// a real auth failure.
+	clone.SetToken("")
+
+	secret, err := clone.Logical().WriteWithContext(ctx, "auth/approle/login", map[string]interface{}{
+		"role_id":   roleID,
+		"secret_id": secretID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vault: approle login: %w", err)
+	}
+	if secret == nil || secret.Auth == nil || secret.Auth.ClientToken == "" {
+		return nil, fmt.Errorf("vault: approle login returned no client token")
+	}
+	clone.SetToken(secret.Auth.ClientToken)
+	return clone, nil
+}
+
+// IssuedAgentCert is the result of signing an agent CSR via the PKI
+// engine. CertificatePEM is the leaf certificate, CAChainPEM is the
+// concatenated PEM chain (root + any intermediates) suitable for
+// embedding in the agent's pinned trust store.
+type IssuedAgentCert struct {
+	CertificatePEM string
+	CAChainPEM     string
+	SerialNumber   string
+	NotAfter       time.Time
+}
+
+// SignAgentCSR calls pki/sign/agent-cert on the provided client (which
+// must be authenticated as the agent-enrollment AppRole) with the given
+// CSR PEM and common name. ttl is e.g. "720h" (30 days). Returns the
+// signed leaf certificate, the CA chain, the serial number, and the
+// not_after timestamp parsed from Vault's response.
+//
+// The signing client is passed in (rather than using c.raw) because the
+// admin API's own root token must NEVER be used to sign agent certs —
+// only the single-use enrollment token has the right scoped policy.
+func (c *Client) SignAgentCSR(ctx context.Context, signClient *vaultapi.Client, csrPEM, commonName, ttl string) (*IssuedAgentCert, error) {
+	if signClient == nil {
+		return nil, fmt.Errorf("vault: sign agent csr: nil sign client")
+	}
+	secret, err := signClient.Logical().WriteWithContext(ctx, "pki/sign/agent-cert", map[string]interface{}{
+		"csr":         csrPEM,
+		"common_name": commonName,
+		"ttl":         ttl,
+		"format":      "pem",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vault: pki sign: %w", err)
+	}
+	if secret == nil || secret.Data == nil {
+		return nil, fmt.Errorf("vault: pki sign: nil response")
+	}
+
+	certPEM, ok := secret.Data["certificate"].(string)
+	if !ok || certPEM == "" {
+		return nil, fmt.Errorf("vault: pki sign: missing certificate")
+	}
+	serial, _ := secret.Data["serial_number"].(string)
+
+	// CA chain. Vault returns either ca_chain ([]interface{}) or just
+	// issuing_ca (string). Concatenate every PEM block we can find.
+	var chain strings.Builder
+	switch v := secret.Data["ca_chain"].(type) {
+	case []interface{}:
+		for _, e := range v {
+			if s, ok := e.(string); ok && s != "" {
+				if chain.Len() > 0 && !strings.HasSuffix(chain.String(), "\n") {
+					chain.WriteByte('\n')
+				}
+				chain.WriteString(s)
+			}
+		}
+	}
+	if chain.Len() == 0 {
+		if issuing, ok := secret.Data["issuing_ca"].(string); ok && issuing != "" {
+			chain.WriteString(issuing)
+		}
+	}
+
+	// not_after parses RFC3339 from Vault.
+	var notAfter time.Time
+	if s, ok := secret.Data["expiration"].(string); ok && s != "" {
+		// Some Vault versions emit Unix int instead — fall through to
+		// the json.Number path below if RFC3339 parse fails.
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			notAfter = t
+		}
+	}
+	if notAfter.IsZero() {
+		// expiration is sometimes a JSON number (Unix seconds).
+		switch v := secret.Data["expiration"].(type) {
+		case float64:
+			notAfter = time.Unix(int64(v), 0).UTC()
+		}
+	}
+
+	return &IssuedAgentCert{
+		CertificatePEM: certPEM,
+		CAChainPEM:     chain.String(),
+		SerialNumber:   serial,
+		NotAfter:       notAfter,
+	}, nil
+}
+
 // GetEnrollmentRoleID returns the agent-enrollment AppRole role_id.
 func (c *Client) GetEnrollmentRoleID(ctx context.Context) (string, error) {
 	secret, err := c.raw.Logical().ReadWithContext(ctx, "auth/approle/role/agent-enrollment/role-id")

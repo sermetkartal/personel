@@ -111,6 +111,18 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 	r.Get("/readyz", readyzHandler)
 	r.Handle(svc.Cfg.Observ.MetricsPath, promhttp.Handler())
 
+	// --- Public agent enrollment endpoint ---
+	// POST /v1/agent-enroll is unauthenticated by design — the agent
+	// has no Keycloak identity yet, only the single-use AppRole
+	// credential bundled in the opaque enrollment token. The handler
+	// itself enforces auth via three independent gates:
+	// (1) enrollment_tokens row exists, unused, unexpired;
+	// (2) Vault AppRole login succeeds with the presented role/secret;
+	// (3) the presented CSR is cryptographically valid.
+	// Mounted at the top level (NOT inside the /v1 auth group) so the
+	// AuthMiddleware never sees it.
+	r.Post("/v1/agent-enroll", endpoint.AgentEnrollHandler(svc.Endpoint))
+
 	// API v1 — all routes require auth.
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(AuthMiddleware(svc.Verifier))

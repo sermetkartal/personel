@@ -16,6 +16,7 @@ import (
 // Config is the validated root configuration.
 type Config struct {
 	HTTP        HTTPConfig        `koanf:"http"`
+	Server      ServerConfig      `koanf:"server"`
 	Postgres    PostgresConfig    `koanf:"postgres"`
 	ClickHouse  ClickHouseConfig  `koanf:"clickhouse"`
 	MinIO       MinIOConfig       `koanf:"minio"`
@@ -37,6 +38,21 @@ type HTTPConfig struct {
 	CORSOrigins     []string      `koanf:"cors_origins"`
 	TLSCert         string        `koanf:"tls_cert"`
 	TLSKey          string        `koanf:"tls_key"`
+}
+
+// ServerConfig holds public-facing URLs that the API embeds in tokens and
+// enrollment responses. Both must be reachable by Windows agents during
+// the enrollment ceremony.
+//
+// PublicURL is the authoritative base URL for this Admin API, used as the
+// "enroll_url" embedded inside the opaque enrollment token the operator
+// hands to the agent installer.
+//
+// GatewayURL is the gateway endpoint the agent will dial after a successful
+// enroll. Format: "tls://host:port".
+type ServerConfig struct {
+	PublicURL  string `koanf:"public_url"`  // e.g. "http://192.168.5.44:8000"
+	GatewayURL string `koanf:"gateway_url"` // e.g. "tls://192.168.5.44:9443"
 }
 
 type PostgresConfig struct {
@@ -157,6 +173,10 @@ func defaults() *Config {
 			WriteTimeout:    60 * time.Second,
 			IdleTimeout:     120 * time.Second,
 			ShutdownTimeout: 15 * time.Second,
+		},
+		Server: ServerConfig{
+			PublicURL:  "http://localhost:8000",
+			GatewayURL: "tls://localhost:9443",
 		},
 		Postgres: PostgresConfig{
 			MaxConns:        20,

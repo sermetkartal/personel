@@ -33,9 +33,27 @@ tracing-subscriber = { workspace = true }
 serde           = { workspace = true }
 serde_json      = { workspace = true }
 toml            = { workspace = true }
+sha2            = { workspace = true }
+hex             = { workspace = true }
+uuid            = { workspace = true }
+
+# Enrollment-only deps (used by bin/enroll.rs).
+# rcgen is workspace-pinned (0.12) and ships an internal P-256 ECDSA generator.
+rcgen           = { workspace = true }
+# reqwest needs the blocking feature for the one-shot enroll CLI; we keep
+# rustls-tls (workspace default) so we don't pull openssl.
+reqwest         = { workspace = true, features = ["blocking", "json", "rustls-tls"] }
+# base64 (URL-safe, no padding) for decoding the enrollment token blob.
+base64          = "0.22"
+# hostname read for CSR subject CN + enroll request body.
+hostname        = "0.4"
 
 # Windows-only: personel-os is still the direct dep for Windows service,
 # DPAPI, and ETW modules. The facade covers cross-platform functions; the
 # Windows-specific enrollment + service modules are #[cfg]-gated in source.
 [target.'cfg(target_os = "windows")'.dependencies]
 personel-os     = { path = "../personel-os" }
+# Used by bin/enroll.rs to read HKLM\SOFTWARE\Microsoft\Cryptography\MachineGuid
+# for the hardware fingerprint. Workspace `windows` crate already enables the
+# Win32_System_Registry feature.
+windows         = { workspace = true }

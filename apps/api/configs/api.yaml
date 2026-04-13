@@ -18,6 +18,14 @@ http:
   # tls_cert: ""
   # tls_key: ""
 
+server:
+  # PublicURL is embedded inside the opaque enrollment token the operator
+  # hands to the agent installer. Must be reachable from every Windows
+  # endpoint at agent enroll time. Pilot uses the Ubuntu backend IP.
+  public_url: "http://192.168.5.44:8000"
+  # GatewayURL is the gateway endpoint the agent dials after enrolling.
+  gateway_url: "tls://192.168.5.44:9443"
+
 postgres:
   dsn: "postgres://personel:personel@localhost:5432/personel?sslmode=disable"
   max_conns: 20

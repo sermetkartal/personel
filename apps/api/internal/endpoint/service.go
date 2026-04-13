@@ -3,8 +3,11 @@ package endpoint
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -29,24 +32,58 @@ type Endpoint struct {
 	RevokeReason        *string    `json:"revoke_reason,omitempty"`
 }
 
-// EnrollmentToken is issued to an operator to run the agent installer.
+// EnrollmentToken is the response returned to the admin operator when they
+// request a new endpoint enrollment. The Token field is an opaque
+// base64-url-no-padding blob that bundles role_id, secret_id and the
+// authoritative enroll URL — the operator hands it verbatim to the agent
+// installer, which decodes it client-side. Keeping the three values inside
+// one opaque blob means the install command line stays a single argument
+// and the operator cannot accidentally swap a wrong gateway.
 type EnrollmentToken struct {
-	RoleID   string    `json:"role_id"`
-	SecretID string    `json:"secret_id"`
+	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// enrollmentTokenPayload is the JSON shape that gets base64-url encoded
+// into EnrollmentToken.Token.
+type enrollmentTokenPayload struct {
+	RoleID    string `json:"role_id"`
+	SecretID  string `json:"secret_id"`
+	EnrollURL string `json:"enroll_url"`
+}
+
+// encodeEnrollmentToken serialises the payload as base64-url-no-padding.
+func encodeEnrollmentToken(p enrollmentTokenPayload) (string, error) {
+	raw, err := json.Marshal(p)
+	if err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(raw), nil
 }
 
 // Service manages endpoints.
 type Service struct {
-	pool         *pgxpool.Pool
-	vaultClient  *vault.Client
-	recorder     *audit.Recorder
-	log          *slog.Logger
+	pool        *pgxpool.Pool
+	vaultClient *vault.Client
+	recorder    *audit.Recorder
+	log         *slog.Logger
+	publicURL   string
+	gatewayURL  string
 }
 
-// NewService creates the endpoint service.
-func NewService(pool *pgxpool.Pool, vc *vault.Client, rec *audit.Recorder, log *slog.Logger) *Service {
-	return &Service{pool: pool, vaultClient: vc, recorder: rec, log: log}
+// NewService creates the endpoint service. publicURL is the externally
+// reachable Admin API base URL embedded in enrollment tokens; gatewayURL
+// is the gateway endpoint returned to the agent after a successful
+// agent-enroll call.
+func NewService(pool *pgxpool.Pool, vc *vault.Client, rec *audit.Recorder, log *slog.Logger, publicURL, gatewayURL string) *Service {
+	return &Service{
+		pool:        pool,
+		vaultClient: vc,
+		recorder:    rec,
+		log:         log,
+		publicURL:   strings.TrimRight(publicURL, "/"),
+		gatewayURL:  gatewayURL,
+	}
 }
 
 // List returns all endpoints for a tenant.
@@ -92,7 +129,10 @@ func (s *Service) Get(ctx context.Context, tenantID, id string) (*Endpoint, erro
 	return &e, nil
 }
 
-// Enroll issues a single-use enrollment token from Vault.
+// Enroll issues a single-use enrollment token from Vault and returns it
+// as a single opaque base64-url blob. The blob bundles {role_id,
+// secret_id, enroll_url} so the operator only has to copy one value
+// into the agent installer command line.
 func (s *Service) Enroll(ctx context.Context, p *auth.Principal) (*EnrollmentToken, error) {
 	roleID, err := s.vaultClient.GetEnrollmentRoleID(ctx)
 	if err != nil {
@@ -105,7 +145,9 @@ func (s *Service) Enroll(ctx context.Context, p *auth.Principal) (*EnrollmentTok
 
 	expiresAt := time.Now().UTC().Add(15 * time.Minute)
 
-	// Store the token record.
+	// Store the token record. The agent-enroll handler later looks this
+	// row up by vault_secret_id to recover the tenant_id binding (Vault
+	// has no idea which tenant a Secret ID belongs to).
 	_, err = s.pool.Exec(ctx,
 		`INSERT INTO enrollment_tokens (tenant_id, vault_secret_id, vault_role_id, created_by, expires_at)
 		 VALUES ($1::uuid, $2, $3, $4::uuid, $5)`,
@@ -115,20 +157,32 @@ func (s *Service) Enroll(ctx context.Context, p *auth.Principal) (*EnrollmentTok
 		return nil, fmt.Errorf("endpoint: store enrollment token: %w", err)
 	}
 
+	enrollURL := s.publicURL + "/v1/agent-enroll"
+	token, err := encodeEnrollmentToken(enrollmentTokenPayload{
+		RoleID:    roleID,
+		SecretID:  secretID,
+		EnrollURL: enrollURL,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("endpoint: encode enrollment token: %w", err)
+	}
+
 	_, err = s.recorder.Append(ctx, audit.Entry{
 		Actor:    p.UserID,
 		TenantID: p.TenantID,
 		Action:   audit.ActionEndpointEnrolled,
 		Target:   "enrollment-token:issued",
-		Details:  map[string]any{"expires_at": expiresAt},
+		Details: map[string]any{
+			"expires_at": expiresAt,
+			"enroll_url": enrollURL,
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
 	return &EnrollmentToken{
-		RoleID:    roleID,
-		SecretID:  secretID,
+		Token:     token,
 		ExpiresAt: expiresAt,
 	}, nil
 }

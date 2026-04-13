@@ -79,7 +79,7 @@ try {
 $ReleaseDir = "$AgentRoot\target\x86_64-pc-windows-msvc\release"
 
 # Verify expected binaries exist.
-@("personel-agent.exe", "personel-watchdog.exe", "enroll.exe") | ForEach-Object {
+@("personel-agent.exe", "personel-agent-watchdog.exe", "enroll.exe") | ForEach-Object {
     $Bin = "$ReleaseDir\$_"
     if (-not (Test-Path $Bin)) {
         throw "Expected binary not found after build: $Bin"

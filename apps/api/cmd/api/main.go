@@ -163,7 +163,7 @@ func main() {
 
 	tenantSvc := tenant.NewService(pool, recorder, log)
 	userSvc := user.NewService(pool, recorder, log)
-	endpointSvc := endpoint.NewService(pool, vc, recorder, log)
+	endpointSvc := endpoint.NewService(pool, vc, recorder, log, cfg.Server.PublicURL, cfg.Server.GatewayURL)
 
 	policyStore := policy.NewStore(pool)
 	policyPub := policy.NewPublisher(natsPublisher, vc, cfg.NATS.PolicySubject, log)
