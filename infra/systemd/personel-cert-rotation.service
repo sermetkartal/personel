@@ -1,0 +1,75 @@
+# =============================================================================
+# Personel Platform — Certificate Rotation (Vault PKI)
+#
+# Daily-fired oneshot that runs rotate-certs.sh against the inventory at
+# infra/scripts/cert-inventory.yaml. Renews any server cert whose notAfter
+# is within RENEWAL_WINDOW (default 30) days, atomically swaps it on disk,
+# and reloads the owning service.
+#
+# This is COMPLEMENTARY TO personel-cert-renewer.service. The renewer is
+# the older fallback that only WARNS on expiry; this rotator actually
+# performs the renewal. After this lands and is verified for two cycles,
+# personel-cert-renewer.service can be retired.
+#
+# REQUIREMENTS
+#   - vault CLI installed on the host (or symlinked from the container)
+#   - /etc/personel/vault-rotator-approle.env exists (root:root, mode 600):
+#       VAULT_ROLE_ID=...
+#       VAULT_SECRET_ID=...
+#     This AppRole has policy `cert-rotator` granting:
+#       path "pki/issue/server-cert" { capabilities = ["update"] }
+#   - /var/log/personel directory exists, owned by personel:personel
+#   - The personel user has read access to /etc/personel/tls and write
+#     access to the staging subdirectories (via group membership)
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Certificate Rotation (Vault PKI)
+Documentation=file:///opt/personel/infra/runbooks/install.md
+After=personel-compose.service network-online.target
+Requires=docker.service
+PartOf=personel.target
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+
+WorkingDirectory=/opt/personel/infra
+
+# AppRole credentials for the cert-rotator role
+EnvironmentFile=/etc/personel/vault-rotator-approle.env
+
+# Vault address + CA bundle
+Environment=VAULT_ADDR=https://127.0.0.1:8200
+Environment=VAULT_CACERT=/etc/personel/tls/tenant_ca.crt
+Environment=ROTATE_LOG_FILE=/var/log/personel/cert-rotation.log
+Environment=RENEWAL_WINDOW=30
+
+# AppRole login → export VAULT_TOKEN → run rotator → revoke token
+ExecStart=/bin/bash -c '\
+  set -euo pipefail; \
+  VAULT_TOKEN=$$(/usr/bin/vault write -field=token auth/approle/login \
+    role_id="$${VAULT_ROLE_ID}" secret_id="$${VAULT_SECRET_ID}"); \
+  export VAULT_TOKEN; \
+  trap "/usr/bin/vault token revoke -self >/dev/null 2>&1 || true" EXIT; \
+  /opt/personel/infra/scripts/rotate-certs.sh \
+'
+
+TimeoutStartSec=600
+Restart=no
+
+# Logging — captured in journald, also tee'd to file by the script
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-cert-rotation
+
+# Hardening
+ProtectSystem=strict
+ReadWritePaths=/etc/personel/tls /var/log/personel /var/run
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=personel.target

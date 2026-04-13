@@ -1,0 +1,49 @@
+# =============================================================================
+# Personel Platform — pg_hba.conf TLS Hardened (Roadmap #42)
+# =============================================================================
+# Production policy: every non-loopback connection MUST use TLS.
+# Loopback (Unix socket + 127.0.0.1) keeps simpler auth so init scripts and
+# pg_basebackup running on the host can still operate without bootstrapping
+# a client cert.
+#
+# Activated only when docker-compose.tls-override.yaml is layered on. The dev
+# fallback at pg_hba.conf is left untouched.
+#
+# TYPE       DATABASE          USER             ADDRESS               METHOD
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Local socket — superuser maintenance and entrypoint init scripts
+# -----------------------------------------------------------------------------
+local       all               postgres                                trust
+local       all               all                                     reject
+
+# -----------------------------------------------------------------------------
+# Loopback (host admin scripts on the same machine — pg_basebackup, psql)
+# scram-sha-256 password auth, no TLS requirement (kernel-local hop).
+# -----------------------------------------------------------------------------
+host        all               postgres         127.0.0.1/32           scram-sha-256
+host        all               postgres         ::1/128                scram-sha-256
+host        replication       backup_operator  127.0.0.1/32           scram-sha-256
+host        replication       backup_operator  ::1/128                scram-sha-256
+
+# -----------------------------------------------------------------------------
+# Docker internal subnets — TLS REQUIRED. Application service roles only.
+# Any client attempting plaintext on these networks is rejected by the
+# explicit hostnossl line below before it hits the catch-all.
+# -----------------------------------------------------------------------------
+hostssl     personel          app_admin_api    172.16.0.0/12          scram-sha-256
+hostssl     personel          app_gateway      172.16.0.0/12          scram-sha-256
+hostssl     personel          app_dlp_ro       172.16.0.0/12          scram-sha-256
+hostssl     personel          app_keycloak     172.16.0.0/12          scram-sha-256
+hostssl     personel_keycloak app_keycloak     172.16.0.0/12          scram-sha-256
+hostssl     replication       backup_operator  172.16.0.0/12          scram-sha-256
+
+# Plaintext on Docker subnets is an explicit hard reject (loud error in pg log)
+hostnossl   all               all              172.16.0.0/12          reject
+
+# -----------------------------------------------------------------------------
+# Catch-all reject — any address not whitelisted above is denied.
+# -----------------------------------------------------------------------------
+host        all               all              0.0.0.0/0              reject
+host        all               all              ::/0                   reject

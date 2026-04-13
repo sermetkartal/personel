@@ -1,0 +1,263 @@
+name: personel
+
+# =============================================================================
+# Personel Platform — Production Healthcheck Override (Roadmap #56)
+# =============================================================================
+# Customers running the production stack layer this file on top of the base
+# docker-compose.yaml to ENFORCE strict healthcheck-gated startup ordering.
+#
+# Why a separate file:
+#   * The base compose already declares `condition: service_healthy` for most
+#     dependencies, but field deployments and dev sessions sometimes patch in
+#     `condition: service_started` as a debug shortcut. This override
+#     re-asserts the strict semantics in one place, idempotently.
+#   * Some services have weak / missing healthchecks because they ship in
+#     distroless containers without curl/wget. We patch those in here using
+#     binaries that ARE present (the service's own binary, busybox builtins
+#     where available, or python3 fallbacks).
+#   * The override touches NO image tags, environment variables, ports, or
+#     networks — only depends_on conditions and healthcheck stanzas. This
+#     keeps it composable with the postgres TLS override and the envoy
+#     production override.
+#
+# Usage (production):
+#   cd infra/compose
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f docker-compose.healthcheck-override.yaml \
+#     -f postgres/docker-compose.tls-override.yaml \
+#     up -d
+#
+# Do NOT layer this override on top of docker-compose.dev.yaml — the dev
+# file intentionally disables several healthchecks (api, console, keycloak)
+# because the dev images lack the required tooling. Mixing the two will
+# produce healthchecks that never go green and the stack will refuse to come
+# up. See docs/operations/healthcheck-restoration.md for the full migration
+# story.
+#
+# Rollback: drop the `-f docker-compose.healthcheck-override.yaml` flag on
+# the next `docker compose up -d`. No state is altered.
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # VAULT — base healthcheck uses `vault status` which works in production
+  # mode. Reaffirm here for clarity; no functional change.
+  # ---------------------------------------------------------------------------
+  vault:
+    healthcheck:
+      test: ["CMD-SHELL", "vault status -address=https://127.0.0.1:8200 -tls-skip-verify 2>&1 | grep -E 'Initialized|Sealed' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # POSTGRES — pg_isready over the local socket. Same as base.
+  # ---------------------------------------------------------------------------
+  postgres:
+    depends_on:
+      vault:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-personel} -h 127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # CLICKHOUSE — HTTP /ping endpoint. wget is in the alpine image.
+  # ---------------------------------------------------------------------------
+  clickhouse:
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8123/ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # NATS — monitoring port /healthz. wget is in the alpine image.
+  # ---------------------------------------------------------------------------
+  nats:
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:8222/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # MINIO — health/live endpoint. curl ships with minio image.
+  # ---------------------------------------------------------------------------
+  minio:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # OPENSEARCH — _cluster/health, accept yellow as healthy on single-node.
+  # ---------------------------------------------------------------------------
+  opensearch:
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsku admin:${OPENSEARCH_ADMIN_PASSWORD} 'https://127.0.0.1:9200/_cluster/health' | grep -Eq '\"status\":\"(green|yellow)\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+
+  # ---------------------------------------------------------------------------
+  # KEYCLOAK — /health/ready endpoint. The base image is distroless and has
+  # NEITHER curl nor wget, so the base compose's curl-based check fails on
+  # production. We work around by using Keycloak's own JVM via `kc.sh
+  # show-config` plus a TCP probe via /dev/tcp (bash builtin). This works
+  # because the keycloak image DOES have bash even if it lacks curl.
+  # ---------------------------------------------------------------------------
+  keycloak:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/ready HTTP/1.0\\r\\nHost: keycloak\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  # ---------------------------------------------------------------------------
+  # GATEWAY — has its own healthcheck subcommand that HTTP-GETs /healthz on
+  # the metrics port. Reaffirm dependencies as service_healthy.
+  # ---------------------------------------------------------------------------
+  gateway:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/personel-gateway", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # API — has its own healthcheck subcommand. Reaffirm strict deps.
+  # ---------------------------------------------------------------------------
+  api:
+    depends_on:
+      postgres:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/personel-api", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # ENRICHER — has its own healthcheck subcommand.
+  # ---------------------------------------------------------------------------
+  enricher:
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      nats:
+        condition: service_healthy
+      opensearch:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/personel-enricher", "healthcheck"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # DLP — own healthcheck subcommand.
+  # ---------------------------------------------------------------------------
+  dlp:
+    depends_on:
+      nats:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      vault:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/dlp", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # CONSOLE — Next.js /api/health route. The Node base image includes wget.
+  # ---------------------------------------------------------------------------
+  console:
+    depends_on:
+      api:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health | grep -q ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # PORTAL — same pattern as console.
+  # ---------------------------------------------------------------------------
+  portal:
+    depends_on:
+      api:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3001/api/health | grep -q ok"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # ENVOY — admin /ready endpoint on 9901.
+  # ---------------------------------------------------------------------------
+  envoy:
+    depends_on:
+      console:
+        condition: service_healthy
+      portal:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+      gateway:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:9901/ready | grep -q LIVE"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s

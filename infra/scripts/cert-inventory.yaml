@@ -1,0 +1,200 @@
+# =============================================================================
+# Personel Platform — Certificate Rotation Inventory
+# =============================================================================
+#
+# Source of truth for rotate-certs.sh. Each entry describes one TLS server
+# certificate that Vault PKI will re-issue when it falls inside the renewal
+# window (default 30 days).
+#
+# FIELDS
+#   name        Human-readable label, used in log lines and journald.
+#   role        Vault PKI role name (vault write pki/issue/<role>).
+#               All Personel server certs are issued from a single role
+#               'server-cert' configured with allow_any_name=true,
+#               allowed_domains=personel.internal,
+#               allow_subdomains=true, max_ttl=2160h.
+#   issuer_path Vault PKI mount path. The default is the on-prem dev path
+#               'pki' (root CA). When the multi-tenant tenant CA structure
+#               from ca-bootstrap.sh §5 is in place, change this to
+#               pki/tenant/<tenant_id>/servers per service.
+#   cn          common_name passed to vault write
+#   sans        DNS SAN list (comma-joined to alt_names by the rotator)
+#   ip_sans     IP SAN list (comma-joined to ip_sans by the rotator)
+#   cert_path   Absolute path to the live cert file on the host
+#   key_path    Absolute path to the live private key file on the host
+#   reload_cmd  Command the rotator runs after atomic swap to make the
+#               service re-read the cert. Use 'sighup-pid:/var/run/foo.pid'
+#               for processes that honor SIGHUP, or any docker compose /
+#               systemctl invocation.
+#   owner       chown target for the rotated files (uid:gid or user:group)
+#   mode        chmod target for the new key file (default 0600)
+#
+# RENEWAL WINDOW
+#   The rotator script renews any cert with `notAfter` <= now + 30 days.
+#   Cert TTL is 30 days (720h). The cron runs daily at 03:00, so each cert
+#   is renewed on its first daily check after entering the window — there
+#   is roughly 29 days of overlap between renewal trigger and cert expiry,
+#   which is the safety margin against rotation script failure.
+#
+# EDITING THIS FILE
+#   - Add a new service: append a stanza, run rotate-certs.sh --check first
+#     to validate.
+#   - Remove a service: delete the stanza, then physically delete the cert
+#     and key files (the rotator does NOT clean up orphans).
+#   - Change paths: rotate-certs.sh --check warns if cert_path is missing.
+# =============================================================================
+
+# Default Vault PKI mount; per-service entries can override.
+defaults:
+  issuer_path: pki
+  ttl: 720h
+  owner: personel:personel
+  mode: "0600"
+
+services:
+  - name: vault
+    role: server-cert
+    cn: vault.personel.internal
+    sans:
+      - vault
+      - vault.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/vault.crt
+    key_path: /etc/personel/tls/vault.key
+    # Vault picks up TLS reload via SIGHUP since Vault 1.3
+    reload_cmd: docker exec personel-vault sh -c 'kill -HUP 1'
+
+  - name: gateway
+    role: server-cert
+    cn: gateway.personel.internal
+    sans:
+      - gateway
+      - gateway.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/gateway.crt
+    key_path: /etc/personel/tls/gateway.key
+    reload_cmd: docker compose -f /opt/personel/infra/compose/docker-compose.yaml restart gateway
+
+  - name: api
+    role: server-cert
+    cn: api.personel.internal
+    sans:
+      - api
+      - api.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/api.crt
+    key_path: /etc/personel/tls/api.key
+    reload_cmd: docker compose -f /opt/personel/infra/compose/docker-compose.yaml restart api
+
+  - name: postgres
+    role: server-cert
+    cn: postgres.personel.internal
+    sans:
+      - postgres
+      - postgres.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/postgres.crt
+    key_path: /etc/personel/tls/postgres.key
+    # Postgres reloads SSL config on SIGHUP without restart
+    reload_cmd: docker exec personel-postgres sh -c 'pg_ctl reload -D /var/lib/postgresql/data'
+
+  - name: clickhouse
+    role: server-cert
+    cn: clickhouse.personel.internal
+    sans:
+      - clickhouse
+      - clickhouse.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/clickhouse.crt
+    key_path: /etc/personel/tls/clickhouse.key
+    # ClickHouse re-reads the cert on the next connection; SYSTEM RELOAD CONFIG forces it.
+    reload_cmd: docker exec personel-clickhouse clickhouse-client --query 'SYSTEM RELOAD CONFIG'
+
+  - name: nats
+    role: server-cert
+    cn: nats.personel.internal
+    sans:
+      - nats
+      - nats.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/nats.crt
+    key_path: /etc/personel/tls/nats.key
+    # NATS supports nats-server --signal reload for hot TLS reload
+    reload_cmd: docker exec personel-nats nats-server --signal reload
+
+  - name: minio
+    role: server-cert
+    cn: minio.personel.internal
+    sans:
+      - minio
+      - minio.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/minio.crt
+    key_path: /etc/personel/tls/minio.key
+    # MinIO reloads certs on SIGHUP
+    reload_cmd: docker exec personel-minio sh -c 'kill -HUP 1'
+
+  - name: opensearch
+    role: server-cert
+    cn: opensearch.personel.internal
+    sans:
+      - opensearch
+      - opensearch.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/opensearch.crt
+    key_path: /etc/personel/tls/opensearch.key
+    # OpenSearch security plugin needs a full restart for cert reload
+    reload_cmd: docker compose -f /opt/personel/infra/compose/docker-compose.yaml restart opensearch
+
+  - name: keycloak
+    role: server-cert
+    cn: keycloak.personel.internal
+    sans:
+      - keycloak
+      - keycloak.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/keycloak.crt
+    key_path: /etc/personel/tls/keycloak.key
+    # Keycloak (Quarkus) requires restart for TLS material change
+    reload_cmd: docker compose -f /opt/personel/infra/compose/docker-compose.yaml restart keycloak
+
+  - name: enricher
+    role: server-cert
+    cn: enricher.personel.internal
+    sans:
+      - enricher
+      - enricher.personel.internal
+      - localhost
+    ip_sans:
+      - 127.0.0.1
+      - 192.168.5.44
+    cert_path: /etc/personel/tls/enricher.crt
+    key_path: /etc/personel/tls/enricher.key
+    reload_cmd: docker compose -f /opt/personel/infra/compose/docker-compose.yaml restart enricher

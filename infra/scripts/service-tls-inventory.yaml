@@ -1,0 +1,125 @@
+# =============================================================================
+# Personel Platform — Service TLS Inventory
+# =============================================================================
+# Source of truth for which services receive Vault-PKI-issued server certs
+# and what their CN + SANs look like.
+#
+# Consumed by:
+#   - infra/scripts/issue-all-service-certs.sh  (bulk initial issuance)
+#   - infra/scripts/rotate-certs.sh              (sister agent #54 — renewal)
+#
+# Rules:
+#   - Every TLS-terminating service in the stack MUST have an entry here.
+#   - The Vault PKI role is "server-cert" (server_flag=true, max TTL 720h).
+#   - cn must be unique across the inventory.
+#   - sans = DNS SANs (hostnames/aliases). Always include the docker service
+#           name so intra-compose DNS works.
+#   - ip_sans = IP SANs. Always include 127.0.0.1 for local diagnostics; add
+#              192.168.5.44 (pilot host) for services exposed off-box.
+#   - ttl = lifetime requested from Vault. Server certs default to 720h (30d).
+#   - Phase 2 services (ml-classifier, ocr-service, uba-detector, livrec-service)
+#     may not be wired in compose yet; we issue certs for them anyway so they
+#     are ready when brought online.
+# =============================================================================
+
+defaults:
+  ttl: 720h
+  role: server-cert
+
+services:
+  # ---- Tier 0: Vault itself (issued via root after bootstrap) -------------
+  - name: vault
+    cn: vault.personel.internal
+    sans: [vault]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  # ---- Tier 1: Data tier --------------------------------------------------
+  - name: postgres
+    cn: postgres.personel.internal
+    sans: [postgres]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: clickhouse
+    cn: clickhouse.personel.internal
+    sans: [clickhouse]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: nats
+    cn: nats.personel.internal
+    sans: [nats]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: minio
+    cn: minio.personel.internal
+    sans: [minio, s3.personel.internal]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: opensearch
+    cn: opensearch.personel.internal
+    sans: [opensearch]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  # ---- Tier 2: Auth -------------------------------------------------------
+  - name: keycloak
+    cn: keycloak.personel.internal
+    sans: [keycloak, sso.personel.internal]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  # ---- Tier 3: App tier ---------------------------------------------------
+  - name: api
+    cn: api.personel.internal
+    sans: [api]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: gateway
+    cn: gateway.personel.internal
+    sans: [gateway]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: enricher
+    cn: enricher.personel.internal
+    sans: [enricher]
+    ip_sans: [127.0.0.1]
+
+  # ---- Tier 4: UI tier ----------------------------------------------------
+  - name: console
+    cn: console.personel.internal
+    sans: [console]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  - name: portal
+    cn: portal.personel.internal
+    sans: [portal]
+    ip_sans: [192.168.5.44, 127.0.0.1]
+
+  # ---- Tier 5: Phase 2 / sidecar services ---------------------------------
+  - name: dlp
+    cn: dlp.personel.internal
+    sans: [dlp]
+    ip_sans: [127.0.0.1]
+
+  - name: ml-classifier
+    cn: ml-classifier.personel.internal
+    sans: [ml-classifier]
+    ip_sans: [127.0.0.1]
+
+  - name: ocr-service
+    cn: ocr-service.personel.internal
+    sans: [ocr-service]
+    ip_sans: [127.0.0.1]
+
+  - name: uba-detector
+    cn: uba-detector.personel.internal
+    sans: [uba-detector]
+    ip_sans: [127.0.0.1]
+
+  - name: livrec-service
+    cn: livrec-service.personel.internal
+    sans: [livrec-service]
+    ip_sans: [127.0.0.1]
+
+  # ---- Tier 6: Observability ----------------------------------------------
+  - name: grafana
+    cn: grafana.personel.internal
+    sans: [grafana]
+    ip_sans: [192.168.5.44, 127.0.0.1]

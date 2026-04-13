@@ -1,0 +1,56 @@
+name: personel
+
+# =============================================================================
+# Personel Platform — Postgres TLS Production Override (Roadmap #42)
+# =============================================================================
+# Layer this override on top of docker-compose.yaml when the operator has
+# already (a) bootstrapped Vault PKI, (b) issued a postgres server cert, and
+# (c) dropped the cert files into /etc/personel/tls on the host.
+#
+# Usage (production):
+#   cd infra/compose
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f postgres/docker-compose.tls-override.yaml \
+#     up -d postgres
+#
+# Rollback (cert problem, can't start):
+#   docker compose -f docker-compose.yaml up -d postgres
+#   (the base compose already mounts the dev postgresql.conf which sets ssl=on
+#    but pointing at the older self-signed certs — flip back to dev override
+#    if even that fails to come up)
+#
+# This override does NOT change image versions, env vars, or networks. It only
+# swaps the postgresql.conf, pg_hba.conf, and command line.
+#
+# See docs/operations/postgres-tls-migration.md for the full operator story.
+# =============================================================================
+
+services:
+  postgres:
+    volumes:
+      # Production data + bootstrap stay the same as base
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf.tls:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf.tls:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Cert bundle is read-only; renewer rewrites the source files on host
+      - tls-certs:/etc/personel/tls:ro
+      # WAL archive directory shared with backup-incremental.sh on the host
+      - ${POSTGRES_WAL_ARCHIVE_DIR:-/var/backups/personel/pg/wal}:/var/backups/personel/pg/wal:rw
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    healthcheck:
+      # pg_isready hits the unix socket inside the container, which uses the
+      # `local trust` line from pg_hba.conf.tls — no cert verify needed for
+      # the healthcheck itself. Real client connections still go through
+      # the hostssl rules.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -h 127.0.0.1 -p 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s

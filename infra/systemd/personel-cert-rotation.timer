@@ -1,0 +1,22 @@
+# =============================================================================
+# Personel Platform — Cert Rotation Timer
+#
+# Fires daily at 03:00 local time (low-traffic window). Each daily run
+# inspects every cert in cert-inventory.yaml and rotates any cert with
+# notAfter <= now + 30 days. Cert TTL is 30 days, so each cert has roughly
+# 29 daily rotation opportunities before it expires — generous overlap
+# against rotation script failures.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Cert Rotation Timer
+PartOf=personel.target
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=900
+Unit=personel-cert-rotation.service
+
+[Install]
+WantedBy=personel.target

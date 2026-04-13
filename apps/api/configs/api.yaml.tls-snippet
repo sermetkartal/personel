@@ -1,0 +1,32 @@
+# =============================================================================
+# Personel Admin API — Postgres TLS Snippet (Roadmap #42)
+# =============================================================================
+# This is a delta snippet, not a complete config. Merge the postgres section
+# below into apps/api/configs/api.yaml when the operator has activated the
+# postgres TLS override (see docs/operations/postgres-tls-migration.md).
+#
+# Or override at runtime via env var:
+#   PERSONEL_POSTGRES_DSN="postgres://app_admin_api:apipass123@postgres:5432/personel?sslmode=verify-full&sslrootcert=/etc/personel/tls/root_ca.crt"
+#
+# `sslmode=verify-full` enforces:
+#   1. The Postgres server presents a cert chained to root_ca.crt
+#   2. The cert's CN or SAN matches the hostname in the DSN ("postgres")
+#
+# `sslmode=verify-ca` is NOT acceptable in production — drops hostname
+# verification, opens the door to in-network MITM via stolen cert.
+#
+# `sslmode=require` is also NOT acceptable — encrypts but accepts ANY cert.
+# =============================================================================
+
+postgres:
+  dsn: "postgres://app_admin_api:apipass123@postgres:5432/personel?sslmode=verify-full&sslrootcert=/etc/personel/tls/root_ca.crt"
+  max_conns: 20
+  min_conns: 2
+  max_conn_lifetime: 1h
+  max_conn_idle_time: 30m
+
+# Same change for the gateway (apps/gateway/configs/gateway.yaml) and the
+# enricher (apps/enricher/configs/enricher.yaml). Pattern is identical.
+#
+# DLP service uses a read-only role:
+#   postgres://app_dlp_ro:<password>@postgres:5432/personel?sslmode=verify-full&sslrootcert=/etc/personel/tls/root_ca.crt

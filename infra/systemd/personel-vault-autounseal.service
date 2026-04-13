@@ -1,0 +1,92 @@
+# =============================================================================
+# Personel Platform — Vault Auto-Unseal from Sealed Shares File (Production)
+# =============================================================================
+#
+# This unit is the production middle-ground between the dev script
+# personel-vault-unseal.service (env-var Shamir shares — convenient but
+# leaks shares to anyone who can read /proc/<pid>/environ) and a true HSM
+# auto-unseal (Phase 2, requires hardware procurement).
+#
+# It runs auto-unseal-sealed.sh, which:
+#   1. Reads the age-encrypted /etc/personel/vault-shares.enc
+#   2. Decrypts it with the master key supplied via VAULT_AUTOSEAL_KEY
+#   3. Submits the 3 shares to Vault
+#
+# THE MASTER KEY MUST NOT LIVE IN THIS UNIT FILE.
+#
+# Place it in a systemd drop-in that is created by the operator AFTER
+# physical handover at the production host. The drop-in file MUST be
+# root-owned and mode 600:
+#
+#   sudo mkdir -p /etc/systemd/system/personel-vault-autounseal.service.d
+#   sudo nano /etc/systemd/system/personel-vault-autounseal.service.d/master.conf
+#   # Contents:
+#   #   [Service]
+#   #   Environment=VAULT_AUTOSEAL_KEY=AGE-SECRET-KEY-1XXX...
+#   sudo chmod 600 /etc/systemd/system/personel-vault-autounseal.service.d/master.conf
+#   sudo systemctl daemon-reload
+#
+# The drop-in is created by the operator OUT-OF-BAND. It is never committed
+# to the repo, never copied into a container image, never tarred into a
+# backup. If the host is rebuilt, the operator re-creates the drop-in by
+# physically referring to the master key, which lives in the customer's
+# password vault.
+#
+# Where the operator stores the master key:
+#   - Customer's password manager (1Password / Bitwarden / Vaultwarden) under
+#     a "Personel Vault Master" entry, sealed with MFA
+#   - Backup copy in the customer DPO's tamper-evident envelope #6 (added
+#     to the existing 5-share envelope set per pki-bootstrap.md §3.2)
+#
+# This unit replaces personel-vault-unseal.service for production. Both
+# units MUST NOT be enabled simultaneously.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Vault Auto-Unseal (Sealed Shares File, Production)
+Documentation=file:///opt/personel/docs/operations/vault-prod-migration.md
+After=docker.service network-online.target
+Requires=docker.service
+Before=personel-compose.service
+PartOf=personel.target
+# Refuse to coexist with the dev unseal service
+Conflicts=personel-vault-unseal.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=no
+
+# The master key drop-in must exist or the unit fails
+ConditionPathExists=/etc/systemd/system/personel-vault-autounseal.service.d/master.conf
+ConditionPathExists=/etc/personel/vault-shares.enc
+
+# Shares file location (script default; override here for staging)
+Environment=VAULT_SHARES_FILE=/etc/personel/vault-shares.enc
+Environment=VAULT_ADDR=https://127.0.0.1:8200
+Environment=VAULT_CACERT=/etc/personel/tls/tenant_ca.crt
+
+# VAULT_AUTOSEAL_KEY is provided by the master.conf drop-in.
+# Do NOT add it here.
+
+ExecStart=/opt/personel/infra/compose/vault/auto-unseal-sealed.sh
+
+# Allow Vault container ~120 s to become reachable before giving up
+TimeoutStartSec=180
+
+# Do NOT auto-restart — a sealed Vault after a crash needs human review
+Restart=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-vault-autounseal
+
+# Hardening — the script needs /dev/shm for the ephemeral identity file
+ProtectSystem=strict
+ReadWritePaths=/etc/personel
+PrivateTmp=true
+ProtectHome=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=personel.target

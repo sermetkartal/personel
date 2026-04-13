@@ -1,0 +1,77 @@
+# =============================================================================
+# Personel Platform — MinIO WORM Bucket Initialization (one-shot)
+#
+# This is a one-shot service. It is NOT included in the default compose stack
+# and will NOT run on `docker compose up`. Run it explicitly when you want to
+# (re)provision the audit-worm + evidence-worm buckets:
+#
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f minio/docker-compose.worm-init.yaml \
+#     run --rm minio-worm-init
+#
+# This wrapper pins the same logic as infra/scripts/minio-worm-bootstrap.sh
+# but executes inside the compose network so it can resolve the `minio`
+# service name. Use the standalone script for host-level execution outside
+# compose; use this for clean compose-only environments.
+#
+# Prerequisites:
+#   /etc/personel/secrets/minio-root.env exists with MINIO_ROOT_USER + PASSWORD
+# =============================================================================
+services:
+  minio-worm-init:
+    image: minio/mc:latest
+    profiles:
+      - worm-init   # never starts implicitly; only `run` from CLI invokes it
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ENDPOINT: "http://minio:9000"
+      AUDIT_BUCKET: "audit-worm"
+      EVIDENCE_BUCKET: "evidence-worm"
+      RETENTION_DAYS: "1826"
+    env_file:
+      - /etc/personel/secrets/minio-root.env
+    volumes:
+      - /etc/personel/secrets:/etc/personel/secrets
+    entrypoint:
+      - "/bin/sh"
+      - "-eu"
+      - "-c"
+      - |
+        ALIAS="personel-worm-init"
+        echo "[worm-init] waiting for minio..."
+        for i in $$(seq 1 30); do
+          if mc alias set "$$ALIAS" "$$MINIO_ENDPOINT" "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD" --api s3v4 >/dev/null 2>&1; then
+            if mc ready "$$ALIAS" >/dev/null 2>&1; then
+              break
+            fi
+          fi
+          sleep 2
+        done
+
+        for bucket in "$$AUDIT_BUCKET" "$$EVIDENCE_BUCKET"; do
+          echo "[worm-init] provisioning $$bucket"
+          if mc ls "$$ALIAS/$$bucket" >/dev/null 2>&1; then
+            info=$$(mc retention info --default "$$ALIAS/$$bucket" 2>&1 || true)
+            if echo "$$info" | grep -qi "compliance"; then
+              echo "[worm-init]   $$bucket already has COMPLIANCE lock — OK"
+            else
+              echo "[worm-init] FATAL: $$bucket exists without Object Lock"
+              echo "[worm-init] Object Lock cannot be retroactively enabled."
+              echo "[worm-init] See docs/operations/minio-worm-migration.md §Recovery."
+              exit 1
+            fi
+          else
+            mc mb --with-lock "$$ALIAS/$$bucket"
+            echo "[worm-init]   created $$bucket with Object Lock"
+          fi
+
+          mc version enable "$$ALIAS/$$bucket" >/dev/null 2>&1 || true
+          mc retention set --default COMPLIANCE "$${RETENTION_DAYS}d" "$$ALIAS/$$bucket"
+          echo "[worm-init]   default retention applied: COMPLIANCE $${RETENTION_DAYS}d"
+        done
+
+        echo "[worm-init] complete."
+    restart: "no"

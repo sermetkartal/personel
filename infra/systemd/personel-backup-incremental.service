@@ -1,0 +1,44 @@
+# =============================================================================
+# Personel Platform — Hourly Incremental Backup Service (Roadmap #58)
+# Runs backup-incremental.sh — WAL validation, ClickHouse parts merge,
+# destination health probes, Prometheus textfile metric emission.
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Hourly Incremental Backup
+After=personel-compose.service
+Requires=docker.service
+PartOf=personel.target
+BindsTo=personel-compose.service
+
+[Service]
+Type=oneshot
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra
+
+EnvironmentFile=/opt/personel/infra/compose/.env
+Environment=BACKUP_ROOT=/var/backups/personel
+
+ExecStart=/opt/personel/infra/scripts/backup-incremental.sh
+
+# Hourly job — short timeout. If it ever exceeds 5 min something is wrong.
+TimeoutStartSec=300
+
+# Incremental failures are recoverable; the next hourly run picks up.
+# We do NOT restart on failure — the timer will retry on the next tick.
+Restart=no
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-backup-incremental
+
+# Sandboxing
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/backups/personel /var/lib/node_exporter/textfile_collector
+
+[Install]
+WantedBy=personel.target

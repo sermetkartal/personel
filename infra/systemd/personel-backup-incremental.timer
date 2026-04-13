@@ -1,0 +1,17 @@
+# =============================================================================
+# Personel Platform — Hourly Incremental Backup Timer (Roadmap #58)
+# =============================================================================
+
+[Unit]
+Description=Personel Platform Hourly Incremental Backup Timer
+PartOf=personel.target
+
+[Timer]
+# Every hour on the hour, plus a small jitter to avoid load spikes
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=120
+Unit=personel-backup-incremental.service
+
+[Install]
+WantedBy=personel.target

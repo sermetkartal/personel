@@ -1,0 +1,107 @@
+# =============================================================================
+# Personel Platform — NATS Production Override
+#
+# Apply on top of infra/compose/docker-compose.yaml to switch NATS from
+# the Phase-1 dev profile (no auth) to operator-mode JWT auth with
+# JetStream at-rest encryption.
+#
+# Usage:
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f nats/docker-compose.prod-override.yaml \
+#     up -d nats
+#
+# Prerequisites:
+#   1. infra/scripts/nats-bootstrap.sh has been executed.
+#   2. /etc/personel/nats/operator.jwt exists.
+#   3. /etc/personel/nats/resolver/ contains the SYS + PersonelMain JWTs.
+#   4. /etc/personel/secrets/nats-encryption.key exists.
+#   5. /etc/personel/tls/{nats.crt,nats.key,root_ca.crt} exist.
+#
+# This override replaces the dev nats.conf with nats-server.prod.conf and
+# injects the encryption key as a tmpfs-backed file (so it never touches
+# the writable container layer).
+# =============================================================================
+services:
+  nats:
+    command:
+      - "--config"
+      - "/etc/nats/nats-server.conf"
+    volumes:
+      # Production server config (read-only)
+      - ./nats/nats-server.prod.conf:/etc/nats/nats-server.conf:ro
+
+      # Operator JWT root of trust (read-only, world-readable inside container)
+      - /etc/personel/nats/operator.jwt:/etc/personel/nats/operator.jwt:ro
+
+      # Per-account JWT resolver dir (read-only)
+      - /etc/personel/nats/resolver:/etc/personel/nats/resolver:ro
+
+      # TLS material (read-only)
+      - /etc/personel/tls:/etc/personel/tls:ro
+
+      # JetStream encryption key (root-only on host, mounted read-only)
+      - /etc/personel/secrets/nats-encryption.key:/etc/personel/secrets/nats-encryption.key:ro
+
+      # Persistent JetStream store
+      - nats_jetstream:/data/jetstream
+
+    environment:
+      # The conf file references $NATS_ENCRYPTION_KEY; we read the file at
+      # entrypoint time and export it before NATS starts. The wrapper is
+      # baked into the official nats:2.10-alpine image via the entrypoint.
+      NATS_ENCRYPTION_KEY_FILE: "/etc/personel/secrets/nats-encryption.key"
+
+    # Override the entrypoint to read the key file into env BEFORE the
+    # nats-server process starts. This avoids leaking the key via
+    # `docker inspect`.
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - |
+        set -e
+        if [ -f "$$NATS_ENCRYPTION_KEY_FILE" ]; then
+          NATS_ENCRYPTION_KEY="$$(cat "$$NATS_ENCRYPTION_KEY_FILE")"
+          export NATS_ENCRYPTION_KEY
+        else
+          echo "FATAL: encryption key file missing at $$NATS_ENCRYPTION_KEY_FILE" >&2
+          exit 1
+        fi
+        exec nats-server "$$@"
+      - "nats-server"
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O-", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 20s
+
+  # ---------------------------------------------------------------------------
+  # Bind-mount creds files into each consumer service. The compose stack
+  # references these paths via PERSONEL_NATS_CREDS_FILE in the service config.
+  # ---------------------------------------------------------------------------
+  gateway:
+    volumes:
+      - /etc/personel/nats-creds/gateway.creds:/etc/personel/nats-creds/gateway.creds:ro
+    environment:
+      PERSONEL_NATS_URL: "tls://nats:4222"
+      PERSONEL_NATS_CREDS_FILE: "/etc/personel/nats-creds/gateway.creds"
+
+  enricher:
+    volumes:
+      - /etc/personel/nats-creds/enricher.creds:/etc/personel/nats-creds/enricher.creds:ro
+    environment:
+      PERSONEL_NATS_URL: "tls://nats:4222"
+      PERSONEL_NATS_CREDS_FILE: "/etc/personel/nats-creds/enricher.creds"
+
+  api:
+    volumes:
+      - /etc/personel/nats-creds/api.creds:/etc/personel/nats-creds/api.creds:ro
+    environment:
+      PERSONEL_NATS_URL: "tls://nats:4222"
+      PERSONEL_NATS_CREDS_FILE: "/etc/personel/nats-creds/api.creds"
+
+volumes:
+  nats_jetstream:
+    driver: local

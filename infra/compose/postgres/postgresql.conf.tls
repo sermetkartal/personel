@@ -1,0 +1,117 @@
+# =============================================================================
+# Personel Platform — PostgreSQL TLS Hardened Configuration (Roadmap #42)
+# =============================================================================
+# This file is the production-bound TLS variant of postgresql.conf.
+# Activated only when docker-compose.tls-override.yaml is layered on top of
+# the base compose file. Falls back to the dev-shortcut postgresql.conf when
+# the override is not in use.
+#
+# Operator workflow: see docs/operations/postgres-tls-migration.md
+#
+# Required cert files at /etc/personel/tls (issued from Vault PKI server-cert
+# role with CN=postgres.personel.internal + DNS:postgres + IP:192.168.5.44):
+#   - postgres.crt    (server cert, mode 0644)
+#   - postgres.key    (server private key, mode 0600, owned by postgres uid)
+#   - root_ca.crt     (chain root for client cert validation, mode 0644)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CONNECTIONS AND AUTHENTICATION
+# -----------------------------------------------------------------------------
+listen_addresses          = '*'
+port                      = 5432
+max_connections           = 200
+superuser_reserved_connections = 5
+
+# -----------------------------------------------------------------------------
+# TLS — REQUIRED for all non-loopback clients (enforced via pg_hba.conf.tls)
+# Renewal is via Vault PKI + cert-renewer.timer (see #54).
+# -----------------------------------------------------------------------------
+ssl                       = on
+ssl_cert_file             = '/etc/personel/tls/postgres.crt'
+ssl_key_file              = '/etc/personel/tls/postgres.key'
+ssl_ca_file               = '/etc/personel/tls/root_ca.crt'
+ssl_min_protocol_version  = 'TLSv1.2'
+ssl_prefer_server_ciphers = on
+ssl_ciphers               = 'HIGH:!aNULL:!MD5:!3DES:!RC4'
+
+# -----------------------------------------------------------------------------
+# MEMORY (same budget as base config)
+# -----------------------------------------------------------------------------
+shared_buffers            = 2GB
+effective_cache_size      = 6GB
+work_mem                  = 64MB
+maintenance_work_mem      = 512MB
+wal_buffers               = 64MB
+huge_pages                = try
+
+# -----------------------------------------------------------------------------
+# WRITE-AHEAD LOG — PITR ready (Roadmap #58 + #61)
+# WAL archiving is enabled here. The archive_command writes to a directory
+# that is bind-mounted into the container at /var/backups/personel/pg/wal.
+# backup-incremental.sh hourly script reads from this same directory.
+# -----------------------------------------------------------------------------
+wal_level                 = replica
+archive_mode              = on
+archive_command           = 'test ! -f /var/backups/personel/pg/wal/%f && cp %p /var/backups/personel/pg/wal/%f'
+archive_timeout           = 300                # force WAL switch every 5 min
+max_wal_size              = 4GB
+min_wal_size              = 512MB
+wal_compression           = on
+checkpoint_completion_target = 0.9
+checkpoint_timeout        = 10min
+max_wal_senders           = 5                  # for pg_basebackup --X stream
+
+# -----------------------------------------------------------------------------
+# QUERY TUNING
+# -----------------------------------------------------------------------------
+random_page_cost          = 1.1
+effective_io_concurrency  = 200
+max_parallel_workers_per_gather = 2
+max_parallel_workers      = 4
+parallel_leader_participation = on
+default_statistics_target = 200
+
+# -----------------------------------------------------------------------------
+# AUTOVACUUM
+# -----------------------------------------------------------------------------
+autovacuum                = on
+autovacuum_max_workers    = 4
+autovacuum_vacuum_cost_delay = 2ms
+autovacuum_vacuum_scale_factor = 0.01
+autovacuum_analyze_scale_factor = 0.005
+autovacuum_vacuum_insert_threshold = 500
+
+# -----------------------------------------------------------------------------
+# LOGGING — also log SSL handshakes and failures for audit
+# -----------------------------------------------------------------------------
+logging_collector         = off
+log_destination           = 'stderr'
+log_line_prefix           = '%t [%p] %q%u@%d (ssl=%a) '
+log_min_duration_statement = 1000
+log_checkpoints           = on
+log_connections           = on                 # capture client TLS state
+log_disconnections        = off
+log_lock_waits            = on
+log_temp_files            = 0
+log_autovacuum_min_duration = 500ms
+
+# -----------------------------------------------------------------------------
+# ROW SECURITY
+# -----------------------------------------------------------------------------
+row_security              = on
+
+# -----------------------------------------------------------------------------
+# TIMEZONE
+# -----------------------------------------------------------------------------
+timezone                  = 'UTC'
+lc_messages               = 'tr_TR.UTF-8'
+lc_monetary               = 'tr_TR.UTF-8'
+lc_numeric                = 'tr_TR.UTF-8'
+lc_time                   = 'tr_TR.UTF-8'
+
+# -----------------------------------------------------------------------------
+# pg_cron (must remain in shared_preload_libraries for Phase 3.0 evidence)
+# -----------------------------------------------------------------------------
+shared_preload_libraries  = 'pg_cron'
+cron.database_name        = 'personel'
