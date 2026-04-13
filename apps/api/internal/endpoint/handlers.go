@@ -57,6 +57,7 @@ func EnrollHandler(svc *Service) http.HandlerFunc {
 		p := auth.PrincipalFromContext(r.Context())
 		token, err := svc.Enroll(r.Context(), p)
 		if err != nil {
+			svc.log.Error("endpoint enroll failed", "error", err.Error(), "tenant_id", p.TenantID, "user_id", p.UserID)
 			httpx.WriteError(w, r, http.StatusInternalServerError, httpx.ProblemTypeInternal, "Internal Error", "err.internal")
 			return
 		}

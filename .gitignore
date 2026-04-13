@@ -125,3 +125,12 @@ tmp/
 .tmp/
 *.tmp
 apps/agent/installer.zip
+
+# Claude Code local session
+.claude/
+
+# WiX MSI build artifacts
+apps/agent/installer/dist/
+*.wixpdb
+*.cab
+*.msi
