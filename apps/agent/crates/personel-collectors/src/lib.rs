@@ -59,6 +59,7 @@ use tracing::{debug, error, info, warn};
 use personel_core::clock::Clock;
 use personel_core::error::Result;
 use personel_core::ids::{EndpointId, TenantId};
+use personel_core::throttle::ThrottleState;
 use personel_crypto::Aes256Key;
 use personel_policy::engine::PolicyView;
 use personel_queue::queue::EventQueue;
@@ -87,6 +88,19 @@ pub struct HealthSnapshot {
 /// Context injected into every collector at startup.
 ///
 /// Provides testable seams for all external dependencies.
+///
+/// # Throttle awareness
+///
+/// `throttle` is a lock-free handle every collector CAN (but is not yet
+/// required to) consult at the start of each tick. Faz 4 Wave 1 #32 wires
+/// the field into the context and the monitor task but retrofits ZERO
+/// existing collectors — all 23 current collectors remain *throttle-unaware*.
+/// The `EventQueue` priority-based eviction continues to handle overload at
+/// the tail. Collectors that are expensive enough to justify tick-rate
+/// halving (e.g. future ML-in-agent workloads, screen capture) will call
+/// [`ThrottleState::current_state`](personel_core::throttle::ThrottleState::current_state)
+/// and [`ThrottleState::should_low_priority_skip`](personel_core::throttle::ThrottleState::should_low_priority_skip)
+/// directly as they are retrofitted in follow-up sprints.
 #[derive(Clone)]
 pub struct CollectorCtx {
     /// Shared access to the local event queue (the ONLY write path for collectors).
@@ -101,6 +115,9 @@ pub struct CollectorCtx {
     pub tenant_id: TenantId,
     /// This endpoint's unique identifier.
     pub endpoint_id: EndpointId,
+    /// Shared self-throttle state fed by the agent's 5-second resource monitor.
+    /// Lock-free on the read path. See the `Throttle awareness` note above.
+    pub throttle: Arc<ThrottleState>,
 }
 
 impl CollectorCtx {

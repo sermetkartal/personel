@@ -18,6 +18,19 @@ tokio          = { workspace = true }
 reqwest        = { workspace = true }
 bytes          = { workspace = true }
 hex            = { workspace = true }
+# tar + flate2 for .tar.gz update package extraction (Faz 4 #30).
+# tar is not in the workspace dep set; kept local to this crate since it is
+# the only consumer.
+tar            = "0.4"
+flate2         = { workspace = true }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+# MoveFileExW with MOVEFILE_DELAY_UNTIL_REBOOT fallback when the running
+# agent.exe cannot be replaced synchronously. personel-updater is otherwise
+# #![deny(unsafe_code)]; the unsafe call is scoped to swap.rs with an
+# explicit #![allow(unsafe_code)] on that module.
+windows        = { workspace = true }
 
 [dev-dependencies]
 rand           = { workspace = true }
+tempfile       = "3"

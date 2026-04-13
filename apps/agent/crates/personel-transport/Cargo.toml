@@ -5,9 +5,12 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-personel-core  = { path = "../personel-core" }
-personel-proto = { path = "../personel-proto" }
-personel-queue = { path = "../personel-queue" }
+personel-core    = { path = "../personel-core" }
+personel-proto   = { path = "../personel-proto" }
+personel-queue   = { path = "../personel-queue" }
+# Faz 4 #30 — OTA apply wire-in. handle_server_message dispatches
+# UpdateNotify into personel_updater::{verify_update_package, apply_update}.
+personel-updater = { path = "../personel-updater" }
 
 tokio         = { workspace = true }
 tonic         = { workspace = true }

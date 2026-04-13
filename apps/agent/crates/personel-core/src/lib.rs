@@ -16,5 +16,6 @@ pub mod clock;
 pub mod error;
 pub mod event;
 pub mod ids;
+pub mod throttle;
 
 pub use error::{AgentError, Result};

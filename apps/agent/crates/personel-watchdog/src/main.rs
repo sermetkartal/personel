@@ -24,6 +24,8 @@
 
 #![deny(unsafe_code)]
 
+#[cfg(target_os = "windows")]
+mod health_monitor;
 mod ipc;
 
 use std::time::Duration;
@@ -60,6 +62,17 @@ async fn main() -> Result<()> {
     let (ipc_tx, ipc_rx) = mpsc::channel::<IpcEvent>(32);
     spawn_ipc_server(ipc_tx);
     info!("IPC server spawned");
+
+    // Health monitor (Faz 4 Wave 1 #29) — listens on the
+    // \\.\pipe\personel-agent-health pipe and records tamper events to
+    // watchdog.log if the agent stops sending heartbeats. The agent picks
+    // up that file on its next start and replays entries as critical
+    // tamper events into its queue.
+    #[cfg(target_os = "windows")]
+    {
+        health_monitor::spawn_health_monitor();
+        info!("health monitor spawned");
+    }
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
     tokio::spawn(async move {

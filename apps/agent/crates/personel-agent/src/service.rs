@@ -38,10 +38,12 @@ use personel_collectors::{
     CollectorCtx,
 };
 use personel_core::clock::SystemClock;
+use personel_core::throttle::ThrottleState;
 use personel_policy::engine::PolicyEngine;
 use personel_queue::queue::{EventQueue, QueueConfig};
 
 use crate::config::AgentConfig;
+use crate::throttle::{run_throttle_monitor, MonitorDeps};
 
 /// Runs the main agent loop.
 ///
@@ -69,6 +71,17 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     let queue = Arc::new(EventQueue::open(queue_config).context("open event queue")?);
     info!("queue opened");
 
+    // ── Crash dump uploader (Faz 4 #31) ───────────────────────────────────────
+    // Spawn a one-shot task to scan the dumps directory for any crash dump
+    // files from a previous run, enqueue them as Critical tamper events, and
+    // move them to `uploaded/`. Runs on the blocking pool so large file reads
+    // + base64 don't stall the reactor. Non-fatal on any error.
+    let (crash_stop_tx, crash_stop_rx) = oneshot::channel::<()>();
+    let crash_queue = Arc::clone(&queue);
+    let _crash_task = tokio::spawn(async move {
+        crate::crash_dump::run_dump_uploader(crash_queue, crash_stop_rx).await;
+    });
+
     // ── Policy engine ─────────────────────────────────────────────────────────
     // TODO: load the real Ed25519 policy-signing public key from config.
     // Placeholder key (all zeros) — will fail on real policy bundles.
@@ -81,16 +94,39 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
         });
     info!("policy engine initialised (version={})", policy_engine.current().version);
 
+    // ── Self-throttle state (Faz 4 Wave 1 #32) ────────────────────────────────
+    // Shared between the throttle monitor (writer) and every collector
+    // (lock-free readers). Lives in personel-core so collectors can
+    // import it without depending on the agent binary crate.
+    let throttle_state = Arc::new(ThrottleState::new());
+
     // ── Collector context ─────────────────────────────────────────────────────
-    let clock = Arc::new(SystemClock);
+    // `dyn Clock` upcast so both the ctx and the throttle monitor deps
+    // can share the same Arc.
+    let clock: Arc<dyn personel_core::clock::Clock> = Arc::new(SystemClock);
     let ctx = CollectorCtx {
         queue: Arc::clone(&queue),
-        clock,
+        clock: Arc::clone(&clock),
         pe_dek: None, // TODO: load from keystore after enrollment
         policy_rx,
         tenant_id,
         endpoint_id,
+        throttle: Arc::clone(&throttle_state),
     };
+
+    // ── Throttle monitor task ─────────────────────────────────────────────────
+    // The monitor ticks every 5 s, measures the agent process's own
+    // CPU% + RSS, feeds the rolling window, and emits an
+    // `agent.health_heartbeat` event on every state transition.
+    let (throttle_stop_tx, throttle_stop_rx) = oneshot::channel::<()>();
+    let throttle_deps = MonitorDeps {
+        state: Arc::clone(&throttle_state),
+        queue: Arc::clone(&queue),
+        clock: Arc::clone(&clock),
+    };
+    let _throttle_task = tokio::spawn(async move {
+        run_throttle_monitor(throttle_deps, throttle_stop_rx).await;
+    });
 
     // ── Collector registry ────────────────────────────────────────────────────
     let mut registry = CollectorRegistry::new();
@@ -126,6 +162,40 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     // on the 30-second tick to detect collectors that failed to start.
     registry.start_all(&ctx).await.context("start collectors")?;
     info!("all collectors started — individual failures logged above if any");
+
+    // ── Anti-tamper startup checks (Faz 4 Wave 1 #29) ─────────────────────────
+    // Three checks: PE self-hash, registry ACL, watchdog log replay. Findings
+    // become critical agent.tamper_detected events. Failures NEVER abort agent
+    // startup — tamper findings should still reach the gateway via the queue.
+    {
+        let findings = crate::anti_tamper::run_startup_checks(&ctx);
+        if findings.is_empty() {
+            info!("anti_tamper: startup checks clean");
+        } else {
+            warn!(count = findings.len(), "anti_tamper: startup findings emitted");
+            for finding in &findings {
+                if let Err(e) = crate::anti_tamper::enqueue_tamper_event(&queue, &ctx, finding) {
+                    warn!(error = %e, check = finding.check, "anti_tamper: enqueue failed");
+                }
+            }
+        }
+    }
+
+    // ── Health pipe writer (Faz 4 Wave 1 #29) ─────────────────────────────────
+    // Spawns a 1-byte heartbeat sender on \\.\pipe\personel-agent-health every
+    // 30 s. The watchdog reads these pings and classifies the agent as
+    // unresponsive if no byte is seen for 90 s. Windows-only; on dev hosts
+    // the writer is not spawned and the watchdog log replay path also no-ops.
+    #[cfg(target_os = "windows")]
+    let (health_pipe_stop_tx, health_pipe_stop_rx) = oneshot::channel::<()>();
+    #[cfg(target_os = "windows")]
+    {
+        tokio::spawn(async move {
+            if let Err(e) = crate::health_pipe::run_health_pipe_writer(health_pipe_stop_rx).await {
+                warn!(error = %e, "health_pipe: writer task exited with error");
+            }
+        });
+    }
 
     // ── Transport ─────────────────────────────────────────────────────────────
     let (transport_stop_tx, transport_stop_rx) = oneshot::channel::<()>();
@@ -258,6 +328,10 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
 
     registry.stop_all().await;
     let _ = transport_stop_tx.send(());
+    let _ = crash_stop_tx.send(());
+    let _ = throttle_stop_tx.send(());
+    #[cfg(target_os = "windows")]
+    let _ = health_pipe_stop_tx.send(());
 
     info!("personel-agent stopped");
     Ok(())

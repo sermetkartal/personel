@@ -430,7 +430,74 @@ fn handle_server_message(msg: personel_proto::v1::ServerMessage) {
             info!(version = %p.policy_version, "transport: PolicyPush — TODO Phase 2: apply");
         }
         Some(Payload::UpdateNotify(u)) => {
-            info!(target = ?u.target_version, canary = u.canary, "transport: UpdateNotify — TODO Phase 2: notify watchdog");
+            // Faz 4 #30 — wire real OTA apply. The download/network path is
+            // still TODO; we consume a package that the control plane (or a
+            // future downloader task) deposits at a well-known path under
+            // %PROGRAMDATA%. If the file is not present this is a no-op —
+            // the server is free to issue UpdateNotify as a pre-announce
+            // hint. The UpdateAck response path is not plumbed yet: the
+            // outbound mpsc lives inside `stream_once` and is not reachable
+            // from this synchronous dispatch point. Logging success/failure
+            // is the Phase 1 compromise until the response channel is
+            // exposed (a small refactor: lift `msg_tx` into an Arc and hand
+            // a clone into `handle_server_message` so it can spawn the
+            // response send). For now the happy path still exits the
+            // process on success so the watchdog + SCM can relaunch from
+            // the new binary.
+            let target = u.target_version.clone();
+            let canary = u.canary;
+            info!(?target, canary, "transport: UpdateNotify received — spawning apply task");
+            tokio::spawn(async move {
+                let pkg_path = incoming_update_package_path();
+                if !pkg_path.exists() {
+                    warn!(
+                        path = ?pkg_path,
+                        "UpdateNotify: no package at expected incoming path; \
+                         nothing to apply (network download path is TODO)"
+                    );
+                    return;
+                }
+                // The verification key is baked in via env var at build
+                // time or falls back to a sentinel that always rejects —
+                // the point is that an unsigned package can never reach
+                // `apply_update`.
+                let signing_key_pem = std::env::var("PERSONEL_UPDATE_SIGNING_KEY_HEX")
+                    .unwrap_or_default();
+                if signing_key_pem.is_empty() {
+                    error!("UpdateNotify: no signing key configured; refusing to apply");
+                    return;
+                }
+                match personel_updater::verify_update_package(&pkg_path, &signing_key_pem) {
+                    Ok(metadata) => {
+                        let install_dir = default_install_dir();
+                        info!(
+                            version = %metadata.version,
+                            ?install_dir,
+                            "UpdateNotify: package verified; applying"
+                        );
+                        match personel_updater::apply_update(metadata, &install_dir) {
+                            Ok(()) => {
+                                warn!("UpdateNotify: apply_update ok — exiting so watchdog can relaunch");
+                                // Exit path: the watchdog (already upgraded)
+                                // observes the gap and invokes sc start.
+                                // TODO: emit UpdateAck{success:true} before exit.
+                                std::process::exit(0);
+                            }
+                            Err(e) => {
+                                error!(error = %e, "UpdateNotify: apply_update failed; attempting rollback");
+                                if let Err(r) = personel_updater::rollback_update(&install_dir) {
+                                    error!(error = %r, "UpdateNotify: rollback failed");
+                                }
+                                // TODO: emit UpdateAck{success:false, error:...}.
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        error!(error = %e, "UpdateNotify: package verification failed — refusing to apply");
+                        // TODO: emit UpdateAck{success:false, error:...}.
+                    }
+                }
+            });
         }
         Some(Payload::LiveViewStart(_)) => {
             info!("transport: LiveViewStart — TODO Phase 2: start screen capture");
@@ -453,6 +520,46 @@ fn handle_server_message(msg: personel_proto::v1::ServerMessage) {
         None => {
             warn!("transport: ServerMessage with no payload — ignoring");
         }
+    }
+}
+
+// ── OTA update paths ──────────────────────────────────────────────────────────
+
+/// Returns the path where a downloaded update package is expected to be
+/// deposited. Phase 1 simplification: a fixed path under PROGRAMDATA on
+/// Windows, or /tmp on dev builds. The actual network download task is
+/// Phase 2 and will write to this same path.
+fn incoming_update_package_path() -> std::path::PathBuf {
+    #[cfg(target_os = "windows")]
+    {
+        let pd = std::env::var("PROGRAMDATA")
+            .unwrap_or_else(|_| r"C:\ProgramData".to_string());
+        std::path::PathBuf::from(pd)
+            .join("Personel")
+            .join("agent")
+            .join("incoming")
+            .join("update.tar.gz")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::path::PathBuf::from("/tmp/personel-agent-update.tar.gz")
+    }
+}
+
+/// Returns the directory the agent is installed to. Picks up an override
+/// from `PERSONEL_INSTALL_DIR` so tests and dev runs don't need to touch
+/// `C:\Program Files`.
+fn default_install_dir() -> std::path::PathBuf {
+    if let Ok(override_) = std::env::var("PERSONEL_INSTALL_DIR") {
+        return std::path::PathBuf::from(override_);
+    }
+    #[cfg(target_os = "windows")]
+    {
+        std::path::PathBuf::from(r"C:\Program Files (x86)\Personel\Agent")
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        std::path::PathBuf::from("/opt/personel/agent")
     }
 }
 

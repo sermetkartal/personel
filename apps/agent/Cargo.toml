@@ -79,6 +79,11 @@ windows = { version = "0.54", features = [
     # by the windows crate).
     "Win32_System_IO",
     "Win32_System_Diagnostics_Debug",
+    # Win32_System_Kernel gates EXCEPTION_POINTERS + LPTOP_LEVEL_EXCEPTION_FILTER
+    # + SetUnhandledExceptionFilter + MINIDUMP_EXCEPTION_INFORMATION. Required
+    # by the crash_dump module (Faz 4 #31). MiniDumpWriteDump itself requires
+    # Win32_System_Kernel + Win32_System_Memory, both enabled here.
+    "Win32_System_Kernel",
     "Win32_System_Diagnostics_Etw",
     # EVENT_TRACE_LOGFILEW (file_system collector ETW consumer) requires this.
     "Win32_System_Time",

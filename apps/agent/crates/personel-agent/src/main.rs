@@ -19,9 +19,14 @@ use tokio::sync::oneshot;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
 
+mod anti_tamper;
 mod config;
+mod crash_dump;
+#[cfg(target_os = "windows")]
+mod health_pipe;
 mod runtime;
 mod service;
+mod throttle;
 
 #[cfg(target_os = "windows")]
 use personel_os::service::run_as_service as os_run_as_service;
@@ -53,6 +58,12 @@ fn main() -> Result<()> {
         sha = config::AGENT_GIT_SHA,
         "personel-agent initialising"
     );
+
+    // Install the process-wide unhandled-exception filter BEFORE the tokio
+    // runtime starts. On Windows this registers an SEH top-level filter that
+    // writes a MiniDump to `%ProgramData%\Personel\agent\dumps\` on crash.
+    // Faz 4 Wave 1 #31.
+    crash_dump::install_unhandled_exception_filter();
 
     let data_dir = crate::config::default_data_dir();
     let agent_config = crate::config::AgentConfig::load_or_default(&data_dir)
