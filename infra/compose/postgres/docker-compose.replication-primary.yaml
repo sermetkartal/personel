@@ -1,0 +1,86 @@
+name: personel
+
+# =============================================================================
+# Personel Platform — Postgres Replication PRIMARY Override (Roadmap #43)
+# =============================================================================
+# Layer this override on top of docker-compose.yaml + TLS override on vm3
+# (192.168.5.44) to turn the primary into a replication source. The replica
+# on vm5 uses a SEPARATE compose file (docker-compose.replication-replica.yaml)
+# and is NOT managed by this stack.
+#
+# Usage (production):
+#   cd infra/compose
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f postgres/docker-compose.tls-override.yaml \
+#     -f postgres/docker-compose.replication-primary.yaml \
+#     up -d postgres
+#
+# Rollback (replication broken, primary must keep serving clients):
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f postgres/docker-compose.tls-override.yaml \
+#     up -d postgres
+#   (this drops the replication-primary postgresql.conf + pg_hba.conf but
+#    does NOT drop the replicator role or the archive_command — the replica
+#    simply falls behind until it is either reconnected or decommissioned;
+#    see docs/operations/postgres-replication.md rollback section)
+#
+# This override only:
+#   * Swaps postgresql.conf → postgresql.conf.replication-primary
+#   * Swaps pg_hba.conf    → pg_hba.conf.replication-primary
+#   * Declares replication env vars (passwords stay in .env, NOT committed)
+#   * Leaves image, volumes, networks, ports, healthcheck untouched except
+#     where necessary
+#
+# The replicator role itself is created by postgres-replica-bootstrap.sh,
+# NOT by compose. This avoids baking a password into init.sql.
+#
+# Prerequisite: Wave 1 TLS override is active. This file does NOT re-declare
+# the tls-certs or wal archive mounts — they are inherited.
+#
+# See docs/operations/postgres-replication.md for the full operator story.
+# =============================================================================
+
+services:
+  postgres:
+    volumes:
+      # Production data + bootstrap stay the same as base
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf.replication-primary:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/pg_hba.conf.replication-primary:/etc/postgresql/pg_hba.conf:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      # Cert bundle is read-only; renewer rewrites the source files on host
+      - tls-certs:/etc/personel/tls:ro
+      # WAL archive directory shared with backup-incremental.sh on the host
+      - ${POSTGRES_WAL_ARCHIVE_DIR:-/var/backups/personel/pg/wal}:/var/backups/personel/pg/wal:rw
+    environment:
+      # Replication role is created by postgres-replica-bootstrap.sh via psql.
+      # These vars are declared here only so operators can `docker compose
+      # config` and see the replication topology at a glance — the values
+      # themselves come from /etc/personel/secrets/postgres-replicator-password
+      # and are NEVER baked into the image.
+      POSTGRES_REPLICATION_USER: ${POSTGRES_REPLICATION_USER:-replicator}
+      POSTGRES_REPLICATION_MODE: primary
+      POSTGRES_REPLICA_HOST: ${POSTGRES_REPLICA_HOST:-192.168.5.32}
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
+    healthcheck:
+      # pg_isready via the Unix socket; no cert verify needed for the
+      # local hop. Real application clients still traverse hostssl rules.
+      # An additional replication-liveness probe lives in
+      # infra/scripts/postgres-replication-test.sh and is NOT part of the
+      # container healthcheck (it would need the replicator password).
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -h 127.0.0.1 -p 5432"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    labels:
+      com.personel.service: postgres
+      com.personel.tier: data
+      com.personel.replication: primary

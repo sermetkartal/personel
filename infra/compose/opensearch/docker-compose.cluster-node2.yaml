@@ -1,0 +1,86 @@
+# =============================================================================
+# Personel Platform — OpenSearch Cluster Node 2 (vm5, 192.168.5.32)
+# =============================================================================
+# Faz 5 Madde 51 — OpenSearch 2-node cluster
+#
+# STANDALONE compose file, deployed on vm5. No main-stack overlay — vm5 only
+# runs this single service. The operator scps this file + the node2 YAML +
+# the TLS bundle to vm5 and runs:
+#
+#   docker compose -f docker-compose.cluster-node2.yaml up -d
+#
+# Paths:
+#   - /etc/personel/tls/opensearch-02.crt  (issued from Vault PKI on vm3,
+#     copied to vm5 during bootstrap)
+#   - /etc/personel/tls/opensearch-02.key
+#   - /etc/personel/tls/tenant_ca.crt
+#   - /var/lib/personel/opensearch-02/data  (bind-mount data dir)
+#   - ./opensearch.cluster-node2.yml relative to this compose file
+# =============================================================================
+
+volumes:
+  opensearch-02-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${OPENSEARCH_NODE2_DATA_DIR:-/var/lib/personel/opensearch-02/data}
+
+networks:
+  opensearch-cluster:
+    driver: bridge
+
+services:
+  opensearch-02:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: personel-opensearch-02
+    hostname: opensearch-02
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:9200:9200"
+      - "0.0.0.0:9300:9300"
+    volumes:
+      - opensearch-02-data:/usr/share/opensearch/data
+      - ./opensearch.cluster-node2.yml:/usr/share/opensearch/config/opensearch.yml:ro
+      - ${OPENSEARCH_NODE2_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    environment:
+      OPENSEARCH_JAVA_OPTS: ${OPENSEARCH_NODE2_JAVA_OPTS:--Xms1g -Xmx1g}
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_INITIAL_ADMIN_PASSWORD: ${OPENSEARCH_ADMIN_PASSWORD}
+      bootstrap.memory_lock: "true"
+    networks:
+      - opensearch-cluster
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          curl -sku admin:${OPENSEARCH_ADMIN_PASSWORD}
+          'https://127.0.0.1:9200/_cluster/health?wait_for_status=yellow&timeout=10s'
+          | grep -E '"status":"(green|yellow)"'
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: "${OPENSEARCH_NODE2_CPUS:-2}"
+          memory: "${OPENSEARCH_NODE2_MEM:-2g}"
+        reservations:
+          memory: 1500m
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: opensearch-02
+      com.personel.tier: data
+      com.personel.cluster-role: opensearch-master-data

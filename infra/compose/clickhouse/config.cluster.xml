@@ -1,0 +1,172 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Cluster Config (Multi-Host: vm3 + vm5)
+  =========================================================================
+  This file is loaded BY BOTH nodes (clickhouse-01 on vm3, clickhouse-02 on
+  vm5). It sits beside the base config.xml and is mounted into
+  /etc/clickhouse-server/config.d/config.cluster.xml on each node.
+
+  Distinction from the single-host staging rig (docker-compose.replication.yaml):
+    * That file boots BOTH replicas on vm3 for Phase 1 exit criterion #17
+      (bounded validation window). Shares the docker bridge; no TLS between
+      peers; uses localhost ports.
+    * THIS config deploys one replica per physical host with inter-node
+      TLS, Vault-issued server certs, and LAN-routed ports 9000/9009/9181/9234.
+      The two rigs are mutually exclusive — running both simultaneously
+      will collide on volume names and keeper state.
+
+  TOPOLOGY (Phase 5 Wave 2, #44):
+    cluster:  personel_cluster
+    shards:   1
+    replicas: 2  (hot-standby read scaling; no sharding of writes)
+      replica-01  clickhouse-01 on vm3 (192.168.5.44)
+      replica-02  clickhouse-02 on vm5 (192.168.5.32)
+
+  KEEPER QUORUM — ACCEPTED STAGING RISK:
+    Raft with 2 participants tolerates ZERO failures. Either node down
+    halts all ReplicatedMergeTree writes. Production must add a third
+    keeper participant (roadmap #45 Phase 6 follow-up). See
+    docs/operations/clickhouse-cluster.md §"3rd keeper participant".
+
+  MACROS — REPLICA SELECTION:
+    The <replica> macro is populated from CH_REPLICA env var on each host
+    (01 or 02). Keeps this file byte-identical across both nodes so only
+    the compose env vars differ.
+
+  TLS:
+    * Native TCP 9000 and interserver 9009 both require TLS.
+    * Cert + key paths match the Vault PKI server-cert role output
+      issued by clickhouse-cluster-bootstrap.sh.
+    * tenant_ca.crt is the shared root chain (same Vault PKI issuer).
+-->
+<clickhouse>
+
+    <!-- =================================================================
+         Remote servers — 1 shard, 2 replicas, internal_replication ON
+         (writes go through ReplicatedMergeTree, not Distributed fan-out)
+         ================================================================= -->
+    <remote_servers replace="replace">
+        <personel_cluster>
+            <shard>
+                <internal_replication>true</internal_replication>
+                <replica>
+                    <host>clickhouse-01</host>
+                    <port>9000</port>
+                    <secure>1</secure>
+                    <user>personel_app</user>
+                    <password from_env="CH_CLUSTER_PASSWORD"/>
+                </replica>
+                <replica>
+                    <host>clickhouse-02</host>
+                    <port>9000</port>
+                    <secure>1</secure>
+                    <user>personel_app</user>
+                    <password from_env="CH_CLUSTER_PASSWORD"/>
+                </replica>
+            </shard>
+        </personel_cluster>
+    </remote_servers>
+
+    <!-- =================================================================
+         Macros — {cluster} / {shard} / {replica} substitution tokens used
+         by ReplicatedMergeTree(zk_path, replica_name). {replica} comes
+         from CH_REPLICA env var (01 or 02). Byte-identical on both hosts.
+         ================================================================= -->
+    <macros replace="replace">
+        <cluster>personel_cluster</cluster>
+        <shard>01</shard>
+        <replica from_env="CH_REPLICA"/>
+    </macros>
+
+    <!-- =================================================================
+         Zookeeper / Keeper endpoints — both keepers listed, client
+         library will pick an available participant at session open.
+         ================================================================= -->
+    <zookeeper replace="replace">
+        <node index="1">
+            <host>keeper-01</host>
+            <port>9181</port>
+        </node>
+        <node index="2">
+            <host>keeper-02</host>
+            <port>9181</port>
+        </node>
+        <session_timeout_ms>30000</session_timeout_ms>
+        <operation_timeout_ms>10000</operation_timeout_ms>
+        <root>/clickhouse</root>
+    </zookeeper>
+
+    <!-- =================================================================
+         Interserver HTTP — used by ReplicatedMergeTree to fetch parts
+         between replicas over the LAN. Credentials required to prevent
+         anonymous replication pulls from any host that can reach port
+         9009. Hash is a SHA-256 hex digest; OPERATOR fills this in from
+         the output of clickhouse-cluster-bootstrap.sh.
+         ================================================================= -->
+    <interserver_http_port>9009</interserver_http_port>
+    <interserver_https_port>9010</interserver_https_port>
+    <interserver_http_host from_env="CH_INTERSERVER_HOST"/>
+
+    <interserver_http_credentials>
+        <user>interserver</user>
+        <password_sha256_hex from_env="CH_INTERSERVER_PASSWORD_SHA256"/>
+    </interserver_http_credentials>
+
+    <!-- =================================================================
+         TLS — inter-node transport (overrides base config.xml openSSL
+         with cluster-specific cert path that is unique per host, issued
+         by Vault PKI with CN matching the hostname used by the peer in
+         <remote_servers>).
+         ================================================================= -->
+    <openSSL replace="replace">
+        <server>
+            <certificateFile from_env="CH_TLS_CERT"/>
+            <privateKeyFile from_env="CH_TLS_KEY"/>
+            <caConfig>/etc/personel/tls/tenant_ca.crt</caConfig>
+            <verificationMode>strict</verificationMode>
+            <loadDefaultCAFile>false</loadDefaultCAFile>
+            <requireTLSv1_2>true</requireTLSv1_2>
+            <prefer_server_ciphers>true</prefer_server_ciphers>
+            <invalidCertificateHandler>
+                <name>RejectCertificateHandler</name>
+            </invalidCertificateHandler>
+        </server>
+        <client>
+            <certificateFile from_env="CH_TLS_CERT"/>
+            <privateKeyFile from_env="CH_TLS_KEY"/>
+            <caConfig>/etc/personel/tls/tenant_ca.crt</caConfig>
+            <verificationMode>strict</verificationMode>
+            <loadDefaultCAFile>false</loadDefaultCAFile>
+            <invalidCertificateHandler>
+                <name>RejectCertificateHandler</name>
+            </invalidCertificateHandler>
+        </client>
+    </openSSL>
+
+    <!-- =================================================================
+         Replicated table defaults — tighter deduplication window for
+         the cluster because LAN latency between vm3 and vm5 is measured
+         in milliseconds, not minutes.
+         ================================================================= -->
+    <merge_tree replace="replace">
+        <parts_to_delay_insert>300</parts_to_delay_insert>
+        <parts_to_throw_insert>600</parts_to_throw_insert>
+        <max_parts_in_total>100000</max_parts_in_total>
+        <merge_with_ttl_timeout>86400</merge_with_ttl_timeout>
+        <replicated_deduplication_window>1000</replicated_deduplication_window>
+        <replicated_deduplication_window_seconds>604800</replicated_deduplication_window_seconds>
+        <replicated_max_ratio_of_wrong_parts>0.5</replicated_max_ratio_of_wrong_parts>
+    </merge_tree>
+
+    <!-- =================================================================
+         Distributed DDL — uses the same keeper quorum. Lets us run
+         CREATE TABLE ... ON CLUSTER personel_cluster from either node.
+         ================================================================= -->
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+        <profile>default</profile>
+        <pool_size>1</pool_size>
+        <task_max_lifetime>604800</task_max_lifetime>
+    </distributed_ddl>
+
+</clickhouse>

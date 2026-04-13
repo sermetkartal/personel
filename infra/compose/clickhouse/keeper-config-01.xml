@@ -1,0 +1,62 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Keeper config (server_id=1, vm3)
+  =========================================================================
+  Loaded on vm3 by docker-compose.cluster-node1.yaml. Sits next to the
+  clickhouse-01 server config.cluster.xml and advertises the Raft quorum
+  made of keeper-01 (this host) and keeper-02 (vm5, 192.168.5.32).
+
+  WARNING: 2-node quorum tolerates zero failures. See runbook
+  docs/operations/clickhouse-cluster.md §"Keeper quorum trade-off".
+
+  PORT LAYOUT (host network or LAN-exposed):
+    9181  TCP  Keeper client protocol (ZooKeeper-compatible)
+    9234  TCP  Raft internal consensus
+
+  The tcp_port and hostname below are what ClickHouse server (both
+  keeper-01 and keeper-02 halves) will connect to. Hostnames must
+  resolve on the compose network (vm3 side uses the compose alias
+  keeper-01 for itself and the LAN hostname/IP for keeper-02).
+-->
+<clickhouse>
+    <keeper_server>
+        <path>/var/lib/clickhouse/coordination</path>
+
+        <tcp_port>9181</tcp_port>
+        <server_id>1</server_id>
+
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>information</raft_logs_level>
+            <heart_beat_interval_ms>500</heart_beat_interval_ms>
+            <election_timeout_lower_bound_ms>1000</election_timeout_lower_bound_ms>
+            <election_timeout_upper_bound_ms>2000</election_timeout_upper_bound_ms>
+            <snapshot_distance>100000</snapshot_distance>
+            <reserved_log_items>100000</reserved_log_items>
+            <force_sync>true</force_sync>
+            <quorum_reads>false</quorum_reads>
+            <auto_forwarding>true</auto_forwarding>
+        </coordination_settings>
+
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>keeper-01</hostname>
+                <port>9234</port>
+                <can_become_leader>true</can_become_leader>
+                <priority>2</priority>
+            </server>
+            <server>
+                <id>2</id>
+                <hostname>keeper-02</hostname>
+                <port>9234</port>
+                <can_become_leader>true</can_become_leader>
+                <priority>1</priority>
+            </server>
+        </raft_configuration>
+    </keeper_server>
+</clickhouse>

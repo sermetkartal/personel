@@ -1,0 +1,159 @@
+name: personel
+
+# =============================================================================
+# Personel Platform — ClickHouse Cluster Node 1 (vm3, 192.168.5.44)
+# Phase 5 Wave 2, Roadmap #44: ClickHouse 2-node + Keeper across vm3 + vm5
+# =============================================================================
+#
+# USAGE:
+#   cd infra/compose
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f clickhouse/docker-compose.cluster-node1.yaml \
+#     up -d clickhouse-01 keeper-01
+#
+# PREREQUISITES (run infra/scripts/clickhouse-cluster-bootstrap.sh first):
+#   1. The single-node `clickhouse` service from docker-compose.yaml must
+#      be stopped:
+#        docker compose stop clickhouse
+#      This overlay sets its replicas to 0 but that only applies cleanly
+#      on a fresh `up`; a running instance keeps its container until
+#      explicitly stopped.
+#   2. TLS certs in /etc/personel/tls:
+#        clickhouse-01.crt  (CN=clickhouse-01, SAN=clickhouse-01,192.168.5.44)
+#        clickhouse-01.key
+#        keeper-01.crt / .key
+#        tenant_ca.crt
+#   3. .env variables:
+#        CH_CLUSTER_PASSWORD           — cluster user password (min 20 chars)
+#        CH_INTERSERVER_PASSWORD_SHA256 — SHA-256 hex of interserver secret
+#        CLICKHOUSE_CLUSTER_DATA_DIR_01 — host path for node-1 volumes
+#   4. DNS / /etc/hosts entries on vm3:
+#        192.168.5.44  clickhouse-01  keeper-01
+#        192.168.5.32  clickhouse-02  keeper-02
+#      (compose aliases cover the local names; LAN hostnames must
+#      resolve the remote peer.)
+#
+# SYMMETRY NOTE: This file is NOT deployed to vm5. vm5 uses
+# docker-compose.cluster-node2.yaml which is a standalone compose file
+# (no overlay on the base). The base compose on vm5 is not needed
+# because only ClickHouse + Keeper run there.
+#
+# MUTUAL EXCLUSION: Do not combine with docker-compose.replication.yaml.
+# That file is the single-host staging rig for exit criterion #17 and
+# uses the same volume names + container names — they will collide.
+# =============================================================================
+
+services:
+
+  # Disable the single-node clickhouse service from the base compose.
+  # Stop it manually before applying this overlay on a running stack.
+  clickhouse:
+    deploy:
+      replicas: 0
+    profiles:
+      - disabled
+
+  # ---------------------------------------------------------------------------
+  # clickhouse-01 — replica-01 on vm3
+  # ---------------------------------------------------------------------------
+  clickhouse-01:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: personel-clickhouse-01
+    hostname: clickhouse-01
+    restart: unless-stopped
+    network_mode: host
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      CLICKHOUSE_DB: personel
+      CLICKHOUSE_USER: personel_app
+      CLICKHOUSE_PASSWORD: ${CH_CLUSTER_PASSWORD:?CH_CLUSTER_PASSWORD is required}
+      CH_CLUSTER_PASSWORD: ${CH_CLUSTER_PASSWORD}
+      CH_REPLICA: "01"
+      CH_INTERSERVER_HOST: clickhouse-01
+      CH_INTERSERVER_PASSWORD_SHA256: ${CH_INTERSERVER_PASSWORD_SHA256:?CH_INTERSERVER_PASSWORD_SHA256 is required}
+      CH_TLS_CERT: /etc/personel/tls/clickhouse-01.crt
+      CH_TLS_KEY: /etc/personel/tls/clickhouse-01.key
+    volumes:
+      - clickhouse-01-data:/var/lib/clickhouse
+      - clickhouse-01-logs:/var/log/clickhouse-server
+      # Base config — ports, memory, merge_tree, prometheus
+      - ./clickhouse/config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./clickhouse/users.xml:/etc/clickhouse-server/users.xml:ro
+      # Cluster overlay — remote_servers, macros, zookeeper, interserver TLS
+      - ./clickhouse/config.cluster.xml:/etc/clickhouse-server/config.d/config.cluster.xml:ro
+      # TLS certs (server cert issued by Vault PKI, CN=clickhouse-01)
+      - ${PERSONEL_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 14G
+        reservations:
+          cpus: "1"
+          memory: 4G
+
+  # ---------------------------------------------------------------------------
+  # keeper-01 — server_id=1, Raft leader-preferred
+  # Runs as a separate ClickHouse Keeper container (not embedded in CH
+  # server) so that keeper lifecycle is independent of the DB engine.
+  # ---------------------------------------------------------------------------
+  keeper-01:
+    image: clickhouse/clickhouse-keeper:24-alpine
+    container_name: personel-keeper-01
+    hostname: keeper-01
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      KEEPER_SERVER_ID: "1"
+    volumes:
+      - keeper-01-data:/var/lib/clickhouse/coordination
+      - ./clickhouse/keeper-config-01.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+      - ${PERSONEL_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    healthcheck:
+      # `ruok` (are you ok) — classic ZooKeeper 4-letter command
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 127.0.0.1 9181 | grep -q imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+# =============================================================================
+# Volumes — bind-mounted to /var/lib/personel/clickhouse-cluster/01 by default
+# =============================================================================
+volumes:
+  clickhouse-01-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_CLUSTER_DATA_DIR_01:-/var/lib/personel/clickhouse-cluster/01}/data
+  clickhouse-01-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_CLUSTER_DATA_DIR_01:-/var/lib/personel/clickhouse-cluster/01}/logs
+  keeper-01-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_CLUSTER_DATA_DIR_01:-/var/lib/personel/clickhouse-cluster/01}/keeper

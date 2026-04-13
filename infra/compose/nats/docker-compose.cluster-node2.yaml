@@ -1,0 +1,110 @@
+# =============================================================================
+# Personel Platform — NATS Cluster Node 2 Standalone Compose (vm5 / 192.168.5.32)
+#
+# This compose file is ENTIRELY STANDALONE. It is deployed on vm5 — a fresh
+# host running ONLY this single NATS node. There is no application stack on
+# vm5, no Postgres, no API, no gateway.
+#
+# vm5's only role in Phase 1 is to act as the second JetStream Raft voter
+# and stream replica peer. Application clients still connect through the
+# vm3-side advertised URL list; they do not need to be aware of vm5
+# separately, beyond the URL pool.
+#
+# Deployment:
+#   1. scp the staging tarball produced by infra/scripts/nats-cluster-bootstrap.sh
+#      from vm3 to vm5 and unpack into the standard /etc/personel layout.
+#   2. scp this file to vm5:/opt/personel/nats/docker-compose.yaml
+#   3. scp ../nats-server.cluster-node2.conf to
+#      vm5:/opt/personel/nats/nats-server.cluster-node2.conf
+#   4. ssh vm5 'cd /opt/personel/nats && docker compose up -d'
+#
+# Prerequisites on vm5:
+#   /etc/personel/nats/operator.jwt
+#   /etc/personel/nats/resolver/                  (full copy from vm3)
+#   /etc/personel/secrets/nats-encryption.key     (BYTE-IDENTICAL to vm3)
+#   /etc/personel/tls/{nats.crt,nats.key,root_ca.crt}  (vm5-specific cert)
+#   Host firewall permits TCP 6222 from 192.168.5.44/32 only.
+#   Host firewall permits TCP 4222 from the application subnet.
+#
+# Note: the nats.crt on vm5 must have CN/SAN matching 192.168.5.32 (the
+# advertised cluster URL). Wave 1 ca-bootstrap.sh issues a separate
+# server cert for each host — DO NOT reuse vm3's cert here.
+# =============================================================================
+name: personel-nats-mirror
+
+services:
+  personel-nats-02:
+    image: nats:2.10-alpine
+    container_name: personel-nats-02
+    restart: unless-stopped
+    command:
+      - "--config"
+      - "/etc/nats/nats-server.conf"
+    ports:
+      - "0.0.0.0:4222:4222"
+      - "127.0.0.1:8222:8222"
+      - "0.0.0.0:6222:6222"
+    volumes:
+      # Cluster-aware server config (read-only)
+      - ./nats-server.cluster-node2.conf:/etc/nats/nats-server.conf:ro
+
+      # Operator JWT root of trust
+      - /etc/personel/nats/operator.jwt:/etc/personel/nats/operator.jwt:ro
+
+      # Per-account JWT resolver dir
+      - /etc/personel/nats/resolver:/etc/personel/nats/resolver:ro
+
+      # TLS material — vm5-specific server cert
+      - /etc/personel/tls:/etc/personel/tls:ro
+
+      # JetStream encryption key — MUST be byte-identical to vm3
+      - /etc/personel/secrets/nats-encryption.key:/etc/personel/secrets/nats-encryption.key:ro
+
+      # Persistent JetStream store (vm5-local volume)
+      - nats-02-data:/data/jetstream
+
+    environment:
+      NATS_ENCRYPTION_KEY_FILE: "/etc/personel/secrets/nats-encryption.key"
+
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - |
+        set -e
+        if [ -f "$$NATS_ENCRYPTION_KEY_FILE" ]; then
+          NATS_ENCRYPTION_KEY="$$(cat "$$NATS_ENCRYPTION_KEY_FILE")"
+          export NATS_ENCRYPTION_KEY
+        else
+          echo "FATAL: encryption key file missing at $$NATS_ENCRYPTION_KEY_FILE" >&2
+          exit 1
+        fi
+        exec nats-server "$$@"
+      - "nats-server"
+
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "wget -qO- http://localhost:8222/healthz | grep -q 'ok' && wget -qO- http://localhost:8222/jsz | grep -q '\"streams\"'"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+
+    labels:
+      com.personel.service: nats
+      com.personel.tier: data
+      com.personel.role: cluster-peer
+
+volumes:
+  nats-02-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/personel/nats-02/data

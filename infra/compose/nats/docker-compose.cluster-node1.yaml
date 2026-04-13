@@ -1,0 +1,123 @@
+# =============================================================================
+# Personel Platform — NATS Cluster Node 1 Override (vm3 / 192.168.5.44)
+#
+# Apply on top of infra/compose/docker-compose.yaml. This REPLACES the
+# Wave 1 prod-override (#47) at runtime — you cannot stack both. The
+# cluster override carries forward all of the prod-override settings
+# (operator JWT, account JWTs, encryption key) and adds:
+#
+#   1. Cluster gossip port 6222 published on the data network
+#   2. The cluster-aware nats-server.cluster-node1.conf
+#   3. JetStream healthcheck that probes /jsz to verify a stream peer set
+#
+# Usage:
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f nats/docker-compose.cluster-node1.yaml \
+#     up -d nats
+#
+# Prerequisites (same as Wave 1 prod):
+#   1. infra/scripts/nats-bootstrap.sh has been executed.
+#   2. infra/scripts/nats-cluster-bootstrap.sh has been executed (this also
+#      provisions the staging tarball for vm5).
+#   3. /etc/personel/nats/operator.jwt + resolver/ exist
+#   4. /etc/personel/secrets/nats-encryption.key exists
+#   5. /etc/personel/tls/{nats.crt,nats.key,root_ca.crt} exist
+#   6. Host firewall permits TCP 6222 from 192.168.5.32/32
+# =============================================================================
+services:
+  nats:
+    container_name: personel-nats-01
+    command:
+      - "--config"
+      - "/etc/nats/nats-server.conf"
+    ports:
+      - "127.0.0.1:${NATS_PORT:-4222}:4222"
+      - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
+      # Cluster gossip port — bound to ALL interfaces so vm5 can reach it.
+      # Operator MUST run a host firewall rule restricting source to
+      # 192.168.5.32/32 (the only legitimate peer).
+      - "0.0.0.0:6222:6222"
+    volumes:
+      # Cluster-aware server config (read-only)
+      - ./nats/nats-server.cluster-node1.conf:/etc/nats/nats-server.conf:ro
+
+      # Operator JWT root of trust (read-only, world-readable inside container)
+      - /etc/personel/nats/operator.jwt:/etc/personel/nats/operator.jwt:ro
+
+      # Per-account JWT resolver dir (read-only)
+      - /etc/personel/nats/resolver:/etc/personel/nats/resolver:ro
+
+      # TLS material (read-only) — used for both client and cluster channels
+      - /etc/personel/tls:/etc/personel/tls:ro
+
+      # JetStream encryption key (root-only on host, mounted read-only)
+      - /etc/personel/secrets/nats-encryption.key:/etc/personel/secrets/nats-encryption.key:ro
+
+      # Persistent JetStream store
+      - nats_jetstream:/data/jetstream
+
+    environment:
+      NATS_ENCRYPTION_KEY_FILE: "/etc/personel/secrets/nats-encryption.key"
+
+    entrypoint:
+      - "/bin/sh"
+      - "-c"
+      - |
+        set -e
+        if [ -f "$$NATS_ENCRYPTION_KEY_FILE" ]; then
+          NATS_ENCRYPTION_KEY="$$(cat "$$NATS_ENCRYPTION_KEY_FILE")"
+          export NATS_ENCRYPTION_KEY
+        else
+          echo "FATAL: encryption key file missing at $$NATS_ENCRYPTION_KEY_FILE" >&2
+          exit 1
+        fi
+        exec nats-server "$$@"
+      - "nats-server"
+
+    healthcheck:
+      # Two-stage healthcheck: /healthz must report ok AND /jsz must report
+      # at least one stream (proves JetStream cluster meta layer is live).
+      # Once cluster bootstrap migrates streams to replicas=2, /jsz will
+      # always return non-empty on both nodes; before stream migration the
+      # check still passes because /jsz returns the empty meta layer JSON
+      # which still contains the "streams" key with value 0.
+      test:
+        - "CMD-SHELL"
+        - "wget -qO- http://localhost:8222/healthz | grep -q 'ok' && wget -qO- http://localhost:8222/jsz | grep -q '\"streams\"'"
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Bind-mount creds files into each consumer service. These come from the
+  # Wave 1 nats-bootstrap and are unchanged for the cluster.
+  # ---------------------------------------------------------------------------
+  gateway:
+    volumes:
+      - /etc/personel/nats-creds/gateway.creds:/etc/personel/nats-creds/gateway.creds:ro
+    environment:
+      # Both URLs listed so the client library can reconnect to the surviving
+      # node if the local one fails. The Go nats.go client honours the URL
+      # list as a connect pool.
+      PERSONEL_NATS_URL: "tls://192.168.5.44:4222,tls://192.168.5.32:4222"
+      PERSONEL_NATS_CREDS_FILE: "/etc/personel/nats-creds/gateway.creds"
+
+  enricher:
+    volumes:
+      - /etc/personel/nats-creds/enricher.creds:/etc/personel/nats-creds/enricher.creds:ro
+    environment:
+      PERSONEL_NATS_URL: "tls://192.168.5.44:4222,tls://192.168.5.32:4222"
+      PERSONEL_NATS_CREDS_FILE: "/etc/personel/nats-creds/enricher.creds"
+
+  api:
+    volumes:
+      - /etc/personel/nats-creds/api.creds:/etc/personel/nats-creds/api.creds:ro
+    environment:
+      PERSONEL_NATS_URL: "tls://192.168.5.44:4222,tls://192.168.5.32:4222"
+      PERSONEL_NATS_CREDS_FILE: "/etc/personel/nats-creds/api.creds"
+
+volumes:
+  nats_jetstream:
+    driver: local

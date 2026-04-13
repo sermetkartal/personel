@@ -1,0 +1,116 @@
+# =============================================================================
+# Personel Platform — Keycloak HA Node 1 (vm3, 192.168.5.44)
+# =============================================================================
+# Faz 5 Madde 52 — Keycloak 2-node Infinispan HA
+#
+# Deploy as an overlay to the main stack on vm3:
+#   docker compose -f docker-compose.yaml -f keycloak/docker-compose.ha-node1.yaml up -d keycloak-01
+#
+# Compared to the existing `keycloak` service in docker-compose.yaml this
+# overlay:
+#   - Uses a new service name `keycloak-01` and container `personel-keycloak-01`
+#   - Enables Infinispan clustering (KC_CACHE=ispn) with JDBC_PING2 discovery
+#     against the shared Postgres keycloak database
+#   - Publishes the JGroups port 7800 on the LAN so vm5 can reach it
+#   - Mounts the cache config XML + node-01 TLS cert
+#
+# IMPORTANT: Stop the existing standalone keycloak container before starting
+# this service — see keycloak-ha-bootstrap.sh for the full sequence.
+# =============================================================================
+
+services:
+  keycloak-01:
+    image: quay.io/keycloak/keycloak:25.0.6
+    container_name: personel-keycloak-01
+    hostname: keycloak-01
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "127.0.0.1:${KEYCLOAK_MGMT_PORT:-9000}:9000"
+      - "0.0.0.0:${KEYCLOAK_JGROUPS_PORT:-7800}:7800"
+    volumes:
+      # paths are relative to THIS overlay file (infra/compose/keycloak/)
+      - ./realm-personel.json:/opt/keycloak/data/import/realm-personel.json:ro
+      - ./cache-ispn-jdbc-ping.xml:/opt/keycloak/conf/cache-ispn-jdbc-ping.xml:ro
+      - tls-certs:/etc/personel/tls:ro
+    command:
+      - "start"
+      - "--optimized"
+      - "--import-realm"
+    environment:
+      # --- DB ---
+      KC_DB: postgres
+      KC_DB_URL: ${KEYCLOAK_DB_URL:-jdbc:postgresql://postgres:5432/keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-app_keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      # Duplicate DB URL for JGroups JDBC_PING2 (referenced in cache XML)
+      KC_DB_URL_JGROUPS: ${KEYCLOAK_DB_URL:-jdbc:postgresql://postgres:5432/keycloak}
+
+      # --- Bootstrap admin ---
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USER:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+
+      # --- Hostname / proxy ---
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-keycloak.personel.internal}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"
+
+      # --- Health + metrics ---
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      # --- Infinispan clustering (HA) ---
+      KC_CACHE: "ispn"
+      KC_CACHE_STACK: "jdbc-ping-tcp"
+      KC_CACHE_CONFIG_FILE: "cache-ispn-jdbc-ping.xml"
+
+      # --- TLS between JGroups nodes (Vault PKI) ---
+      KC_HTTPS_CERTIFICATE_FILE: /etc/personel/tls/keycloak-01.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /etc/personel/tls/keycloak-01.key
+
+      # --- JGroups JVM args ---
+      # bind.address=SITE_LOCAL picks the 192.168.5.x interface automatically
+      JAVA_OPTS_APPEND: >-
+        -Djgroups.bind.address=SITE_LOCAL
+        -Djgroups.bind.port=7800
+        -Djgroups.external_addr=192.168.5.44
+        -Djboss.node.name=keycloak-01
+
+    networks:
+      - app
+      - data
+      - vault-net
+    depends_on:
+      postgres:
+        condition: service_healthy
+    # Keycloak 25 quay.io image ships distroless-ish without curl/wget; the
+    # JVM itself exposes /health/ready on :9000. Use the built-in bash loopback
+    # trick for the TCP reachability + a minimal HTTP GET without extra deps.
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          cpus: "${KEYCLOAK_CPUS:-2}"
+          memory: "${KEYCLOAK_MEM:-2g}"
+        reservations:
+          memory: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: keycloak-01
+      com.personel.tier: app
+      com.personel.cluster-role: keycloak-ha-primary

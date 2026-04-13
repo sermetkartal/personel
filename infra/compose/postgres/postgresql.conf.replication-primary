@@ -1,0 +1,139 @@
+# =============================================================================
+# Personel Platform — PostgreSQL Replication PRIMARY Configuration
+# Roadmap #43 — Faz 5 Wave 2 (streaming replication, vm3 → vm5)
+# =============================================================================
+# Layered on TOP of postgresql.conf.tls (Wave 1 #42). All TLS settings, WAL
+# archiving, autovacuum, and logging policy from the TLS variant are kept
+# verbatim — replication adds streaming knobs and bumps a few WAL parameters.
+#
+# Activation: docker-compose.replication-primary.yaml mounts THIS file at
+# /etc/postgresql/postgresql.conf, replacing postgresql.conf.tls. The two
+# files MUST stay in lockstep on the TLS + archive lines (see operator
+# checklist in docs/operations/postgres-replication.md).
+#
+# Bring-up order: postgres-replica-bootstrap.sh on vm3 → recreate primary
+# container with this file → run pg_basebackup from vm5 → start replica.
+#
+# Required cert files at /etc/personel/tls (issued by Vault PKI server-cert
+# role with CN=postgres.personel.internal + DNS:postgres + IP:192.168.5.44):
+#   - postgres.crt    (server cert, mode 0644)
+#   - postgres.key    (server private key, mode 0600, owned by postgres uid)
+#   - root_ca.crt     (chain root for client cert validation, mode 0644)
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CONNECTIONS AND AUTHENTICATION
+# -----------------------------------------------------------------------------
+listen_addresses          = '*'
+port                      = 5432
+max_connections           = 200
+superuser_reserved_connections = 5
+
+# -----------------------------------------------------------------------------
+# TLS — REQUIRED for all non-loopback clients (enforced via pg_hba)
+# Same Vault PKI server cert as the TLS-only override.
+# -----------------------------------------------------------------------------
+ssl                       = on
+ssl_cert_file             = '/etc/personel/tls/postgres.crt'
+ssl_key_file              = '/etc/personel/tls/postgres.key'
+ssl_ca_file               = '/etc/personel/tls/root_ca.crt'
+ssl_min_protocol_version  = 'TLSv1.2'
+ssl_prefer_server_ciphers = on
+ssl_ciphers               = 'HIGH:!aNULL:!MD5:!3DES:!RC4'
+
+# -----------------------------------------------------------------------------
+# MEMORY (same budget as TLS variant)
+# -----------------------------------------------------------------------------
+shared_buffers            = 2GB
+effective_cache_size      = 6GB
+work_mem                  = 64MB
+maintenance_work_mem      = 512MB
+wal_buffers               = 64MB
+huge_pages                = try
+
+# -----------------------------------------------------------------------------
+# WRITE-AHEAD LOG — Replication + PITR coexist
+# wal_level=replica is REQUIRED for both pg_basebackup and streaming.
+# archive_mode stays on so PITR (Roadmap #58 + #61) is not weakened.
+# wal_keep_size gives the replica a 1GB safety buffer for momentary disconnects
+# without needing a replication slot. Slot setup is documented in the runbook
+# as a Phase 2 hardening step (slots prevent WAL recycling when the replica
+# is offline, but they also let the primary disk fill if not monitored).
+# -----------------------------------------------------------------------------
+wal_level                 = replica
+archive_mode              = on
+archive_command           = 'test ! -f /var/backups/personel/pg/wal/%f && cp %p /var/backups/personel/pg/wal/%f'
+archive_timeout           = 300                # force WAL switch every 5 min
+max_wal_size              = 4GB
+min_wal_size              = 512MB
+wal_compression           = on
+checkpoint_completion_target = 0.9
+checkpoint_timeout        = 10min
+
+# Replication-specific
+max_wal_senders           = 10                 # 5 base + headroom for ad-hoc pg_basebackup
+wal_keep_size             = 1GB                # safety buffer for replica reconnects
+hot_standby               = on                 # primary may also serve as a replica later
+
+# Asynchronous replication — see ADR / runbook trade-off note. Phase 1 accepts
+# up to ~30 s of data loss in catastrophic primary failure. To upgrade to
+# synchronous, set: synchronous_commit = remote_apply +
+# synchronous_standby_names = 'replica1' AND ensure the replica is reachable
+# (otherwise primary commits will block).
+synchronous_commit        = local
+
+# -----------------------------------------------------------------------------
+# QUERY TUNING
+# -----------------------------------------------------------------------------
+random_page_cost          = 1.1
+effective_io_concurrency  = 200
+max_parallel_workers_per_gather = 2
+max_parallel_workers      = 4
+parallel_leader_participation = on
+default_statistics_target = 200
+
+# -----------------------------------------------------------------------------
+# AUTOVACUUM
+# -----------------------------------------------------------------------------
+autovacuum                = on
+autovacuum_max_workers    = 4
+autovacuum_vacuum_cost_delay = 2ms
+autovacuum_vacuum_scale_factor = 0.01
+autovacuum_analyze_scale_factor = 0.005
+autovacuum_vacuum_insert_threshold = 500
+
+# -----------------------------------------------------------------------------
+# LOGGING — also log SSL handshakes and replication connection state
+# -----------------------------------------------------------------------------
+logging_collector         = off
+log_destination           = 'stderr'
+log_line_prefix           = '%t [%p] %q%u@%d (ssl=%a) '
+log_min_duration_statement = 1000
+log_checkpoints           = on
+log_connections           = on                 # capture replicator connect events
+log_disconnections        = on                 # also log replica disconnects (silent failure detector)
+log_lock_waits            = on
+log_temp_files            = 0
+log_autovacuum_min_duration = 500ms
+log_replication_commands  = on                 # START_REPLICATION + IDENTIFY_SYSTEM trace
+
+# -----------------------------------------------------------------------------
+# ROW SECURITY
+# -----------------------------------------------------------------------------
+row_security              = on
+
+# -----------------------------------------------------------------------------
+# TIMEZONE
+# -----------------------------------------------------------------------------
+timezone                  = 'UTC'
+lc_messages               = 'tr_TR.UTF-8'
+lc_monetary               = 'tr_TR.UTF-8'
+lc_numeric                = 'tr_TR.UTF-8'
+lc_time                   = 'tr_TR.UTF-8'
+
+# -----------------------------------------------------------------------------
+# pg_cron (must remain in shared_preload_libraries for Phase 3.0 evidence)
+# pg_cron only runs on the primary; on a hot standby it is dormant.
+# -----------------------------------------------------------------------------
+shared_preload_libraries  = 'pg_cron'
+cron.database_name        = 'personel'

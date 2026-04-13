@@ -1,0 +1,53 @@
+# =============================================================================
+# Personel Platform — PostgreSQL Replication REPLICA Configuration
+# Roadmap #43 — Faz 5 Wave 2 (hot standby on vm5)
+# =============================================================================
+# This file is minimal on purpose. The base backup from pg_basebackup carries
+# over the primary's postgresql.conf (TLS, WAL archiving, memory budget).
+# Everything here is either a replica-specific knob or a defensive override.
+#
+# `primary_conninfo` is intentionally NOT set in this file — pg-replica-init.sh
+# writes it into postgresql.auto.conf so rotation is clean (auto.conf is the
+# canonical runtime override location per postgres convention).
+#
+# `restore_command` is left empty: WAL archive shipping is a backup path, not
+# the primary replication mechanism. Streaming handles the hot path; archive
+# recovery only kicks in if the operator manually points the replica at a
+# PITR archive for DR reconstruction (see docs/operations/postgres-replication.md).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# CONNECTIONS
+# Replica listens on all interfaces so the DR console can query it directly.
+# pg_hba from the base backup still enforces TLS + scram-sha-256 for clients.
+# -----------------------------------------------------------------------------
+listen_addresses          = '*'
+port                      = 5432
+
+# -----------------------------------------------------------------------------
+# STANDBY
+# -----------------------------------------------------------------------------
+hot_standby               = on                 # accept read-only queries
+hot_standby_feedback      = on                 # protect read queries from vacuum on primary
+
+# Replica applies WAL as fast as possible. Phase 2 hardening may add
+# max_standby_streaming_delay to protect long-running analytics queries.
+max_standby_streaming_delay = 30s
+max_standby_archive_delay = 60s
+
+# -----------------------------------------------------------------------------
+# LOGGING
+# -----------------------------------------------------------------------------
+logging_collector         = off
+log_destination           = 'stderr'
+log_line_prefix           = '%t [%p] %q%u@%d (standby) '
+log_min_duration_statement = 1000
+log_connections           = on
+log_disconnections        = on
+log_replication_commands  = on
+log_checkpoints           = on
+
+# -----------------------------------------------------------------------------
+# TIMEZONE (must match primary to avoid log-timestamp confusion)
+# -----------------------------------------------------------------------------
+timezone                  = 'UTC'

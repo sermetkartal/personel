@@ -1,0 +1,101 @@
+# =============================================================================
+# Personel Platform — MinIO Mirror Site (vm5 / 192.168.5.32)
+#
+# Standalone compose file deployed on vm5. This brings up a SECOND MinIO
+# instance ("personel-minio-mirror") that participates in MinIO site
+# replication with the primary vm3 instance. Once site replication is
+# enabled via infra/scripts/minio-site-replication-setup.sh, all NON-WORM
+# buckets created on either side are mirrored asynchronously, along with
+# IAM users, groups, and policies.
+#
+# WORM exclusion:
+#   The audit-worm and evidence-worm buckets created by Wave 1 #50 are
+#   EXPLICITLY EXCLUDED from site replication. Object Lock COMPLIANCE
+#   mode and MinIO site replication do not compose cleanly:
+#     * The replicated copy on the mirror site cannot inherit the source's
+#       RetainUntilDate without bucket-level Object Lock pre-configured on
+#       the mirror, and even then versioning + lock interactions are fragile
+#     * Compliance auditors require ONE authoritative WORM copy with a
+#       provable chain-of-custody, not two diverging copies
+#   The customer's compliance officer keeps the master copy on vm3 and
+#   uses a separate `mc mirror` cron to push deltas to off-site cold
+#   storage (S3 Glacier / customer-controlled bucket) — that pipeline is
+#   covered by infra/scripts/backup.sh and is OUT OF SCOPE for this file.
+#
+# Deployment:
+#   1. scp this file to vm5:/opt/personel/minio/docker-compose.yaml
+#   2. scp the vm5 minio-root.env from vm3 to
+#      vm5:/etc/personel/secrets/minio-root.env
+#      (root credentials MUST be IDENTICAL across sites for site replication
+#      to authenticate the cluster admin operations)
+#   3. scp the vm5 server cert (issued by infra/scripts/minio-mirror-bootstrap)
+#      to vm5:/etc/personel/tls/{public.crt,private.key,CAs/root_ca.crt}
+#   4. ssh vm5 'sudo install -d -m 0700 /var/lib/personel/minio-mirror/data'
+#   5. ssh vm5 'cd /opt/personel/minio && sudo docker compose up -d'
+#
+# Prerequisites on vm5:
+#   /etc/personel/secrets/minio-root.env  (MINIO_ROOT_USER + MINIO_ROOT_PASSWORD)
+#   /etc/personel/tls/public.crt          (server cert, CN=192.168.5.32)
+#   /etc/personel/tls/private.key
+#   /etc/personel/tls/CAs/root_ca.crt
+#   Host firewall permits TCP 9000 from 192.168.5.44/32 (so vm3's mc admin
+#     replicate add can reach back).
+# =============================================================================
+name: personel-minio-mirror
+
+services:
+  personel-minio-mirror:
+    # Pin the same image tag as the vm3 primary. Site replication requires
+    # both sides to run the same MinIO release; mismatched releases cause
+    # cryptic IAM sync failures.
+    image: minio/minio:RELEASE.2024-04-18T19-09-19Z
+    container_name: personel-minio-mirror
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:9000:9000"
+      - "0.0.0.0:9001:9001"
+    volumes:
+      - minio-mirror-data:/data
+      - /etc/personel/tls:/etc/personel/tls:ro
+    command: server /data --console-address ":9001" --certs-dir /etc/personel/tls
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?MINIO_ROOT_USER must match vm3 primary}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD must match vm3 primary}
+      MINIO_VOLUMES: /data
+      MINIO_OPTS: "--quiet"
+      # Site name surfaces in `mc admin replicate info`. Use a stable label
+      # so the operator can distinguish primary from mirror at a glance.
+      MINIO_SITE_NAME: "vm5-mirror"
+      MINIO_SITE_REGION: "tr-vm5"
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "mc ready local 2>/dev/null || curl -fsS http://localhost:9000/minio/health/live"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "${MINIO_MIRROR_CPUS:-2}"
+          memory: "${MINIO_MIRROR_MEM:-4g}"
+        reservations:
+          memory: 512m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: minio
+      com.personel.tier: data
+      com.personel.role: site-mirror
+
+volumes:
+  minio-mirror-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/personel/minio-mirror/data

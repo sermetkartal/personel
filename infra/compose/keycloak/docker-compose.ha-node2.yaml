@@ -1,0 +1,102 @@
+# =============================================================================
+# Personel Platform — Keycloak HA Node 2 (vm5, 192.168.5.32)
+# =============================================================================
+# Faz 5 Madde 52 — Keycloak 2-node Infinispan HA
+#
+# STANDALONE compose file deployed on vm5. The service connects to vm3's
+# Postgres (KC_DB_URL must resolve to 192.168.5.44:5432 from vm5 — this
+# means vm3's postgres port has to be published on 0.0.0.0:5432 and
+# firewalled to vm5 only, OR an SSH tunnel must be maintained).
+#
+# JGroups discovery uses JDBC_PING2: both nodes write their transport
+# address into the `jgroups_ping` table in the shared keycloak DB and
+# read each other's entries on startup — no multicast, no explicit seed
+# list in Keycloak config.
+#
+# Operator scps this file + cache XML + realm JSON + node-02 cert bundle
+# to vm5 and runs:
+#   docker compose -f docker-compose.ha-node2.yaml up -d
+# =============================================================================
+
+networks:
+  keycloak-ha:
+    driver: bridge
+
+services:
+  keycloak-02:
+    image: quay.io/keycloak/keycloak:25.0.6
+    container_name: personel-keycloak-02
+    hostname: keycloak-02
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8080:8080"
+      - "0.0.0.0:9000:9000"
+      - "0.0.0.0:7800:7800"
+    volumes:
+      - ./realm-personel.json:/opt/keycloak/data/import/realm-personel.json:ro
+      - ./cache-ispn-jdbc-ping.xml:/opt/keycloak/conf/cache-ispn-jdbc-ping.xml:ro
+      - ${KEYCLOAK_NODE2_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    command:
+      - "start"
+      - "--optimized"
+    environment:
+      # --- DB (points at vm3 over the LAN) ---
+      KC_DB: postgres
+      KC_DB_URL: ${KEYCLOAK_DB_URL:-jdbc:postgresql://192.168.5.44:5432/keycloak}
+      KC_DB_USERNAME: ${KEYCLOAK_DB_USER:-app_keycloak}
+      KC_DB_PASSWORD: ${KEYCLOAK_DB_PASSWORD}
+      KC_DB_URL_JGROUPS: ${KEYCLOAK_DB_URL:-jdbc:postgresql://192.168.5.44:5432/keycloak}
+
+      # NOTE: no KC_BOOTSTRAP_ADMIN_* here — node-01 already created the admin
+      # user; node-02 uses the same DB + same Keycloak 25 bootstrap table.
+
+      KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-keycloak.personel.internal}
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+      KC_PROXY_HEADERS: "xforwarded"
+
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+
+      KC_CACHE: "ispn"
+      KC_CACHE_STACK: "jdbc-ping-tcp"
+      KC_CACHE_CONFIG_FILE: "cache-ispn-jdbc-ping.xml"
+
+      KC_HTTPS_CERTIFICATE_FILE: /etc/personel/tls/keycloak-02.crt
+      KC_HTTPS_CERTIFICATE_KEY_FILE: /etc/personel/tls/keycloak-02.key
+
+      JAVA_OPTS_APPEND: >-
+        -Djgroups.bind.address=SITE_LOCAL
+        -Djgroups.bind.port=7800
+        -Djgroups.external_addr=192.168.5.32
+        -Djboss.node.name=keycloak-02
+
+    networks:
+      - keycloak-ha
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          grep -q '"status": "UP"' <&3
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          cpus: "${KEYCLOAK_CPUS:-2}"
+          memory: "${KEYCLOAK_MEM:-2g}"
+        reservations:
+          memory: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: keycloak-02
+      com.personel.tier: app
+      com.personel.cluster-role: keycloak-ha-secondary

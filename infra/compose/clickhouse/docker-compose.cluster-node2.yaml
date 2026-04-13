@@ -1,0 +1,145 @@
+name: personel-cluster-node2
+
+# =============================================================================
+# Personel Platform — ClickHouse Cluster Node 2 (vm5, 192.168.5.32)
+# Phase 5 Wave 2, Roadmap #44: ClickHouse 2-node + Keeper across vm3 + vm5
+# =============================================================================
+#
+# This is a STANDALONE compose file — NOT an overlay. vm5 only runs the
+# second ClickHouse replica and the second keeper participant; the rest
+# of the Personel stack (API, gateway, NATS, Vault, etc.) stays on vm3.
+#
+# USAGE (on vm5, after infra/scripts/clickhouse-cluster-bootstrap.sh
+# has staged certs + env vars):
+#   cd infra/compose/clickhouse
+#   docker compose -f docker-compose.cluster-node2.yaml up -d
+#
+# PREREQUISITES:
+#   1. Docker 25+ on vm5
+#   2. TLS certs in /etc/personel/tls:
+#        clickhouse-02.crt  (CN=clickhouse-02, SAN=clickhouse-02,192.168.5.32)
+#        clickhouse-02.key
+#        keeper-02.crt / .key
+#        tenant_ca.crt
+#   3. /etc/hosts on vm5:
+#        192.168.5.44  clickhouse-01  keeper-01
+#        192.168.5.32  clickhouse-02  keeper-02
+#   4. .env next to this file with:
+#        CH_CLUSTER_PASSWORD            (match vm3)
+#        CH_INTERSERVER_PASSWORD_SHA256 (match vm3)
+#        CLICKHOUSE_CLUSTER_DATA_DIR_02 (host path for bind volumes)
+#        PERSONEL_TLS_DIR               (defaults to /etc/personel/tls)
+#   5. keeper-01 on vm3 is already up; keeper-02 here will join the
+#      quorum as Raft follower.
+#
+# NETWORK MODE: host — required so that the keeper Raft port 9234 on
+# vm5 is directly reachable from vm3 via the LAN hostname, and vice
+# versa. No docker NAT rewriting is tolerable because Raft uses the
+# advertised addresses from keeper-config-02.xml.
+#
+# COPY-ALONG FILES (bootstrap script scp's these from vm3):
+#   config.xml
+#   config.cluster.xml
+#   keeper-config-02.xml
+#   users.xml
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # clickhouse-02 — replica-02 on vm5
+  # ---------------------------------------------------------------------------
+  clickhouse-02:
+    image: clickhouse/clickhouse-server:24-alpine
+    container_name: personel-clickhouse-02
+    hostname: clickhouse-02
+    restart: unless-stopped
+    network_mode: host
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    environment:
+      CLICKHOUSE_DB: personel
+      CLICKHOUSE_USER: personel_app
+      CLICKHOUSE_PASSWORD: ${CH_CLUSTER_PASSWORD:?CH_CLUSTER_PASSWORD is required}
+      CH_CLUSTER_PASSWORD: ${CH_CLUSTER_PASSWORD}
+      CH_REPLICA: "02"
+      CH_INTERSERVER_HOST: clickhouse-02
+      CH_INTERSERVER_PASSWORD_SHA256: ${CH_INTERSERVER_PASSWORD_SHA256:?CH_INTERSERVER_PASSWORD_SHA256 is required}
+      CH_TLS_CERT: /etc/personel/tls/clickhouse-02.crt
+      CH_TLS_KEY: /etc/personel/tls/clickhouse-02.key
+    volumes:
+      - clickhouse-02-data:/var/lib/clickhouse
+      - clickhouse-02-logs:/var/log/clickhouse-server
+      # Base config (copied from vm3 by bootstrap script)
+      - ./config.xml:/etc/clickhouse-server/config.xml:ro
+      - ./users.xml:/etc/clickhouse-server/users.xml:ro
+      # Cluster overlay
+      - ./config.cluster.xml:/etc/clickhouse-server/config.d/config.cluster.xml:ro
+      # TLS certs
+      - ${PERSONEL_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
+          memory: 14G
+        reservations:
+          cpus: "1"
+          memory: 4G
+
+  # ---------------------------------------------------------------------------
+  # keeper-02 — server_id=2, Raft follower (priority lower than keeper-01)
+  # ---------------------------------------------------------------------------
+  keeper-02:
+    image: clickhouse/clickhouse-keeper:24-alpine
+    container_name: personel-keeper-02
+    hostname: keeper-02
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      KEEPER_SERVER_ID: "2"
+    volumes:
+      - keeper-02-data:/var/lib/clickhouse/coordination
+      - ./keeper-config-02.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+      - ${PERSONEL_TLS_DIR:-/etc/personel/tls}:/etc/personel/tls:ro
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | nc -w 2 127.0.0.1 9181 | grep -q imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+volumes:
+  clickhouse-02-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_CLUSTER_DATA_DIR_02:-/var/lib/personel/clickhouse-cluster/02}/data
+  clickhouse-02-logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_CLUSTER_DATA_DIR_02:-/var/lib/personel/clickhouse-cluster/02}/logs
+  keeper-02-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${CLICKHOUSE_CLUSTER_DATA_DIR_02:-/var/lib/personel/clickhouse-cluster/02}/keeper

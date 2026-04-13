@@ -1,0 +1,96 @@
+# =============================================================================
+# Personel Platform — OpenSearch 2-node Cluster (Node 1 / vm3 primary)
+# =============================================================================
+# Faz 5 Madde 51 — OpenSearch 2-node cluster
+#
+# Replaces the single-node configuration in opensearch.yml when the stack is
+# migrated to a two-node cluster spread across vm3 (192.168.5.44) and
+# vm5 (192.168.5.32).
+#
+# Both nodes are master-eligible AND data nodes (small cluster, Phase 1).
+# Split-brain protection is provided by cluster.initial_master_nodes listing
+# both nodes explicitly on first bootstrap — OpenSearch 2.x internally enforces
+# a quorum of (N/2)+1 for master elections against the voting configuration.
+#
+# Node 2 config: opensearch.cluster-node2.yml
+# =============================================================================
+
+cluster.name: personel-opensearch-cluster
+node.name: opensearch-01
+node.roles: [master, data, ingest]
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+network.host: 0.0.0.0
+network.publish_host: 192.168.5.44
+http.port: 9200
+transport.port: 9300
+
+# ---------------------------------------------------------------------------
+# Discovery — Zen2, both nodes seed each other
+# ---------------------------------------------------------------------------
+discovery.seed_hosts:
+  - 192.168.5.44:9300
+  - 192.168.5.32:9300
+cluster.initial_master_nodes:
+  - opensearch-01
+  - opensearch-02
+
+# ---------------------------------------------------------------------------
+# Data paths
+# ---------------------------------------------------------------------------
+path.data: /usr/share/opensearch/data
+path.logs: /usr/share/opensearch/logs
+
+bootstrap.memory_lock: true
+
+# ---------------------------------------------------------------------------
+# TLS / Security — node-specific cert issued from Vault PKI server-cert role
+# ---------------------------------------------------------------------------
+plugins.security.disabled: false
+
+plugins.security.ssl.transport.enabled: true
+plugins.security.ssl.transport.pemcert_filepath: /etc/personel/tls/opensearch-01.crt
+plugins.security.ssl.transport.pemkey_filepath: /etc/personel/tls/opensearch-01.key
+plugins.security.ssl.transport.pemtrustedcas_filepath: /etc/personel/tls/tenant_ca.crt
+plugins.security.ssl.transport.enforce_hostname_verification: false
+plugins.security.ssl.transport.resolve_hostname: false
+
+plugins.security.ssl.http.enabled: true
+plugins.security.ssl.http.pemcert_filepath: /etc/personel/tls/opensearch-01.crt
+plugins.security.ssl.http.pemkey_filepath: /etc/personel/tls/opensearch-01.key
+plugins.security.ssl.http.pemtrustedcas_filepath: /etc/personel/tls/tenant_ca.crt
+
+# Nodes from either physical host are allowed to form the cluster as long as
+# their transport cert is signed by the tenant CA. We pin the DN prefix rather
+# than a full list so cert rotation does not require a config restart.
+plugins.security.nodes_dn:
+  - "CN=opensearch-01*"
+  - "CN=opensearch-02*"
+plugins.security.authcz.admin_dn:
+  - "CN=admin*"
+
+plugins.security.allow_default_init_securityindex: true
+plugins.security.audit.type: internal_opensearch
+plugins.security.enable_snapshot_restore_privilege: true
+plugins.security.check_snapshot_restore_write_privileges: true
+plugins.security.restapi.roles_enabled: ["all_access", "security_rest_api_access"]
+plugins.security.allow_unsafe_democertificates: false
+
+# ---------------------------------------------------------------------------
+# Performance / shard layout
+# ---------------------------------------------------------------------------
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+cluster.routing.allocation.disk.threshold_enabled: true
+cluster.routing.allocation.disk.watermark.low: "85%"
+cluster.routing.allocation.disk.watermark.high: "90%"
+cluster.routing.allocation.disk.watermark.flood_stage: "95%"
+
+# With 2 nodes we want 1 replica per primary (1 copy of each shard lives on
+# the OTHER node). Existing indexes are patched up by
+# opensearch-cluster-reindex.sh after the cluster forms.
+index.number_of_replicas: 1
+index.number_of_shards: 2

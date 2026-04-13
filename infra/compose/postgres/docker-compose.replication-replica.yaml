@@ -1,0 +1,113 @@
+name: personel-replica
+
+# =============================================================================
+# Personel Platform — Postgres Replication REPLICA Standalone (Roadmap #43)
+# =============================================================================
+# This is a STANDALONE compose file deployed on vm5 (192.168.5.32). It is
+# NOT layered on top of the primary's docker-compose.yaml — vm5 runs no
+# other Personel services (dedicated read-replica + DR standby host).
+#
+# Usage (on vm5):
+#   cd /opt/personel/replica
+#   docker compose -f docker-compose.replication-replica.yaml up -d
+#
+# First run: the container is empty, pg-replica-init.sh detects an empty
+# data directory and runs pg_basebackup against the primary (192.168.5.44).
+# Subsequent runs start postgres directly — the standby.signal marker in
+# the data directory keeps it in hot standby mode.
+#
+# Rollback / full resync (nuclear option — loses any read-only state):
+#   docker compose -f docker-compose.replication-replica.yaml down -v
+#   docker compose -f docker-compose.replication-replica.yaml up -d
+#
+# Prerequisites on vm5 (operator runs scp from vm3 first):
+#   /etc/personel/tls/root_ca.crt          (Vault PKI root chain)
+#   /etc/personel/tls/postgres-replica.crt (replica server cert, CN=postgres-replica.personel.internal)
+#   /etc/personel/tls/postgres-replica.key (mode 0600, owned by uid 999)
+#   /etc/personel/secrets/postgres-replicator-password (mode 0600, owned by uid 999)
+#   /opt/personel/replica/pg-replica-init.sh       (from infra/compose/postgres/)
+#   /opt/personel/replica/postgresql.conf.replication-replica
+#
+# See docs/operations/postgres-replication.md for full bring-up sequence.
+# =============================================================================
+
+services:
+  postgres-replica:
+    image: postgres:16-bookworm
+    container_name: personel-postgres-replica
+    restart: unless-stopped
+    user: postgres
+    ports:
+      # Published on the LAN so the console admin can point at the replica
+      # for read-only dashboards. The primary listens on 127.0.0.1 only;
+      # the replica is explicitly LAN-visible for DR operator access.
+      - "${POSTGRES_REPLICA_PORT:-5432}:5432"
+    environment:
+      # Used ONLY by pg-replica-init.sh for the initial pg_basebackup connect.
+      # Once the base backup lands, libpq reads primary_conninfo from
+      # postgresql.auto.conf and this variable is no longer consulted.
+      PRIMARY_HOST: ${PRIMARY_HOST:-192.168.5.44}
+      PRIMARY_PORT: ${PRIMARY_PORT:-5432}
+      REPLICATION_USER: ${REPLICATION_USER:-replicator}
+      # Password comes from the secret file mount; never set here.
+      PGSSLMODE: verify-full
+      PGSSLROOTCERT: /etc/personel/tls/root_ca.crt
+    volumes:
+      - postgres-replica-data:/var/lib/postgresql/data
+      # Init wrapper — runs pg_basebackup on an empty data dir, then execs postgres
+      - ./pg-replica-init.sh:/usr/local/bin/pg-replica-init.sh:ro
+      # Replica's own postgresql.conf (minimal — most settings come from the
+      # base backup itself; this file overrides hot_standby + tuning)
+      - ./postgresql.conf.replication-replica:/etc/postgresql/postgresql.conf:ro
+      # TLS material — separate cert for the replica (verify-full requires
+      # the replica trusts the primary's root CA, NOT the replica's own cert)
+      - /etc/personel/tls:/etc/personel/tls:ro
+      # WAL archive directory — replicas can optionally restore from archive
+      # if streaming breaks. Mount is read-only; the replica never writes.
+      - ${POSTGRES_WAL_ARCHIVE_DIR:-/var/backups/personel/pg/wal}:/var/backups/personel/pg/wal:ro
+    secrets:
+      - replicator_password
+    entrypoint: ["/usr/local/bin/pg-replica-init.sh"]
+    healthcheck:
+      # Two-part check: (1) postgres is accepting connections,
+      # (2) we are actually in recovery mode (hot standby) — a replica
+      # that failed over and got promoted to primary by accident MUST
+      # be caught loudly.
+      test:
+        - "CMD-SHELL"
+        - |
+          pg_isready -U postgres -h 127.0.0.1 -p 5432 \
+            && psql -U postgres -h 127.0.0.1 -tAc 'SELECT pg_is_in_recovery()' | grep -qx t
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          cpus: "${POSTGRES_CPUS:-4}"
+          memory: "${POSTGRES_MEM:-8g}"
+        reservations:
+          memory: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: postgres-replica
+      com.personel.tier: data
+      com.personel.replication: replica
+      com.personel.primary: "192.168.5.44"
+
+volumes:
+  postgres-replica-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${POSTGRES_REPLICA_DATA_DIR:-/var/lib/personel/postgres-replica/data}
+
+secrets:
+  replicator_password:
+    file: /etc/personel/secrets/postgres-replicator-password
