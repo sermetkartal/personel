@@ -10,10 +10,11 @@
 
 ### 🛑 KRİTİK GÜVENLİK KURALI — EN BÜYÜK LİMİT
 
-> **SADECE iki makinede işlem yap. Başka HİÇBİR sisteme dokunma.**
+> **SADECE üç makinede işlem yap. Başka HİÇBİR sisteme dokunma.**
 >
 > 1. **Windows VM**: `192.168.5.30` (kullanıcı: kartal, hostname: DESKTOP-426U3BG)
-> 2. **Ubuntu backend**: `192.168.5.44` (kullanıcı: kartal, repo: /home/kartal/personel)
+> 2. **Ubuntu primary**: `192.168.5.44` (kullanıcı: kartal, hostname: vm3, repo: /home/kartal/personel) — primary stack, tüm 12 servis
+> 3. **Ubuntu secondary**: `192.168.5.32` (kullanıcı: kartal, hostname: vm5, ssh-ed25519 fingerprint `SHA256:g/gPQshxLRJovRgJAV59CKZwDCd04xoGhpdMcX96L9s`) — Ubuntu 24.04 LTS, 3.7 GB RAM, 98 GB disk, **docker henüz kurulu değil**. Faz 5 cluster maddeleri (43-46, 48, 51, 52) için replica/peer host.
 >
 > **YASAK**:
 > - Başka IP/host'a SSH bağlanma
