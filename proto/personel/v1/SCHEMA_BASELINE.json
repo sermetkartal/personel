@@ -1,0 +1,97 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-04-13",
+  "note": "Faz 7 item #79 — baseline snapshot for apps/gateway/cmd/schema-check. Required fields are the subset of proto fields the gateway + enricher rely on to route/classify events. Adding a new message or a new optional field is an additive change and does NOT require updating this baseline. Removing a field from 'required_fields' is a BREAKING change and requires bumping schema_version.",
+  "messages": {
+    "EventMeta": {
+      "required_fields": ["tenant_id", "endpoint_id", "event_id", "occurred_at", "event_type", "schema_version"]
+    },
+    "ProcessStart": {
+      "required_fields": ["pid", "image_path"]
+    },
+    "ProcessStop": {
+      "required_fields": ["pid", "exit_code"]
+    },
+    "ProcessForegroundChange": {
+      "required_fields": ["pid_new", "exe_new"]
+    },
+    "WindowTitleChanged": {
+      "required_fields": ["pid", "hwnd", "title", "exe_name"]
+    },
+    "SessionIdleStart": {
+      "required_fields": ["idle_threshold_sec"]
+    },
+    "SessionIdleEnd": {
+      "required_fields": ["idle_duration_ms"]
+    },
+    "ScreenshotCaptured": {
+      "required_fields": ["blob_ref", "width", "height"]
+    },
+    "FileCreated": {
+      "required_fields": ["path", "pid"]
+    },
+    "FileWritten": {
+      "required_fields": ["path", "pid", "bytes_delta"]
+    },
+    "FileDeleted": {
+      "required_fields": ["path", "pid"]
+    },
+    "FileRenamed": {
+      "required_fields": ["path_from", "path_to", "pid"]
+    },
+    "FileRead": {
+      "required_fields": ["path", "process_pid"]
+    },
+    "FileCopied": {
+      "required_fields": ["source_path", "destination_path", "pid"]
+    },
+    "ClipboardMetadata": {
+      "required_fields": ["source_pid", "source_exe", "content_kind"]
+    },
+    "UsbDeviceAttached": {
+      "required_fields": ["vid", "pid", "device_class"]
+    },
+    "UsbDeviceRemoved": {
+      "required_fields": ["vid", "pid"]
+    },
+    "NetworkFlowSummary": {
+      "required_fields": ["pid", "dest_ip", "dest_port", "protocol"]
+    },
+    "KeystrokeWindowStats": {
+      "required_fields": ["hwnd", "exe_name", "keystroke_count"]
+    },
+    "KeystrokeContentEncrypted": {
+      "required_fields": ["ciphertext_ref", "nonce", "aad", "key_version"]
+    },
+    "AppBlockedByPolicy": {
+      "required_fields": ["exe_name", "rule_id"]
+    },
+    "WebBlockedByPolicy": {
+      "required_fields": ["host", "rule_id"]
+    },
+    "AgentHealthHeartbeat": {
+      "required_fields": ["cpu_percent", "rss_bytes", "queue_depth"]
+    },
+    "AgentTamperDetected": {
+      "required_fields": ["check_name", "severity"]
+    },
+    "LiveViewStarted": {
+      "required_fields": ["session_id", "requested_by", "approved_by", "reason_code"]
+    },
+    "LiveViewStopped": {
+      "required_fields": ["session_id", "end_reason"]
+    },
+    "PrintJobSubmitted": {
+      "required_fields": ["printer_name", "document_name", "page_count"]
+    },
+    "SessionLock": {
+      "required_fields": ["user_sid", "lock_reason"]
+    },
+    "SessionUnlock": {
+      "required_fields": ["user_sid", "locked_duration_ms"]
+    },
+    "WindowFocusLost": {
+      "required_fields": ["hwnd_prev", "pid_prev", "exe_prev", "focused_duration_ms"]
+    }
+  }
+}

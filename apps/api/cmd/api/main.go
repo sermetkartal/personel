@@ -46,6 +46,7 @@ import (
 	"github.com/personel/api/internal/mobile"
 	natsclient "github.com/personel/api/internal/nats"
 	"github.com/personel/api/internal/observability"
+	"github.com/personel/api/internal/pipeline"
 	"github.com/personel/api/internal/policy"
 	"github.com/personel/api/internal/postgres"
 	"github.com/personel/api/internal/reports"
@@ -165,6 +166,13 @@ func main() {
 	tenantSvc := tenant.NewService(pool, recorder, log)
 	userSvc := user.NewService(pool, recorder, log)
 	endpointSvc := endpoint.NewService(pool, vc, recorder, log, cfg.Server.PublicURL, cfg.Server.GatewayURL)
+
+	// --- Remote command service (Faz 6 #64 #65) ---
+	// Separate from endpointSvc because its surface area (store +
+	// publisher + audit recorder via interfaces) is independently
+	// mockable in unit tests. Reuses the same pool and natsPublisher.
+	endpointCmdStore := endpoint.NewPgxCommandStore(pool)
+	endpointCmdSvc := endpoint.NewCommandService(endpointCmdStore, natsPublisher, recorder, log)
 
 	policyStore := policy.NewStore(pool)
 	policyPub := policy.NewPublisher(natsPublisher, vc, cfg.NATS.PolicySubject, log)
@@ -313,6 +321,25 @@ func main() {
 	// --- 10. Mobile BFF service (Phase 2.9) ---
 	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
 
+	// --- 10b. Pipeline service (Faz 7 #73 + #74 + #75) ---
+	// DLQ inspection + replay. The DLQReader and EventPublisher share
+	// the same NATS JetStream context already owned by natsPublisher —
+	// we do NOT open a second NATS connection. The CH count source is
+	// the same read-only client used by reportsCHClient; a nil client
+	// degrades the /v1/pipeline/replay CH path to "unavailable" at
+	// request time (handler returns 500 with a clear error) rather
+	// than panicking at boot.
+	pipelineNATS := natsPublisher.JS()
+	pipelineReader := pipeline.NewNATSDLQReader(pipelineNATS, log)
+	pipelinePub := pipeline.NewNATSPublisher(pipelineNATS, log)
+	// ClickHouse count adapter is a thin wrapper so the pipeline
+	// package does not depend on apps/api/internal/clickhouse.
+	var pipelineCH pipeline.CHEventSource
+	if reportsCHClient != nil {
+		pipelineCH = pipelineCHAdapter{client: reportsCHClient}
+	}
+	pipelineSvc := pipeline.NewService(pipelineReader, pipelinePub, pipelineCH, recorder, log)
+
 	// --- 11. Prometheus metrics ---
 	reg := observability.NewRegistry()
 	reg.MustRegister(prometheus.NewGoCollector())
@@ -337,6 +364,7 @@ func main() {
 		Tenant:       tenantSvc,
 		User:         userSvc,
 		Endpoint:     endpointSvc,
+		EndpointCmd:  endpointCmdSvc,
 		Policy:       policySvc,
 		DSR:          dsrSvc,
 		LegalHold:    lhSvc,
@@ -353,6 +381,7 @@ func main() {
 		Evidence:     evidenceStore,
 		EvidencePack: evidencePackBuilder,
 		Backup:       backupSvc,
+		Pipeline:     pipelineSvc,
 		AccessReview: accessReviewSvc,
 		Incident:     incidentSvc,
 		BCP:          bcpSvc,
@@ -436,4 +465,22 @@ type noopExternalSink struct{}
 
 func (s *noopExternalSink) Write(_ context.Context, _ time.Time, _ string, _ []byte) error {
 	return nil
+}
+
+// pipelineCHAdapter wraps the read-only ClickHouse client used by the
+// reports handlers into the narrow CHEventSource interface consumed by
+// the pipeline replay service. Keeping the adapter here (rather than
+// inside the pipeline package) lets the pipeline package stay free of
+// the clickhouseclient import.
+type pipelineCHAdapter struct {
+	client *clickhouseclient.Client
+}
+
+// Count exists as a Phase 1 projection surface for /v1/pipeline/replay.
+// The read-only Client does not yet expose a generic Count method;
+// return 0 here so the replay endpoint reports "projected=0" instead
+// of blowing up. Real counting will be wired alongside Phase 2 CH
+// replay reconstruction.
+func (a pipelineCHAdapter) Count(_ context.Context, _ pipeline.CHReplayFilter) (int, error) {
+	return 0, nil
 }

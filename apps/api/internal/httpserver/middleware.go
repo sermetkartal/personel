@@ -239,6 +239,42 @@ func AuthMiddleware(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	}
 }
 
+// InternalTokenMiddleware protects /v1/internal/* routes with a
+// shared-secret header. The in-cluster gateway presents
+// X-Internal-Token: <secret> on each call to the command ack endpoint;
+// constant-time comparison guards against timing oracles. When the
+// configured secret is empty the middleware responds 503 so routes
+// can be mounted unconditionally but remain inert in dev setups.
+func InternalTokenMiddleware(expected string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if expected == "" {
+				httpx.WriteError(w, r, http.StatusServiceUnavailable, httpx.ProblemTypeInternal, "Internal endpoint disabled", "err.internal")
+				return
+			}
+			presented := r.Header.Get("X-Internal-Token")
+			if presented == "" || !constantTimeEqual(presented, expected) {
+				httpx.WriteError(w, r, http.StatusUnauthorized, httpx.ProblemTypeAuth, "Authentication Required", "err.unauthenticated")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// constantTimeEqual does a constant-time byte comparison. Returns false
+// immediately on length mismatch (length is not a secret).
+func constantTimeEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	var diff byte
+	for i := 0; i < len(a); i++ {
+		diff |= a[i] ^ b[i]
+	}
+	return diff == 0
+}
+
 // AuditContextMiddleware injects the recorder into the request context.
 // Must be placed AFTER AuthMiddleware.
 func AuditContextMiddleware(rec *audit.Recorder) func(http.Handler) http.Handler {

@@ -1,0 +1,59 @@
+<?xml version="1.0"?>
+<!--
+  ClickHouse tiered storage policy for Personel event tables.
+
+  Roadmap item #76 — Faz 7.
+  ============================================================================
+  Tiers:
+    - hot  (≤7 days)      NVMe/SSD, all queries expected to run here
+    - warm (8–90 days)    larger spinning disk / cheap SSD, occasional queries
+    - cold (≥91 days)     Parquet export to MinIO via cold-export job, then
+                          partition DROP. Cold data is NOT queried via CH.
+
+  The `move_factor` triggers a part move when the hot volume has less than
+  10% free space — the merge tree will push the oldest parts to warm even
+  before the TTL MOVE clause fires.
+
+  TTL MOVE clauses (applied in schemas.go via ALTER TABLE once the policy is
+  attached) drive the age-based tiering for the happy path:
+
+      TTL toDateTime(occurred_at) + INTERVAL 7  DAY TO VOLUME 'warm',
+          toDateTime(occurred_at) + INTERVAL 90 DAY DELETE WHERE legal_hold = FALSE
+
+  Cold tier (≥91 days) is outside ClickHouse — the `cold-export` cron job
+  exports each expiring partition to MinIO as Parquet before dropping.
+
+  Retention matrix reference: docs/architecture/data-retention-matrix.md
+-->
+<clickhouse>
+  <storage_configuration>
+    <disks>
+      <hot>
+        <path>/var/lib/clickhouse/hot/</path>
+        <keep_free_space_bytes>10737418240</keep_free_space_bytes> <!-- 10 GiB -->
+      </hot>
+      <warm>
+        <path>/var/lib/clickhouse/warm/</path>
+        <keep_free_space_bytes>5368709120</keep_free_space_bytes> <!-- 5 GiB -->
+      </warm>
+    </disks>
+
+    <policies>
+      <tiered>
+        <volumes>
+          <hot>
+            <disk>hot</disk>
+            <!-- Parts larger than 50 GiB bypass hot and go straight to warm.
+                 This prevents a single huge merge from eating NVMe. -->
+            <max_data_part_size_bytes>53687091200</max_data_part_size_bytes>
+          </hot>
+          <warm>
+            <disk>warm</disk>
+          </warm>
+        </volumes>
+        <!-- Start moving parts to warm when hot has <10% free space. -->
+        <move_factor>0.1</move_factor>
+      </tiered>
+    </policies>
+  </storage_configuration>
+</clickhouse>

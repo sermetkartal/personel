@@ -51,6 +51,14 @@ func New(url, credsFile string, log *slog.Logger) (*Publisher, error) {
 	return &Publisher{nc: nc, js: js, log: log}, nil
 }
 
+// JS exposes the underlying JetStreamContext for packages (e.g. the
+// pipeline DLQ reader) that need direct pull-consumer access beyond
+// what Publish offers. Callers MUST NOT close the returned context;
+// Publisher.Close() owns the lifetime.
+func (p *Publisher) JS() gonats.JetStreamContext {
+	return p.js
+}
+
 // Publish publishes a raw message to a NATS subject.
 func (p *Publisher) Publish(_ context.Context, subject string, data []byte) error {
 	_, err := p.js.Publish(subject, data)

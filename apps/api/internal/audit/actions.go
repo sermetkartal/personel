@@ -78,9 +78,19 @@ const (
 
 // --- Endpoint fleet ---
 const (
-	ActionEndpointEnrolled Action = "endpoint.enrolled"
-	ActionEndpointRevoked  Action = "endpoint.revoked"
-	ActionEndpointDeleted  Action = "endpoint.deleted"
+	ActionEndpointEnrolled       Action = "endpoint.enrolled"
+	ActionEndpointRevoked        Action = "endpoint.revoked"
+	ActionEndpointDeleted        Action = "endpoint.deleted"
+	ActionEndpointTokenRefreshed Action = "endpoint.token_refreshed"
+	// Remote command actions (Faz 6 #64 #65).
+	// Wipe issues a crypto-erase command (KVKK m.7). Deactivate stops
+	// all collectors but preserves local state. Bulk covers 1..N
+	// endpoints in one API call. Ack is written when the gateway
+	// reports back agent acknowledgement of the command.
+	ActionEndpointWipe        Action = "endpoint.wipe_issued"
+	ActionEndpointDeactivate  Action = "endpoint.deactivate_issued"
+	ActionEndpointCommandBulk Action = "endpoint.bulk_operation"
+	ActionEndpointCommandAck  Action = "endpoint.command_acknowledged"
 )
 
 // --- Screenshot / screenclip ---
@@ -205,6 +215,15 @@ const (
 	ActionAgentSilenceAcknowledged Action = "agent.silence.acknowledged"
 )
 
+// --- Pipeline (Faz 7 #75) ---
+const (
+	// ActionPipelineReplay is emitted by POST /v1/pipeline/replay
+	// BEFORE any DLQ re-publish or CH reconstruction. Every replay
+	// is audited — dry_run or real — so operators cannot silently
+	// re-inject events after a bug fix.
+	ActionPipelineReplay Action = "pipeline.replay"
+)
+
 // AllActions is the canonical list. The test in audit_test.go iterates this
 // slice and verifies every action appears in at least one registered handler.
 // Add new actions here in the same commit as the constant above.
@@ -235,6 +254,11 @@ var AllActions = []Action{
 	ActionEndpointEnrolled,
 	ActionEndpointRevoked,
 	ActionEndpointDeleted,
+	ActionEndpointTokenRefreshed,
+	ActionEndpointWipe,
+	ActionEndpointDeactivate,
+	ActionEndpointCommandBulk,
+	ActionEndpointCommandAck,
 	ActionScreenshotViewed,
 	ActionScreenshotExported,
 	ActionScreenclipViewed,
@@ -292,6 +316,7 @@ var AllActions = []Action{
 	ActionDLPPEDEKBootstrapped,
 	ActionDLPPEDEKBootstrapBatch,
 	ActionAgentSilenceAcknowledged,
+	ActionPipelineReplay,
 }
 
 // ValidAction returns true if a is a known audit action.

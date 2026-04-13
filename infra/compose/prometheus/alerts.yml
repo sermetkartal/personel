@@ -428,3 +428,129 @@ groups:
             a blocking CC7.1 failure that will disqualify the current Type II
             observation window. Escalate to DPO + CTO immediately.
           runbook: "runbooks/soc2-evidence-pack-retrieval.md"
+
+  # ---------------------------------------------------------------------------
+  # DATA QUALITY MONITORING (Faz 7 — Roadmap item #80)
+  # The enricher DQM publishes per-tenant counters for every stage of the
+  # post-NATS pipeline. These alerts trip when a tenant's traffic deviates
+  # significantly from its own 7-day baseline, or when drop/DLQ rates climb.
+  # ---------------------------------------------------------------------------
+  - name: enricher.dqm
+    interval: 60s
+    rules:
+
+      - alert: DQMEventsReceivedAnomaly
+        expr: |
+          (
+            sum by (tenant_id) (
+              rate(personel_enricher_events_received_total[5m])
+            )
+            /
+            clamp_min(
+              sum by (tenant_id) (
+                avg_over_time(rate(personel_enricher_events_received_total[1h])[7d:1h])
+              ),
+              0.001
+            )
+          ) < 0.70
+        for: 10m
+        labels:
+          severity: warning
+          category: data_quality
+        annotations:
+          summary: "Enricher received >30% fewer events vs 7-day baseline ({{ $labels.tenant_id }})"
+          description: |
+            The enricher is receiving significantly fewer events than the
+            7-day baseline for tenant {{ $labels.tenant_id }}. This may
+            indicate: (a) agents offline (check Flow 7 alerts), (b) NATS
+            JetStream backlog, (c) gateway ingest outage. Investigate
+            before declaring a DSR SLA outage per KVKK m.11.
+          runbook: "runbooks/troubleshooting.md#enricher-dqm-anomaly"
+
+      - alert: DQMEventsDroppedHigh
+        expr: |
+          (
+            sum by (tenant_id) (
+              rate(personel_enricher_events_dropped_total[5m])
+            )
+            /
+            clamp_min(
+              sum by (tenant_id) (
+                rate(personel_enricher_events_received_total[5m])
+              ),
+              0.001
+            )
+          ) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+          category: data_quality
+        annotations:
+          summary: "Enricher drop ratio >5% for tenant {{ $labels.tenant_id }}"
+          description: |
+            More than 5% of received events are being dropped for tenant
+            {{ $labels.tenant_id }}. Common causes: enrich_error (tenant
+            metadata missing), clickhouse_add_error (batcher backpressure),
+            or legitimate purge-retention rules.
+
+      - alert: DQMDecodeLatencyHigh
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (tenant_id, le) (
+              rate(personel_enricher_decode_latency_ms_bucket[5m])
+            )
+          ) > 50
+        for: 15m
+        labels:
+          severity: warning
+          category: performance
+        annotations:
+          summary: "Enricher decode p95 >50ms for tenant {{ $labels.tenant_id }}"
+          description: |
+            Enrich() p95 latency is above 50ms. Typically indicates a
+            Postgres metadata cache miss storm or a slow query on the
+            endpoints table.
+
+      - alert: DQMDLQRising
+        expr: |
+          sum by (tenant_id) (
+            rate(personel_enricher_events_dlq_total[15m])
+          ) > 0
+        for: 5m
+        labels:
+          severity: critical
+          category: data_quality
+        annotations:
+          summary: "Enricher DLQ traffic for tenant {{ $labels.tenant_id }}"
+          description: |
+            Events are being routed to the DLQ stream. Inspect the DLQ
+            consumer in the enricher dashboard. Any sustained DLQ rate
+            indicates a schema-mismatch or poison-payload condition
+            that needs operator review.
+          runbook: "runbooks/troubleshooting.md#enricher-dlq"
+
+      - alert: DQMDedupRatioAnomaly
+        expr: |
+          (
+            rate(personel_enricher_dedup_hits_total[5m])
+            /
+            clamp_min(
+              (
+                rate(personel_enricher_dedup_hits_total[5m])
+                + rate(personel_enricher_dedup_misses_total[5m])
+              ),
+              0.001
+            )
+          ) > 0.20
+        for: 15m
+        labels:
+          severity: warning
+          category: data_quality
+        annotations:
+          summary: "Enricher dedup hit ratio >20%"
+          description: |
+            More than 20% of events are duplicate deliveries from NATS.
+            This may indicate: (a) a crash loop in the enricher causing
+            redelivery, (b) a misconfigured AckWait, (c) a bug in the
+            agent that re-emits already-acked batches.

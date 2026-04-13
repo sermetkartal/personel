@@ -146,6 +146,25 @@ func main() {
 	router := enricher.NewRouter()
 	consumer := enricher.NewConsumer(js, batcher, enrich, router, metrics, logger)
 
+	// Faz 7 item #78: deduplication cache (100k entries, 5m TTL).
+	// Absorbs at-least-once redelivery before hitting ClickHouse.
+	deduper := enricher.NewDeduper(100_000, 5*time.Minute, nil)
+	defer deduper.Close()
+	consumer.SetDeduper(deduper)
+
+	// Faz 7 item #80: data-quality monitoring.
+	dqm := enricher.NewDQM(nil)
+	consumer.SetDQM(dqm)
+
+	// Faz 7 items #73 + #74: schema-versioned decoder + dead letter queue.
+	// The decoder dispatches on the NATS "schema-version" header so v1
+	// and v2 wire schemas can coexist during a fleet migration. The DLQ
+	// absorbs any message that fails decode / enrich / sink write after
+	// MaxRetries retries, preventing infinite redelivery loops.
+	consumer.SetDecoder(enricher.NewDefaultDecoder())
+	dlqPublisher := enricher.NewDLQPublisher(js, enricher.DLQPublisherConfig{MaxRetries: 3}, logger)
+	consumer.SetDLQ(dlqPublisher)
+
 	// ----- Signal handling -----
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGTERM, syscall.SIGINT)

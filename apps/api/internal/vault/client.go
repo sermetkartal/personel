@@ -362,6 +362,55 @@ func (c *Client) SignAgentCSR(ctx context.Context, signClient *vaultapi.Client, 
 	}, nil
 }
 
+// RevokeCert revokes an issued PKI leaf by serial number via pki/revoke.
+// The serial is accepted in either Vault's colon-separated form
+// ("a1:b2:...") or the contiguous lowercase hex we store in
+// endpoints.cert_serial; the function normalises to the colon form
+// because Vault's pki/revoke endpoint is picky about the layout.
+//
+// This call uses the Admin API's own Vault token — not the single-use
+// agent-enrollment AppRole — so the policy attached to that token must
+// include `pki/revoke` (see infra/compose/vault/policies/api.hcl).
+// A non-nil error is returned on any Vault failure; callers should
+// treat revoke as best-effort and log at WARN on failure (the CRL is
+// eventually consistent and the refresh path must still succeed).
+func (c *Client) RevokeCert(ctx context.Context, serial string) error {
+	if serial == "" {
+		return fmt.Errorf("vault: revoke: empty serial")
+	}
+	// Normalise contiguous hex "a1b2..." → colon form "a1:b2:..." so
+	// Vault's serial matcher is happy. If the caller already passed the
+	// colon form we leave it alone.
+	normalized := serial
+	if !strings.ContainsRune(normalized, ':') {
+		var b strings.Builder
+		b.Grow(len(normalized) + len(normalized)/2)
+		for i := 0; i < len(normalized); i += 2 {
+			if i > 0 {
+				b.WriteByte(':')
+			}
+			end := i + 2
+			if end > len(normalized) {
+				end = len(normalized)
+			}
+			b.WriteString(normalized[i:end])
+		}
+		normalized = b.String()
+	}
+	secret, err := c.raw.Logical().WriteWithContext(ctx, "pki/revoke", map[string]interface{}{
+		"serial_number": normalized,
+	})
+	if err != nil {
+		return fmt.Errorf("vault: pki revoke %q: %w", normalized, err)
+	}
+	// Vault returns revocation_time on success. Missing it is not a
+	// hard error (older Vault versions omit it) but a nil secret is.
+	if secret == nil {
+		return fmt.Errorf("vault: pki revoke %q: nil response", normalized)
+	}
+	return nil
+}
+
 // GetEnrollmentRoleID returns the agent-enrollment AppRole role_id.
 func (c *Client) GetEnrollmentRoleID(ctx context.Context) (string, error) {
 	secret, err := c.raw.Logical().ReadWithContext(ctx, "auth/approle/role/agent-enrollment/role-id")

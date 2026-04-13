@@ -30,6 +30,7 @@ import (
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	"github.com/personel/api/internal/mobile"
+	"github.com/personel/api/internal/pipeline"
 	"github.com/personel/api/internal/policy"
 	"github.com/personel/api/internal/reports"
 	"github.com/personel/api/internal/reportspg"
@@ -49,6 +50,8 @@ type Services struct {
 	Tenant       *tenant.Service
 	User         *user.Service
 	Endpoint     *endpoint.Service
+	// EndpointCmd handles remote command issuance + ack (Faz 6 #64 #65).
+	EndpointCmd  *endpoint.CommandService
 	Policy       *policy.Service
 	DSR          *dsr.Service
 	LegalHold    *legalhold.Service
@@ -68,6 +71,7 @@ type Services struct {
 	AccessReview  *accessreview.Service
 	Incident      *incident.Service
 	BCP           *bcp.Service
+	Pipeline      *pipeline.Service
 	DBPool        *pgxpool.Pool
 	Log           *slog.Logger
 }
@@ -126,6 +130,18 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 	// AuthMiddleware never sees it.
 	r.Post("/v1/agent-enroll", endpoint.AgentEnrollHandler(svc.Endpoint))
 
+	// --- Internal gateway → API callback (Faz 6 #64) ---
+	// POST /v1/internal/commands/{commandID}/ack is called by the
+	// in-cluster gateway after the agent reports acknowledgement or
+	// final state for a remote command. No Keycloak JWT — the
+	// InternalTokenMiddleware enforces a shared-secret header.
+	if svc.EndpointCmd != nil {
+		r.Route("/v1/internal", func(r chi.Router) {
+			r.Use(InternalTokenMiddleware(svc.Cfg.Server.InternalToken))
+			r.Post("/commands/{commandID}/ack", endpoint.InternalAckHandler(svc.EndpointCmd))
+		})
+	}
+
 	// API v1 — all routes require auth.
 	r.Route("/v1", func(r chi.Router) {
 		r.Use(AuthMiddleware(svc.Verifier))
@@ -177,10 +193,52 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO))
 			r.Get("/", endpoint.ListHandler(svc.Endpoint))
 			r.Post("/enroll", endpoint.EnrollHandler(svc.Endpoint))
+
+			// POST /bulk — Faz 6 #65. Batch wipe / deactivate / revoke
+			// across up to endpoint.BulkLimit endpoints. Admin +
+			// IT Manager only (Investigator still uses per-endpoint
+			// wipe for KVKK m.7 incident response).
+			if svc.EndpointCmd != nil {
+				r.With(auth.RequireRole(auth.RoleAdmin, auth.RoleITManager)).
+					Post("/bulk", endpoint.BulkHandler(svc.EndpointCmd))
+			}
+
 			r.Route("/{endpointID}", func(r chi.Router) {
 				r.Get("/", endpoint.GetHandler(svc.Endpoint))
 				r.Delete("/", endpoint.DeleteHandler(svc.Endpoint))
 				r.Post("/revoke", endpoint.RevokeHandler(svc.Endpoint))
+				// POST /refresh-token (Faz 6 #63) — widen RBAC to IT
+				// hierarchy. The parent /endpoints group is gated to
+				// admin+dpo; we override with With() here because
+				// DPO has no cert-rotation authority (device lifecycle
+				// is IT's purview) but it_manager/it_operator do.
+				r.With(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleITManager, auth.RoleITOperator,
+				)).Post("/refresh-token", endpoint.RefreshTokenHandler(svc.Endpoint))
+
+				// --- Remote commands (Faz 6 #64) ---
+				// wipe/deactivate/commands-history. Guarded on the
+				// CommandService being wired so the package builds in
+				// test fixtures that only stub the enrollment service.
+				if svc.EndpointCmd != nil {
+					// Wipe: crypto-erase. Admin + IT Manager +
+					// Investigator (incident response KVKK m.7).
+					r.With(auth.RequireRole(
+						auth.RoleAdmin, auth.RoleITManager, auth.RoleInvestigator,
+					)).Post("/wipe", endpoint.WipeHandler(svc.EndpointCmd))
+
+					// Deactivate: reversible stop. Admin + IT Manager.
+					r.With(auth.RequireRole(
+						auth.RoleAdmin, auth.RoleITManager,
+					)).Post("/deactivate", endpoint.DeactivateHandler(svc.EndpointCmd))
+
+					// GET /commands — read-only command history for
+					// the console endpoint detail page. Admin +
+					// IT Manager + IT Operator.
+					r.With(auth.RequireRole(
+						auth.RoleAdmin, auth.RoleITManager, auth.RoleITOperator,
+					)).Get("/commands", endpoint.ListCommandsHandler(svc.EndpointCmd))
+				}
 			})
 		})
 
@@ -447,6 +505,26 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 					Get("/evidence-coverage", evidence.GetCoverageHandler(svc.Evidence))
 			}
 		})
+
+		// --- Pipeline (Faz 7 #74 + #75) ---
+		// GET  /v1/pipeline/dlq    — admin, dpo, investigator
+		// POST /v1/pipeline/replay — admin, dpo ONLY (load + compliance)
+		//
+		// Every replay writes an audit entry BEFORE any NATS publish;
+		// dry_run=true returns projected count without publishing. Tenant
+		// isolation is enforced by the service layer: all_tenants=true
+		// requires DPO role.
+		if svc.Pipeline != nil {
+			r.Route("/pipeline", func(r chi.Router) {
+				r.With(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleDPO, auth.RoleInvestigator,
+				)).Get("/dlq", pipeline.ListDLQHandler(svc.Pipeline))
+
+				r.With(auth.RequireRole(
+					auth.RoleAdmin, auth.RoleDPO,
+				)).Post("/replay", pipeline.ReplayHandler(svc.Pipeline))
+			})
+		}
 
 		// --- Mobile BFF endpoints (Phase 2.9) ---
 		// Consumed exclusively by apps/mobile-admin (React Native). Gated

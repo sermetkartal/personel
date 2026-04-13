@@ -20,6 +20,7 @@ type StreamConfig struct {
 	Replicas    int
 	MaxAge      time.Duration
 	MaxMsgSize  int32
+	MaxBytes    int64
 	Description string
 }
 
@@ -72,6 +73,21 @@ func RequiredStreams() []StreamConfig {
 			MaxAge:      24 * time.Hour,
 			Description: "PKI revocation events; consumed by gateway to refresh deny list.",
 		},
+		{
+			// Faz 7 #74 — dead letter queue. Messages that fail
+			// enrichment after MaxRetries get parked here for
+			// operator inspection via /v1/pipeline/dlq. Limited
+			// retention (7d) and a 10 GiB ceiling so a
+			// pathological bug can't exhaust disk.
+			Name:        "events_dlq",
+			Subjects:    []string{"events.dlq.>"},
+			Retention:   jetstream.LimitsPolicy,
+			Storage:     jetstream.FileStorage,
+			Replicas:    1,
+			MaxAge:      7 * 24 * time.Hour,
+			MaxBytes:    10 * 1024 * 1024 * 1024, // 10 GiB ceiling
+			Description: "Dead-lettered event batches (Faz 7 #74). Inspect via /v1/pipeline/dlq.",
+		},
 	}
 }
 
@@ -91,6 +107,9 @@ func BootstrapStreams(ctx context.Context, js jetstream.JetStream, logger *slog.
 		}
 		if sc.MaxMsgSize > 0 {
 			cfg.MaxMsgSize = sc.MaxMsgSize
+		}
+		if sc.MaxBytes > 0 {
+			cfg.MaxBytes = sc.MaxBytes
 		}
 
 		_, err := js.CreateOrUpdateStream(ctx, cfg)

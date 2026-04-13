@@ -68,6 +68,13 @@ type HTTPConfig struct {
 type ServerConfig struct {
 	PublicURL  string `koanf:"public_url"`  // e.g. "http://192.168.5.44:8000"
 	GatewayURL string `koanf:"gateway_url"` // e.g. "tls://192.168.5.44:9443"
+	// InternalToken is a shared secret used by the in-cluster gateway
+	// to authenticate calls to /v1/internal/* endpoints (e.g. the
+	// command acknowledgement path used by Faz 6 #64/#65 remote
+	// commands). Rotated out-of-band via systemd credential injection;
+	// must be >=32 bytes when set. Empty value disables the internal
+	// route group (gateway can't call back) — safe default for dev.
+	InternalToken string `koanf:"internal_token"`
 }
 
 type PostgresConfig struct {

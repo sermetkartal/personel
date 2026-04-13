@@ -69,6 +69,52 @@ type Service struct {
 	log         *slog.Logger
 	publicURL   string
 	gatewayURL  string
+
+	// refreshStoreOverride is ONLY set by SetRefreshStoreForTesting and
+	// stands in for the production *pgxpool.Pool-backed pgxRefreshStore
+	// so the refresh path can be unit-tested without a live Postgres.
+	// nil in production.
+	refreshStoreOverride refreshStore
+
+	// pkiOverride is ONLY set by SetPKIForTesting and stands in for the
+	// concrete *vault.Client so the refresh path can be unit-tested
+	// without a live Vault server. nil in production.
+	pkiOverride pkiSigner
+
+	// auditOverride is ONLY set by SetAuditForTesting. nil in production;
+	// the concrete *audit.Recorder on s.recorder is used instead.
+	auditOverride auditAppender
+}
+
+// auditAppend routes through the test override if present, otherwise
+// delegates to the production recorder.
+func (s *Service) auditAppend(ctx context.Context, e audit.Entry) (int64, error) {
+	if s.auditOverride != nil {
+		return s.auditOverride.Append(ctx, e)
+	}
+	return s.recorder.Append(ctx, e)
+}
+
+// SetAuditForTesting installs a fake audit recorder. ONLY for use in
+// *_test.go.
+func (s *Service) SetAuditForTesting(r auditAppender) {
+	s.auditOverride = r
+}
+
+// vaultPKI returns the PKI signer the refresh path will use. Default
+// is the concrete *vault.Client; unit tests install a fake via
+// SetPKIForTesting.
+func (s *Service) vaultPKI() pkiSigner {
+	if s.pkiOverride != nil {
+		return s.pkiOverride
+	}
+	return s.vaultClient
+}
+
+// SetPKIForTesting installs a fake PKI signer. ONLY for use in
+// *_test.go.
+func (s *Service) SetPKIForTesting(pki pkiSigner) {
+	s.pkiOverride = pki
 }
 
 // NewService creates the endpoint service. publicURL is the externally
@@ -148,9 +194,15 @@ func (s *Service) Enroll(ctx context.Context, p *auth.Principal) (*EnrollmentTok
 	// Store the token record. The agent-enroll handler later looks this
 	// row up by vault_secret_id to recover the tenant_id binding (Vault
 	// has no idea which tenant a Secret ID belongs to).
+	//
+	// issued_for_tenant mirrors tenant_id but the name makes it explicit
+	// that the tenant is pinned to the issuing operator's Principal —
+	// the agent has no ability to influence it. Migration 0031 introduced
+	// the column; both are set so downstream queries can rely on the
+	// explicit name.
 	_, err = s.pool.Exec(ctx,
-		`INSERT INTO enrollment_tokens (tenant_id, vault_secret_id, vault_role_id, created_by, expires_at)
-		 VALUES ($1::uuid, $2, $3, $4::uuid, $5)`,
+		`INSERT INTO enrollment_tokens (tenant_id, vault_secret_id, vault_role_id, created_by, expires_at, issued_for_tenant)
+		 VALUES ($1::uuid, $2, $3, $4::uuid, $5, $1::uuid)`,
 		p.TenantID, secretID, roleID, p.UserID, expiresAt,
 	)
 	if err != nil {
