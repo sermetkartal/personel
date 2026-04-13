@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.2 — Faz 1+2+3+4 COMPLETE; Faz 5 Wave 1 partial: 9/21 (items 41,42,47,50,53,54,55,56,58). Cluster items (43-46, 48, 51, 52) AWAITING ikinci makine. Toplam 49/190. — 2026-04-13
+> Versiyon: 2.3 — Faz 1+2+3+4 COMPLETE; Faz 5 Wave 1 + Wave 2 partial: 16/21 (items 41-58 hariç 59,60,61). vm5 (192.168.5.32) cluster scaffold'ları hazır. Toplam 56/190. — 2026-04-13
 
 ---
 
@@ -590,14 +590,7 @@ Wave bitince:
 **AWAITING CUSTOMER ACTION** (otonom çalışan Claude Code kapatamaz):
 
 - [ ] **`.github/workflows/build-agent.yml` push** — Faz 4 #40 code signing CI workflow lokal `C:\personel\.github\workflows\build-agent.yml`'de hazır ama oturumun OAuth token'ında `workflow` scope yok. Manuel `git add .github/workflows/build-agent.yml && git commit && git push` kullanıcı tarafından `workflow`-scope'lu token ile yapılmalı.
-- [ ] **Faz 5 cluster items** — ikinci pilot makine (Ubuntu) gerekiyor:
-  - #43 Postgres replica + streaming replication
-  - #44 ClickHouse 2-node + Keeper
-  - #45 ClickHouse replication test + failover drill
-  - #46 NATS JetStream cluster (3-node Raft)
-  - #48 MinIO distributed (4-node erasure)
-  - #51 OpenSearch cluster setup
-  - #52 Keycloak HA (2-node + Infinispan)
+- [x] ~~**Faz 5 cluster items** — ikinci pilot makine (Ubuntu) gerekiyor~~ — vm5 192.168.5.32 sağlandı (2026-04-13). Items 43, 44, 45, 46, 48, 51, 52 cluster scaffold'ları commit `2bf4d50`'de hazır. Operator runbook'ları docs/operations/ altında 4 dosya: postgres-replication.md, clickhouse-cluster.md, nats-minio-cluster.md, opensearch-keycloak-cluster.md. **Faz 5 Wave 2 deployment operator handoff bekliyor** — 6 sıralı bring-up adımı (postgres → CH → NATS → MinIO → OS → Keycloak). Detay: commit `2bf4d50` mesajı.
 - [ ] **Faz 5 Wave 1 operator handoff** — 9 maddenin script + runbook'ları repo'da hazır ama Ubuntu pilot'a deploy edilmedi. Sıralı operator action listesi `C:\Users\kartal\AppData\Local\Temp\faz5w1-commit.txt` veya commit `88502db` mesajında. Özetle: vault prod ceremony → postgres TLS → NATS auth → MinIO WORM → all-services TLS → cert/secret rotation timers → healthcheck override → backup automation. Her madde için `docs/operations/*-migration.md` Türkçe runbook.
 - [ ] **Faz 5 Wave 1 #59 #60 #61** — Restore drill (RTO/RPO ölç), off-site backup mirror, PITR — Wave 1 backup scaffold içinde restore-orchestrator + WAL archive var, ama gerçek RTO ölçümü ve off-site replikasyon (#60) ikinci makine olmadan eksik.
 - [ ] EV Code Signing Certificate satın alma (~$700/yıl Sectigo)
