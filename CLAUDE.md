@@ -14,7 +14,7 @@
 >
 > 1. **Windows VM**: `192.168.5.30` (kullanıcı: kartal, hostname: DESKTOP-426U3BG)
 > 2. **Ubuntu primary**: `192.168.5.44` (kullanıcı: kartal, hostname: vm3, repo: /home/kartal/personel) — primary stack, tüm 12 servis
-> 3. **Ubuntu secondary**: `192.168.5.32` (kullanıcı: kartal, hostname: vm5, ssh-ed25519 fingerprint `SHA256:g/gPQshxLRJovRgJAV59CKZwDCd04xoGhpdMcX96L9s`) — Ubuntu 24.04 LTS, 3.7 GB RAM, 98 GB disk, **docker henüz kurulu değil**. Faz 5 cluster maddeleri (43-46, 48, 51, 52) için replica/peer host.
+> 3. **Ubuntu secondary**: `192.168.5.32` (kullanıcı: kartal, hostname: vm5, ssh-ed25519 fingerprint `SHA256:g/gPQshxLRJovRgJAV59CKZwDCd04xoGhpdMcX96L9s`) — Ubuntu 24.04 LTS, **7.7 GB RAM, 4 vCPU, 87 GB disk**. Docker CE 29.4 + Compose v5.1.2 yüklü, kartal user docker group'unda. DNS=8.8.8.8 (1.1.1.1 bu network'te bloke). Faz 5 cluster maddeleri (43-46, 48, 51, 52) için replica/peer host.
 >
 > **YASAK**:
 > - Başka IP/host'a SSH bağlanma
