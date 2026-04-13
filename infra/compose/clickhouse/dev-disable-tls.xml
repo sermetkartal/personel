@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - Disable TCP TLS (dev Wave 2)
+  The base config.xml references /etc/personel/tls/clickhouse.{crt,key}
+  inside an <openSSL> block. When those files are missing (vm5 has no
+  TLS cert bundle yet), ClickHouse still starts because tcp_port_secure
+  is optional, but the <openSSL><server> stanza paths are only read
+  lazily on secure connections. To be safe, we replace openSSL with an
+  empty block and remove tcp_port_secure here.
+-->
+<clickhouse>
+    <tcp_port_secure remove="remove"/>
+    <openSSL replace="replace">
+        <server/>
+    </openSSL>
+</clickhouse>

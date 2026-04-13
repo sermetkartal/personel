@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Node 2 port override (vm5)
+  Moves native tcp_port from 9000 to 19000 to avoid collision with
+  personel-minio-mirror which also listens on host 9000 on vm5.
+-->
+<clickhouse>
+    <tcp_port replace="replace">19000</tcp_port>
+</clickhouse>

@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse cluster include (dev mode, Wave 2 bring-up)
+  Mounted at /etc/clickhouse-server/config.d/cluster.xml on both nodes.
+  No TLS, no interserver auth. Uses LAN IPs so cross-host replication works
+  whether the container is on docker bridge (clickhouse-01 on vm3, for
+  backward compat with api/gateway/enricher) or host network (clickhouse-02
+  on vm5). replica + interserver host come from env.
+-->
+<clickhouse>
+    <remote_servers replace="replace">
+        <personel_cluster>
+            <shard>
+                <internal_replication>true</internal_replication>
+                <replica>
+                    <host>192.168.5.44</host>
+                    <port>19000</port>
+                    <user>personel_app</user>
+                    <password from_env="CLICKHOUSE_PASSWORD"/>
+                </replica>
+                <replica>
+                    <host>192.168.5.32</host>
+                    <port>19000</port>
+                    <user>personel_app</user>
+                    <password from_env="CLICKHOUSE_PASSWORD"/>
+                </replica>
+            </shard>
+        </personel_cluster>
+    </remote_servers>
+
+    <zookeeper replace="replace">
+        <node index="1">
+            <host>192.168.5.44</host>
+            <port>9181</port>
+        </node>
+        <node index="2">
+            <host>192.168.5.32</host>
+            <port>9181</port>
+        </node>
+        <session_timeout_ms>30000</session_timeout_ms>
+        <operation_timeout_ms>10000</operation_timeout_ms>
+        <root>/clickhouse</root>
+    </zookeeper>
+
+    <interserver_http_host from_env="CH_INTERSERVER_HOST"/>
+
+    <distributed_ddl>
+        <path>/clickhouse/task_queue/ddl</path>
+        <profile>default</profile>
+        <pool_size>1</pool_size>
+        <task_max_lifetime>604800</task_max_lifetime>
+    </distributed_ddl>
+</clickhouse>

@@ -1,0 +1,93 @@
+# =============================================================================
+# Personel Platform — Keycloak HA Node 2 (vm5) — DEV MODE STANDALONE
+# =============================================================================
+# Faz 5 Madde 52 — 2-node Infinispan HA (pilot dev, no TLS)
+#
+# STANDALONE compose on vm5 (192.168.5.32). Shares the postgres database
+# on vm3 via the LAN (port 5432 is already published on 0.0.0.0 on vm3).
+#
+# JGroups discovery is JDBC_PING2: both nodes write their transport address
+# into the `jgroups_ping` table in the shared personel_keycloak DB and read
+# each other's entries at startup — no multicast.
+#
+# Deploy: on vm5,
+#   mkdir -p /opt/personel/keycloak
+#   scp docker-compose.ha-node2.dev.yaml cache-ispn-jdbc-ping.xml vm5:/opt/personel/keycloak/
+#   cd /opt/personel/keycloak && docker compose -f docker-compose.ha-node2.dev.yaml up -d
+# =============================================================================
+
+networks:
+  keycloak-ha:
+    driver: bridge
+
+services:
+  keycloak-02:
+    image: quay.io/keycloak/keycloak:25.0.6
+    container_name: personel-keycloak-02
+    hostname: keycloak-02
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8080:8080"
+      - "127.0.0.1:9010:9000"
+      - "0.0.0.0:7800:7800"
+    volumes:
+      - ./cache-ispn-jdbc-ping.xml:/opt/keycloak/conf/cache-ispn-jdbc-ping.xml:ro
+    command:
+      - "start"
+      - "--http-enabled=true"
+      - "--hostname-strict=false"
+      - "--proxy-headers=xforwarded"
+      - "--cache=ispn"
+      - "--cache-config-file=cache-ispn-jdbc-ping.xml"
+      - "--health-enabled=true"
+      - "--metrics-enabled=true"
+    environment:
+      # --- DB (points at vm3 over the LAN) ---
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://192.168.5.44:5432/personel_keycloak
+      KC_DB_USERNAME: app_keycloak
+      KC_DB_PASSWORD: keycloak123
+      KC_DB_URL_JGROUPS: jdbc:postgresql://192.168.5.44:5432/personel_keycloak
+
+      # NOTE: no KEYCLOAK_ADMIN/_PASSWORD here — node-01 already created the
+      # admin user; node-02 shares the same DB row.
+
+      KC_HOSTNAME: keycloak
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+
+      JAVA_OPTS_APPEND: >-
+        -Djgroups.bind.address=SITE_LOCAL
+        -Djgroups.bind.port=7800
+        -Djgroups.external_addr=192.168.5.32
+        -Djboss.node.name=keycloak-02
+
+    networks:
+      - keycloak-ha
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          cat <&3 | grep -q '"status": "UP"'
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: "2g"
+        reservations:
+          memory: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: keycloak-02
+      com.personel.tier: app
+      com.personel.cluster-role: keycloak-ha-secondary

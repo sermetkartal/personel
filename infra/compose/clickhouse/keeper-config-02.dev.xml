@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<!--
+  Personel Platform - ClickHouse Keeper dev config (server_id=2, vm5)
+  Dev-mode Wave 2 bring-up: no TLS, hostnames are LAN IPs, listen_host=0.0.0.0.
+-->
+<clickhouse>
+    <logger>
+        <level>information</level>
+        <console>1</console>
+    </logger>
+    <listen_host>0.0.0.0</listen_host>
+    <keeper_server>
+        <path>/var/lib/clickhouse/coordination</path>
+        <tcp_port>9181</tcp_port>
+        <server_id>2</server_id>
+        <log_storage_path>/var/lib/clickhouse/coordination/log</log_storage_path>
+        <snapshot_storage_path>/var/lib/clickhouse/coordination/snapshots</snapshot_storage_path>
+        <four_letter_word_white_list>*</four_letter_word_white_list>
+
+        <coordination_settings>
+            <operation_timeout_ms>10000</operation_timeout_ms>
+            <session_timeout_ms>30000</session_timeout_ms>
+            <raft_logs_level>information</raft_logs_level>
+            <heart_beat_interval_ms>500</heart_beat_interval_ms>
+            <election_timeout_lower_bound_ms>1000</election_timeout_lower_bound_ms>
+            <election_timeout_upper_bound_ms>2000</election_timeout_upper_bound_ms>
+            <snapshot_distance>100000</snapshot_distance>
+            <reserved_log_items>100000</reserved_log_items>
+            <force_sync>true</force_sync>
+            <quorum_reads>false</quorum_reads>
+            <auto_forwarding>true</auto_forwarding>
+        </coordination_settings>
+
+        <raft_configuration>
+            <server>
+                <id>1</id>
+                <hostname>192.168.5.44</hostname>
+                <port>9234</port>
+                <can_become_leader>true</can_become_leader>
+                <priority>2</priority>
+            </server>
+            <server>
+                <id>2</id>
+                <hostname>192.168.5.32</hostname>
+                <port>9234</port>
+                <can_become_leader>true</can_become_leader>
+                <priority>1</priority>
+            </server>
+        </raft_configuration>
+    </keeper_server>
+</clickhouse>

@@ -1,0 +1,68 @@
+# =============================================================================
+# Personel Platform — OpenSearch Cluster Node 1 (DEV mode, vm3)
+# =============================================================================
+# Faz 5 Madde 51 — OpenSearch 2-node cluster, PHASE 1 DEV VARIANT
+#
+# Standalone compose (no overlay on main stack). Deploy via:
+#   docker compose -f docker-compose.dev-cluster-node1.yaml up -d
+#
+# Chosen for operational simplicity: avoids the main stack's `data` and
+# `monitoring` network bindings so we can publish the transport port
+# (9300) and HTTP port (9200) on the LAN without fighting `internal: true`.
+# =============================================================================
+
+volumes:
+  opensearch-01-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/personel/opensearch-01/data
+
+networks:
+  opensearch-cluster:
+    driver: bridge
+
+services:
+  opensearch-01:
+    image: opensearchproject/opensearch:2.13.0
+    container_name: personel-opensearch-01
+    hostname: opensearch-01
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:9200:9200"
+      - "0.0.0.0:9300:9300"
+    volumes:
+      - opensearch-01-data:/usr/share/opensearch/data
+      - ./opensearch.dev-cluster-node1.yml:/usr/share/opensearch/config/opensearch.yml:ro
+    environment:
+      OPENSEARCH_JAVA_OPTS: "-Xms1g -Xmx1g"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      DISABLE_SECURITY_PLUGIN: "true"
+      bootstrap.memory_lock: "true"
+    networks:
+      - opensearch-cluster
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "curl -sf 'http://127.0.0.1:9200/_cluster/health' | grep -E '\"status\":\"(green|yellow)\"'"
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: opensearch-01
+      com.personel.tier: data
+      com.personel.cluster-role: opensearch-master-data

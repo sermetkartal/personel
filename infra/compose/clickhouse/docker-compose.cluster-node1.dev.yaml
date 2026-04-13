@@ -1,0 +1,66 @@
+name: personel
+
+# =============================================================================
+# Personel Platform - ClickHouse Cluster Node 1 DEV overlay (vm3)
+# Chains on top of docker-compose.yaml + dev-override + /tmp/postgres-port-publish.yaml
+#
+# Usage from /home/kartal/personel/infra/compose:
+#   docker compose \
+#     -f docker-compose.yaml \
+#     -f docker-compose.dev-override.yaml \
+#     -f /tmp/postgres-port-publish.yaml \
+#     -f clickhouse/docker-compose.cluster-node1.dev.yaml \
+#     up -d --no-deps clickhouse keeper-01
+#
+# Preserves:
+#   - personel-clickhouse container name + clickhouse-data volume (no data loss)
+#   - existing compose-level mounts (config.xml, users.xml, macros.xml, tls-certs)
+# Adds:
+#   - /etc/clickhouse-server/config.d/cluster.xml (cluster + keeper + macros)
+#   - CH_REPLICA=01 + CH_INTERSERVER_HOST=192.168.5.44 + CLICKHOUSE_PASSWORD
+#   - 0.0.0.0:9000 + 0.0.0.0:9009 published so vm5 replica can pull parts
+#   - personel-keeper-01 sibling container on host network (Raft 9234, client 9181)
+# =============================================================================
+
+services:
+
+  clickhouse:
+    ports: !override
+      - "127.0.0.1:8123:8123"
+      - "192.168.5.44:19000:9000"
+      - "192.168.5.44:9009:9009"
+    environment:
+      CLICKHOUSE_DB: personel
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_ADMIN_PASSWORD_SHA256: ${CLICKHOUSE_ADMIN_PASSWORD_SHA256}
+      CLICKHOUSE_APP_PASSWORD_SHA256: ${CLICKHOUSE_APP_PASSWORD_SHA256}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CH_REPLICA: "01"
+      CH_INTERSERVER_HOST: "192.168.5.44"
+    volumes:
+      - ./clickhouse/config.cluster.dev.xml:/etc/clickhouse-server/config.d/cluster.xml:ro
+
+  keeper-01:
+    image: clickhouse/clickhouse-keeper:24.3-alpine
+    container_name: personel-keeper-01
+    hostname: keeper-01
+    restart: unless-stopped
+    network_mode: host
+    user: "0:0"
+    volumes:
+      - keeper-01-data:/var/lib/clickhouse/coordination
+      - ./clickhouse/keeper-config-01.dev.xml:/etc/clickhouse-keeper/keeper_config.xml:ro
+    healthcheck:
+      test: ["CMD-SHELL", "echo ruok | (exec 3<>/dev/tcp/127.0.0.1/9181 && cat >&3 && timeout 2 cat <&3) | grep -q imok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  keeper-01-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: /var/lib/personel/keeper-01

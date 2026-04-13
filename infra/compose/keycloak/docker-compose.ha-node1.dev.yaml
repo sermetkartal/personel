@@ -1,0 +1,108 @@
+# =============================================================================
+# Personel Platform — Keycloak HA Node 1 (vm3) — DEV MODE OVERLAY
+# =============================================================================
+# Faz 5 Madde 52 — 2-node Infinispan HA (pilot dev, no TLS)
+#
+# Differs from docker-compose.ha-node1.yaml:
+#   - Keycloak 24.0.3 (matches the pre-existing standalone container)
+#   - No TLS (HTTP only, plain JGroups TCP)
+#   - No --import-realm (the shared personel_keycloak DB already has the
+#     realm; importing would either no-op or duplicate clients)
+#   - Uses the existing personel_app + personel_data networks with alias
+#     `keycloak` so the unchanged api/gateway still resolve it
+#   - Uses the existing personel_keycloak database + app_keycloak user
+#
+# Deploy: on vm3,
+#   docker compose -f /home/kartal/personel/infra/compose/keycloak/docker-compose.ha-node1.dev.yaml up -d keycloak-01
+# =============================================================================
+
+networks:
+  personel_app:
+    external: true
+  personel_data:
+    external: true
+
+services:
+  keycloak-01:
+    image: quay.io/keycloak/keycloak:25.0.6
+    container_name: personel-keycloak-01
+    hostname: keycloak-01
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8080:8080"
+      - "127.0.0.1:9010:9000"
+      - "0.0.0.0:7800:7800"
+    volumes:
+      - ./cache-ispn-jdbc-ping.xml:/opt/keycloak/conf/cache-ispn-jdbc-ping.xml:ro
+    command:
+      - "start"
+      - "--http-enabled=true"
+      - "--hostname-strict=false"
+      - "--proxy-headers=xforwarded"
+      - "--cache=ispn"
+      - "--cache-config-file=cache-ispn-jdbc-ping.xml"
+      - "--health-enabled=true"
+      - "--metrics-enabled=true"
+    environment:
+      # --- DB (matches the existing standalone container) ---
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/personel_keycloak
+      KC_DB_USERNAME: app_keycloak
+      KC_DB_PASSWORD: keycloak123
+      # Duplicate DB URL for JGroups JDBC_PING2 (referenced in cache XML)
+      KC_DB_URL_JGROUPS: jdbc:postgresql://postgres:5432/personel_keycloak
+
+      # --- Bootstrap admin (Keycloak 25 uses KC_BOOTSTRAP_ADMIN_*; honoured
+      # only if no admin row exists yet — safe no-op because the realm
+      # export already has admin/admin123) ---
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin123
+
+      # --- Hostname / proxy ---
+      KC_HOSTNAME: keycloak
+      KC_HOSTNAME_STRICT: "false"
+      KC_HTTP_ENABLED: "true"
+
+      # --- JGroups JVM args ---
+      # Bind inside the container network for intra-pod talk, publish the
+      # 192.168.5.44 external addr so vm5 dials the right endpoint
+      JAVA_OPTS_APPEND: >-
+        -Djgroups.bind.address=SITE_LOCAL
+        -Djgroups.bind.port=7800
+        -Djgroups.external_addr=192.168.5.44
+        -Djboss.node.name=keycloak-01
+
+    networks:
+      personel_app:
+        aliases:
+          - keycloak
+      personel_data:
+        aliases:
+          - keycloak
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+          cat <&3 | grep -q '"status": "UP"'
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: "2g"
+        reservations:
+          memory: 768m
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    labels:
+      com.personel.service: keycloak-01
+      com.personel.tier: app
+      com.personel.cluster-role: keycloak-ha-primary

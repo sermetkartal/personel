@@ -1,0 +1,61 @@
+# =============================================================================
+# Personel Platform — OpenSearch 2-node Cluster (DEV mode, node 1 / vm3)
+# =============================================================================
+# Faz 5 Madde 51 — OpenSearch 2-node cluster, PHASE 1 DEV VARIANT
+#
+# Pragmatic Phase 1 choice: security plugin DISABLED, plain HTTP, no TLS on
+# transport or REST layer. This matches the single-node pilot posture where
+# admin/tenant CA cert issuance for OpenSearch nodes was never performed.
+#
+# TLS + security plugin are DEFERRED to Faz 5 Wave 3 / Madde 53 (Vault PKI
+# sertifika rotasyonu), at which point this file is replaced with the full
+# opensearch.cluster-node1.yml variant.
+#
+# Node 2 config: opensearch.dev-cluster-node2.yml
+# =============================================================================
+
+cluster.name: personel-opensearch-cluster
+node.name: opensearch-01
+node.roles: [master, data, ingest]
+
+# ---------------------------------------------------------------------------
+# Network
+# ---------------------------------------------------------------------------
+network.host: 0.0.0.0
+network.publish_host: 192.168.5.44
+http.port: 9200
+transport.port: 9300
+
+# ---------------------------------------------------------------------------
+# Discovery — Zen2, both nodes seed each other
+# ---------------------------------------------------------------------------
+discovery.seed_hosts:
+  - 192.168.5.44:9300
+  - 192.168.5.32:9300
+cluster.initial_master_nodes:
+  - opensearch-01
+  - opensearch-02
+
+# ---------------------------------------------------------------------------
+# Data paths
+# ---------------------------------------------------------------------------
+path.data: /usr/share/opensearch/data
+path.logs: /usr/share/opensearch/logs
+
+bootstrap.memory_lock: true
+
+# ---------------------------------------------------------------------------
+# Security plugin — DISABLED for Phase 1
+# ---------------------------------------------------------------------------
+plugins.security.disabled: true
+
+# ---------------------------------------------------------------------------
+# Performance / shard layout
+# ---------------------------------------------------------------------------
+thread_pool.write.queue_size: 1000
+thread_pool.search.queue_size: 1000
+
+cluster.routing.allocation.disk.threshold_enabled: true
+cluster.routing.allocation.disk.watermark.low: "85%"
+cluster.routing.allocation.disk.watermark.high: "90%"
+cluster.routing.allocation.disk.watermark.flood_stage: "95%"
