@@ -149,7 +149,7 @@ func CORSMiddleware(cfg *config.HTTPConfig) func(http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PATCH,PUT,DELETE,OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Request-Id")
+				w.Header().Set("Access-Control-Allow-Headers", "Authorization,Content-Type,X-Request-Id,traceparent,tracestate,baggage")
 				w.Header().Set("Vary", "Origin")
 			}
 			if r.Method == http.MethodOptions {

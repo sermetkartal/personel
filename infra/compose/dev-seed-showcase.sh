@@ -66,17 +66,17 @@ BEGIN
   RETURNING id INTO v_elif_id;
 
   -- Assigned endpoints (one laptop each; Zeynep has desktop + laptop)
-  INSERT INTO endpoints (id, tenant_id, hostname, os, os_version, agent_version,
-                         enrolled_at, last_seen_at, is_active, assigned_user_id, status)
+  INSERT INTO endpoints (id, tenant_id, hostname, os_version, agent_version,
+                         enrolled_at, last_seen_at, is_active, assigned_user_id)
   VALUES
-    (gen_random_uuid(), v_tenant_id, 'FIN-LAPTOP-ZK01', 'windows', '11 Pro 23H2', '0.9.3',
-     now() - interval '3 years', now() - interval '2 minutes', true, v_zeynep_id, 'online'),
-    (gen_random_uuid(), v_tenant_id, 'FIN-DESKTOP-ZK02', 'windows', '11 Pro 23H2', '0.9.3',
-     now() - interval '2 years', now() - interval '4 hours', true, v_zeynep_id, 'online'),
-    (gen_random_uuid(), v_tenant_id, 'DEV-LAPTOP-MY01', 'windows', '11 Pro 23H2', '0.9.3',
-     now() - interval '18 months', now() - interval '1 minute', true, v_mert_id, 'online'),
-    (gen_random_uuid(), v_tenant_id, 'SAL-LAPTOP-ED01', 'windows', '11 Home 23H2', '0.9.3',
-     now() - interval '8 months', now() - interval '25 minutes', true, v_elif_id, 'online')
+    (gen_random_uuid(), v_tenant_id, 'FIN-LAPTOP-ZK01', 'Windows 11 Pro 23H2', '0.9.3',
+     now() - interval '3 years', now() - interval '2 minutes', true, v_zeynep_id),
+    (gen_random_uuid(), v_tenant_id, 'FIN-DESKTOP-ZK02', 'Windows 11 Pro 23H2', '0.9.3',
+     now() - interval '2 years', now() - interval '4 hours', true, v_zeynep_id),
+    (gen_random_uuid(), v_tenant_id, 'DEV-LAPTOP-MY01', 'Windows 11 Pro 23H2', '0.9.3',
+     now() - interval '18 months', now() - interval '1 minute', true, v_mert_id),
+    (gen_random_uuid(), v_tenant_id, 'SAL-LAPTOP-ED01', 'Windows 11 Home 23H2', '0.9.3',
+     now() - interval '8 months', now() - interval '25 minutes', true, v_elif_id)
   ON CONFLICT DO NOTHING;
 
   RAISE NOTICE 'Zeynep: %, Mert: %, Elif: %', v_zeynep_id, v_mert_id, v_elif_id;

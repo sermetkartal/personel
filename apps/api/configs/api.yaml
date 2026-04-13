@@ -15,6 +15,8 @@ http:
   cors_origins:
     - "http://localhost:3000"   # Next.js admin console (dev)
     - "http://localhost:3001"   # Employee transparency portal (dev)
+    - "http://192.168.5.44:3000" # pilot vm3 console (dev)
+    - "http://192.168.5.44:3001" # pilot vm3 portal (dev)
   # tls_cert: ""
   # tls_key: ""
 

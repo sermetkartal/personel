@@ -585,6 +585,42 @@ Wave bitince:
 2. **Madde 6**: publish düzelince `docker exec personel-nats wget -qO- http://127.0.0.1:8222/jsz?streams=1` → events_raw `messages > 0` doğrulayın
 3. **Madde 7-20 (Faz 2 Wave 1-3)**: rust-engineer x14 paralel spawn — file_system/network real + browser/firefox/cloud/email + office/system/bluetooth/mtp/device/geo/url/clipboard collectors
 
+**Keycloak mapper'ları — KC24→KC25 upgrade sırasında kaybolan manuel state** (2026-04-13):
+
+Faz 5 Wave 2 Keycloak HA upgrade sırasında realm export/import yapıldı ama bazı özel mapper'lar kayboldu. Realm-export.json'a commit'lenmeli, bir sonraki fresh deploy'da yeniden uygulanmalı. Geçici olarak vm3'teki çalışan KC instance'ına `kcadm.sh` ile yeniden eklendi:
+
+1. **`personel-console` client'ına audience mapper** — JWT `aud` claim'ine `personel-admin-api` eklemek için:
+   ```
+   kcadm.sh create clients/<console-id>/protocol-mappers/models -r personel \
+     -s name=aud-personel-admin-api \
+     -s protocol=openid-connect \
+     -s protocolMapper=oidc-audience-mapper \
+     -s 'config."included.client.audience"=personel-admin-api' \
+     -s 'config."access.token.claim"=true'
+   ```
+   Olmadan → API OIDC verifier `aud mismatch` ile tüm request'leri 401'liyor.
+
+2. **`personel-console` client'ına user-attribute mapper** — `tenant_id` user attribute'unu JWT `tenant_id` claim'ine bağlar:
+   ```
+   kcadm.sh create clients/<console-id>/protocol-mappers/models -r personel \
+     -s name=tenant_id-mapper \
+     -s protocol=openid-connect \
+     -s protocolMapper=oidc-usermodel-attribute-mapper \
+     -s 'config."user.attribute"=tenant_id' \
+     -s 'config."claim.name"=tenant_id' \
+     -s 'config."jsonType.label"=String' \
+     -s 'config."access.token.claim"=true'
+   ```
+   Olmadan → API `auth.PrincipalFromContext` boş TenantID okuyor, handler'lar ya 401 ya da boş data dönüyor.
+
+3. **Her tenant-scoped kullanıcı için `tenant_id` user attribute**:
+   ```
+   kcadm.sh update users/<user-id> -r personel \
+     -s 'attributes.tenant_id=["be459dac-1a79-4054-b6e1-fa934a927315"]'
+   ```
+
+Kalıcı çözüm: `infra/compose/keycloak/realm-personel.json` bu iki mapper + admin user attribute'unu içermeli. KC realm export → diff → commit.
+
 **Re-enroll akışı ihtiyacı**: agent Rust değişikliklerinden sonra `C:\ProgramData\Personel\agent\*` temizlenip fresh enroll yapılmalı. Önceki config root_ca_path içermiyor.
 
 **AWAITING CUSTOMER ACTION** (otonom çalışan Claude Code kapatamaz):
