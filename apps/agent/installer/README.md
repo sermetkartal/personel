@@ -95,3 +95,10 @@ HKLM\SOFTWARE\Personel\Agent\Config
 
 The `enroll.exe` custom action reads these keys during deferred execution to
 provision the PE-DEK and register the endpoint.
+
+## Code signing (production builds)
+
+For production releases, binaries and the MSI must be Authenticode-signed.
+See [`docs/operations/code-signing.md`](../../../docs/operations/code-signing.md)
+for the full operator runbook (cert procurement, GitHub Actions secret setup,
+local signing via `sign-binaries.ps1`, rotation procedure).

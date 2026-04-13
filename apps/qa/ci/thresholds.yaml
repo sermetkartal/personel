@@ -181,6 +181,16 @@ thresholds:
       and validates script presence, bash -n syntax, --help exit code, and
       missing-arg argument validation.
 
+# Agent footprint thresholds (used by cmd/footprint-bench).
+# These mirror EC-2 / EC-3 / EC-4 above but are structured for direct
+# machine parsing by the benchmark harness without walking the list form.
+footprint:
+  cpu_avg_max_percent: 2.0
+  cpu_p95_max_percent: 3.0
+  cpu_max_percent: 5.0
+  rss_avg_max_mb: 120
+  rss_max_mb: 150
+
 # Simulator-specific thresholds (used in load test pass/fail).
 simulator_thresholds:
   - id: SIM-1

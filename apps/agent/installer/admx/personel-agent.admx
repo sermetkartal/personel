@@ -1,0 +1,302 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  personel-agent.admx — Group Policy template for Personel UAM Agent
+
+  Target: Windows 10 / 11 / Server 2019+ domain-joined endpoints
+  Scope:  Computer Configuration only (HKLM\SOFTWARE\Policies\Personel\Agent)
+
+  Deployment:
+    Copy this file to \\<domain>\SYSVOL\<domain>\Policies\PolicyDefinitions\
+    Copy matching .adml files to PolicyDefinitions\en-US\ and PolicyDefinitions\tr-TR\
+    See docs/operations/gpo-deployment.md for the full procedure.
+
+  Status legend (see runbook):
+    [WIRED]   Agent currently honours this setting at runtime.
+    [DEFINED] Policy surface exists but agent does not yet read it; reserved
+              for a Phase 5 wiring sprint. Setting the value is safe; it
+              will be activated on the next agent release that implements it.
+-->
+<policyDefinitions xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   revision="1.0"
+                   schemaVersion="1.0"
+                   xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+
+  <policyNamespaces>
+    <target prefix="personel" namespace="Personel.Policies.Agent" />
+    <using prefix="windows" namespace="Microsoft.Policies.Windows" />
+  </policyNamespaces>
+
+  <resources minRequiredRevision="1.0" />
+
+  <supportedOn>
+    <definitions>
+      <definition name="SUPPORTED_PersonelAgent_1_0"
+                  displayName="$(string.SUPPORTED_PersonelAgent_1_0)" />
+    </definitions>
+  </supportedOn>
+
+  <categories>
+    <category name="Personel"             displayName="$(string.Cat_Personel)" />
+    <category name="PersonelAgent"        displayName="$(string.Cat_PersonelAgent)"
+              explainText="$(string.Cat_PersonelAgent_Help)">
+      <parentCategory ref="Personel" />
+    </category>
+    <category name="Enrollment"           displayName="$(string.Cat_Enrollment)"
+              explainText="$(string.Cat_Enrollment_Help)">
+      <parentCategory ref="PersonelAgent" />
+    </category>
+    <category name="Operations"           displayName="$(string.Cat_Operations)"
+              explainText="$(string.Cat_Operations_Help)">
+      <parentCategory ref="PersonelAgent" />
+    </category>
+    <category name="PrivacyDLP"           displayName="$(string.Cat_PrivacyDLP)"
+              explainText="$(string.Cat_PrivacyDLP_Help)">
+      <parentCategory ref="PersonelAgent" />
+    </category>
+  </categories>
+
+  <policies>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         ENROLLMENT CATEGORY
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- AgentEnrollmentToken ──────────────────────────────────────────── -->
+    <policy name="AgentEnrollmentToken"
+            class="Machine"
+            displayName="$(string.AgentEnrollmentToken)"
+            explainText="$(string.AgentEnrollmentToken_Help)"
+            presentation="$(presentation.AgentEnrollmentToken)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Enrollment" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <text id="AgentEnrollmentToken_Text"
+              valueName="EnrollmentToken"
+              required="false"
+              maxLength="4096" />
+      </elements>
+    </policy>
+
+    <!-- GatewayURL ────────────────────────────────────────────────────── -->
+    <policy name="GatewayURL"
+            class="Machine"
+            displayName="$(string.GatewayURL)"
+            explainText="$(string.GatewayURL_Help)"
+            presentation="$(presentation.GatewayURL)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Enrollment" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <text id="GatewayURL_Text"
+              valueName="GatewayUrl"
+              required="false"
+              maxLength="512" />
+      </elements>
+    </policy>
+
+    <!-- DataDirectoryOverride ─────────────────────────────────────────── -->
+    <policy name="DataDirectoryOverride"
+            class="Machine"
+            displayName="$(string.DataDirectoryOverride)"
+            explainText="$(string.DataDirectoryOverride_Help)"
+            presentation="$(presentation.DataDirectoryOverride)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Enrollment" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <text id="DataDirectoryOverride_Text"
+              valueName="DataDirectory"
+              required="false"
+              maxLength="260" />
+      </elements>
+    </policy>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         OPERATIONS CATEGORY
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- HeartbeatIntervalSeconds ─────────────────────────────────────── -->
+    <policy name="HeartbeatIntervalSeconds"
+            class="Machine"
+            displayName="$(string.HeartbeatIntervalSeconds)"
+            explainText="$(string.HeartbeatIntervalSeconds_Help)"
+            presentation="$(presentation.HeartbeatIntervalSeconds)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <decimal id="HeartbeatIntervalSeconds_Decimal"
+                 valueName="HeartbeatIntervalSeconds"
+                 required="true"
+                 minValue="5"
+                 maxValue="3600" />
+      </elements>
+    </policy>
+
+    <!-- ScreenshotIntervalSeconds ────────────────────────────────────── -->
+    <policy name="ScreenshotIntervalSeconds"
+            class="Machine"
+            displayName="$(string.ScreenshotIntervalSeconds)"
+            explainText="$(string.ScreenshotIntervalSeconds_Help)"
+            presentation="$(presentation.ScreenshotIntervalSeconds)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <decimal id="ScreenshotIntervalSeconds_Decimal"
+                 valueName="ScreenshotIntervalSeconds"
+                 required="true"
+                 minValue="30"
+                 maxValue="7200" />
+      </elements>
+    </policy>
+
+    <!-- ScreenshotQuality ────────────────────────────────────────────── -->
+    <policy name="ScreenshotQuality"
+            class="Machine"
+            displayName="$(string.ScreenshotQuality)"
+            explainText="$(string.ScreenshotQuality_Help)"
+            presentation="$(presentation.ScreenshotQuality)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <decimal id="ScreenshotQuality_Decimal"
+                 valueName="ScreenshotQuality"
+                 required="true"
+                 minValue="1"
+                 maxValue="100" />
+      </elements>
+    </policy>
+
+    <!-- EnableScreenshotOnIdleFastTick ───────────────────────────────── -->
+    <policy name="EnableScreenshotOnIdleFastTick"
+            class="Machine"
+            displayName="$(string.EnableScreenshotOnIdleFastTick)"
+            explainText="$(string.EnableScreenshotOnIdleFastTick_Help)"
+            key="SOFTWARE\Policies\Personel\Agent"
+            valueName="EnableScreenshotOnIdleFastTick">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+
+    <!-- AutoUpdateCheckInterval ──────────────────────────────────────── -->
+    <policy name="AutoUpdateCheckInterval"
+            class="Machine"
+            displayName="$(string.AutoUpdateCheckInterval)"
+            explainText="$(string.AutoUpdateCheckInterval_Help)"
+            presentation="$(presentation.AutoUpdateCheckInterval)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <decimal id="AutoUpdateCheckInterval_Decimal"
+                 valueName="AutoUpdateCheckInterval"
+                 required="true"
+                 minValue="300"
+                 maxValue="604800" />
+      </elements>
+    </policy>
+
+    <!-- AutoUpdateChannel ────────────────────────────────────────────── -->
+    <policy name="AutoUpdateChannel"
+            class="Machine"
+            displayName="$(string.AutoUpdateChannel)"
+            explainText="$(string.AutoUpdateChannel_Help)"
+            presentation="$(presentation.AutoUpdateChannel)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <enum id="AutoUpdateChannel_Enum"
+              valueName="AutoUpdateChannel"
+              required="true">
+          <item displayName="$(string.AutoUpdateChannel_Stable)">
+            <value><string>stable</string></value>
+          </item>
+          <item displayName="$(string.AutoUpdateChannel_Beta)">
+            <value><string>beta</string></value>
+          </item>
+          <item displayName="$(string.AutoUpdateChannel_Dev)">
+            <value><string>dev</string></value>
+          </item>
+        </enum>
+      </elements>
+    </policy>
+
+    <!-- DiagnosticLogLevel ───────────────────────────────────────────── -->
+    <policy name="DiagnosticLogLevel"
+            class="Machine"
+            displayName="$(string.DiagnosticLogLevel)"
+            explainText="$(string.DiagnosticLogLevel_Help)"
+            presentation="$(presentation.DiagnosticLogLevel)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="Operations" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <enum id="DiagnosticLogLevel_Enum"
+              valueName="DiagnosticLogLevel"
+              required="true">
+          <item displayName="$(string.DiagnosticLogLevel_Error)">
+            <value><string>error</string></value>
+          </item>
+          <item displayName="$(string.DiagnosticLogLevel_Warn)">
+            <value><string>warn</string></value>
+          </item>
+          <item displayName="$(string.DiagnosticLogLevel_Info)">
+            <value><string>info</string></value>
+          </item>
+          <item displayName="$(string.DiagnosticLogLevel_Debug)">
+            <value><string>debug</string></value>
+          </item>
+        </enum>
+      </elements>
+    </policy>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         PRIVACY / DLP CATEGORY
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ExcludedAppsAdditional ──────────────────────────────────────── -->
+    <policy name="ExcludedAppsAdditional"
+            class="Machine"
+            displayName="$(string.ExcludedAppsAdditional)"
+            explainText="$(string.ExcludedAppsAdditional_Help)"
+            presentation="$(presentation.ExcludedAppsAdditional)"
+            key="SOFTWARE\Policies\Personel\Agent">
+      <parentCategory ref="PrivacyDLP" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <elements>
+        <multiText id="ExcludedAppsAdditional_MultiText"
+                   valueName="ExcludedAppsAdditional"
+                   required="false" />
+      </elements>
+    </policy>
+
+    <!-- DLPOptInAcknowledged ────────────────────────────────────────── -->
+    <policy name="DLPOptInAcknowledged"
+            class="Machine"
+            displayName="$(string.DLPOptInAcknowledged)"
+            explainText="$(string.DLPOptInAcknowledged_Help)"
+            key="SOFTWARE\Policies\Personel\Agent"
+            valueName="DLPOptInAcknowledged">
+      <parentCategory ref="PrivacyDLP" />
+      <supportedOn ref="SUPPORTED_PersonelAgent_1_0" />
+      <enabledValue>
+        <decimal value="1" />
+      </enabledValue>
+      <disabledValue>
+        <decimal value="0" />
+      </disabledValue>
+    </policy>
+
+  </policies>
+</policyDefinitions>

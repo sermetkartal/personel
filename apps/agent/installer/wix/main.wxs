@@ -11,7 +11,24 @@
   Properties exposed for GPO / msiexec command line:
     GATEWAY_URL    — Gateway gRPC endpoint (https://host:8443)
     TENANT_TOKEN   — Enrollment JWT from the admin console
+
+  ── ADMX / ADML deployment ──────────────────────────────────────────────
+  This installer targets ENDPOINTS, not Domain Controllers. ADMX templates
+  for Group Policy are NOT copied by this MSI. To deploy the ADMX:
+
+    1. On a Domain Controller (or any workstation with RSAT), copy the
+       files from apps/agent/installer/admx/ into the AD central policy
+       store at \\<domain>\SYSVOL\<domain>\Policies\PolicyDefinitions\.
+    2. Follow the procedure in docs/operations/gpo-deployment.md.
+
+  Deliberately NOT shipping ADMX via this MSI because:
+    - ADMX install target (%SystemRoot%\PolicyDefinitions or SYSVOL) is
+      admin-discretionary and must not be silently written from an
+      endpoint MSI.
+    - Endpoints are not DCs and should not carry policy definitions.
+    - AD central store ingestion is a one-time domain-level operation.
 -->
+
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util"
      xmlns:fw="http://wixtoolset.org/schemas/v4/wxs/firewall">

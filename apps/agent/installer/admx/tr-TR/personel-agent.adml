@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  personel-agent.adml (tr-TR) — personel-agent.admx icin Turkce goruntuleme metinleri
+-->
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           revision="1.0"
+                           schemaVersion="1.0"
+                           xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+
+  <displayName>Personel Agent Grup Ilkesi Sablonu</displayName>
+  <description>Personel UAM ajani icin yonetimsel sablon. Active Directory Grup Ilkesi uzerinden kayit, operasyonel ayarlar ve KVKK hassasiyeti olan gizlilik kontrollerini yapilandirir.</description>
+
+  <resources>
+    <stringTable>
+
+      <!-- Destek matrisi -->
+      <string id="SUPPORTED_PersonelAgent_1_0">Windows 10 / 11 / Server 2019+ uzerinde Personel Agent 1.0 veya daha yeni</string>
+
+      <!-- Kategori etiketleri -->
+      <string id="Cat_Personel">Personel</string>
+      <string id="Cat_PersonelAgent">Personel Agent</string>
+      <string id="Cat_PersonelAgent_Help">Personel Kullanici Etkinligi Izleme ajani icin yapilandirma. Buradaki tum ayarlar HKLM\SOFTWARE\Policies\Personel\Agent anahtarina yazilir ve PersonelAgent Windows servisi tarafindan baslangicta ve ilke yenilemelerinde okunur.</string>
+
+      <string id="Cat_Enrollment">Kayit</string>
+      <string id="Cat_Enrollment_Help">Ajan ilk acilisinda, msiexec TENANT_TOKEN parametresine ihtiyac duymadan kiraciya katilmasini saglayan ayarlar. Tam otomatik GPO tabanli dagitimlar icin kullanilir.</string>
+
+      <string id="Cat_Operations">Operasyon</string>
+      <string id="Cat_Operations_Help">Calisma zamani ayarlari: kalp atisi sikligi, ekran goruntusu yakalama ritmi, otomatik guncelleme kanali, gunluk ayrinti duzeyi. Bu ayarlar neyin toplandigini degil, ne sikligi ile toplandigini degistirir.</string>
+
+      <string id="Cat_PrivacyDLP">Gizlilik ve DLP</string>
+      <string id="Cat_PrivacyDLP_Help">KVKK acisindan hassas kontroller. Buradaki degisiklikler, dagitimdan once musterinin Kisisel Verileri Koruma Sorumlusu (DPO) tarafindan incelenmeli ve calisan Aydinlatma Metni'ne (KVKK m.10 bildirim) yansitilmalidir. DLP opt-in onay ilkesi, ADR 0013'un calisma zamani karsiligidir.</string>
+
+      <!-- AgentEnrollmentToken -->
+      <string id="AgentEnrollmentToken">Kayit belirteci (token)</string>
+      <string id="AgentEnrollmentToken_Help">Bu kiraci icin Personel yonetim konsolu tarafindan duzenlenen, tek seferlik base64url kodlu kayit belirteci. Bu ilke Etkinlestirilmis ve belirtec saglanmissa, ajan ilk baslatmada bu belirteci kullanir; msiexec TENANT_TOKEN parametresine gerek kalmaz.
+
+Belirtec tek kullanimliktir ve suresi dolar; yeni deger yayarak veya msiexec zamanli kayda donerek dondurun.
+
+Durum: [TANIMLANDI] Ilke yuzeyi mevcut ancak ajan bu anahtari henuz okumuyor; sonraki bir surumde baglanacak. Bugun deger atamak guvenlidir ve gelecege hazirdir.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\EnrollmentToken (REG_SZ)</string>
+
+      <!-- GatewayURL -->
+      <string id="GatewayURL">Gateway URL</string>
+      <string id="GatewayURL_Help">Ajanin baglandigi gRPC gateway URL'sini gecersiz kilar. Port dahil tam bir HTTPS URL olmalidir, ornegin: https://personel-gw.kurumsal.com:8443
+
+Ayarlanmamissa ajan, MSI yuklemesi sirasinda HKLM\SOFTWARE\Personel\Agent\Config\GatewayUrl altina yazilan degeri veya derlenmis varsayilani kullanir. Ilke degeri, bir sonraki ilke yenilemesinde yukleme zamanli degerden oncelik alir.
+
+Durum: [BAGLI] Ajan bu ayari okur (yukleme zamanli kayit defteri veya config.toml dosyasina geri dusmelidir).
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\GatewayUrl (REG_SZ)</string>
+
+      <!-- DataDirectoryOverride -->
+      <string id="DataDirectoryOverride">Veri dizini gecersiz kilma</string>
+      <string id="DataDirectoryOverride_Help">Ajanin cevrimdisi kuyrugunu, DPAPI ile muhurlenmis anahtarlari ve yapilandirmasini depoladigi varsayilan veri dizinini (%PROGRAMDATA%\Personel\agent) gecersiz kilar. Salt okunur sistem diski veya ayri veri bolumu bulunan uc noktalar icin kullanisli.
+
+Dizin LocalSystem tarafindan yazilabilir olmalidir. Ajan dizin yoksa olusturacaktir. Ortam degiskenleri GENISLETILMEZ; dogrudan yol girin.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Ajan su anda yalnizca %PROGRAMDATA% altini okuyor.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\DataDirectory (REG_SZ)</string>
+
+      <!-- HeartbeatIntervalSeconds -->
+      <string id="HeartbeatIntervalSeconds">Kalp atisi araligi (saniye)</string>
+      <string id="HeartbeatIntervalSeconds_Help">Ajanin gateway'e kalp atisi gonderme sikligi, saniye cinsinden. Varsayilan: 30.
+
+Dusuk degerler canlilik algilamayi iyilestirir (Flow 7 calisan tarafindan devre disi birakma) ancak bant genisligi tuketimini artirir. Yuksek degerler dusuk bant genisliklerine sahip sahalarda gurultuyu azaltir.
+
+Gecerli aralik: 5 ila 3600 saniye. Onerilen: 30-60 saniye.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Ajan su anda derlenmis 30 saniyelik varsayilanla calisiyor.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\HeartbeatIntervalSeconds (REG_DWORD)</string>
+
+      <!-- ScreenshotIntervalSeconds -->
+      <string id="ScreenshotIntervalSeconds">Ekran goruntusu araligi (saniye)</string>
+      <string id="ScreenshotIntervalSeconds_Help">Uyarlanabilir sikligi ayarlanmadan onceki taban ekran yakalama araligi, saniye cinsinden. Varsayilan: 300 (5 dakika).
+
+Ajan bu tabanin uzerine uyarlanabilir siklik uygular: bosta oturumlar 30 saniye ile bir dakikaya kadar uzar, aktif oturumlar dakikada bir kadar sik yakalayabilir. Uyarlanabilir davranisi devre disi birakmak icin "Uyarlanabilir ekran goruntusu sikligini etkinlestir" ayarina bakin.
+
+Gecerli aralik: 30 ila 7200 saniye.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Mevcut ajan derlenmis varsayilanlari kullaniyor.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\ScreenshotIntervalSeconds (REG_DWORD)</string>
+
+      <!-- ScreenshotQuality -->
+      <string id="ScreenshotQuality">Ekran goruntusu WebP kalitesi</string>
+      <string id="ScreenshotQuality_Help">1 ile 100 arasinda WebP kodlayici kalitesi. Varsayilan: 75.
+
+Dusuk degerler yukleme bant genisligini ve depolama maliyetini (ClickHouse + MinIO) azaltir ancak alt akistaki OCR dogrulugunu dusurur. 75 degeri kalite ile boyut arasinda denge kurar; ocr-service akista ise 50'nin altina inmeyin.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\ScreenshotQuality (REG_DWORD)</string>
+
+      <!-- EnableScreenshotOnIdleFastTick -->
+      <string id="EnableScreenshotOnIdleFastTick">Uyarlanabilir ekran goruntusu sikligini etkinlestir</string>
+      <string id="EnableScreenshotOnIdleFastTick_Help">Etkinlestirildiginde (varsayilan), ajan ekran yakalama sikligini kullanici etkinligine gore uyarlar: bosta oturumlar 30 saniyelik bosluga kadar aralik uzatir, aktif oturumlar daha sik yakalar (1-5 dakika). Devre disi birakildiginda ajan, etkinlige bakilmaksizin sabit ScreenshotIntervalSeconds araliginda yakalar.
+
+Deterministik ornekleme icin bunu devre disi birakin (orn. sabit sikligi gerektiren uyum denetimleri).
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Uyarlanabilir zamanlama Phase 5 baglamasi gelene kadar ajana gomulu kalacaktir.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\EnableScreenshotOnIdleFastTick (REG_DWORD, 0 veya 1)</string>
+
+      <!-- AutoUpdateCheckInterval -->
+      <string id="AutoUpdateCheckInterval">Otomatik guncelleme kontrol araligi (saniye)</string>
+      <string id="AutoUpdateCheckInterval_Help">Ajanin yonetim API'sinin guncelleme manifestinden yeni surumleri kontrol etme sikligi, saniye cinsinden. Varsayilan: 21600 (6 saat).
+
+Dusuk degerler yamalari daha hizli alir ancak daha fazla API trafigi olusturur. Buyuk filolar icin GPO miras yapisiyla bu degeri kademeli olarak yayin.
+
+Gecerli aralik: 300 ila 604800 saniye (5 dakika ila 7 gun).
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Mevcut yapilarda guncelleme kontrol donguleri calismiyor.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\AutoUpdateCheckInterval (REG_DWORD)</string>
+
+      <!-- AutoUpdateChannel -->
+      <string id="AutoUpdateChannel">Otomatik guncelleme kanali</string>
+      <string id="AutoUpdateChannel_Help">Ajanin hangi guncelleme kanalini takip ettigini secer.
+
+  kararli - Sadece uretim surumleri (varsayilan). Tum uretim OU'lari icin onerilir.
+  beta    - Surum adaylari ve ileri evre onizleme yapilari. Pilot OU'lar icin uygundur.
+  dev     - Gecelik ve geliştirme dali yapilari. Yalnizca dahili QA.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\AutoUpdateChannel (REG_SZ: "stable", "beta", "dev")</string>
+      <string id="AutoUpdateChannel_Stable">Kararli (uretim)</string>
+      <string id="AutoUpdateChannel_Beta">Beta (pilot)</string>
+      <string id="AutoUpdateChannel_Dev">Dev (yalnizca QA)</string>
+
+      <!-- DiagnosticLogLevel -->
+      <string id="DiagnosticLogLevel">Tani gunlugu seviyesi</string>
+      <string id="DiagnosticLogLevel_Help">Ajan ve gozetim (watchdog) servisleri icin PERSONEL_LOG ortam degiskenini ayarlar. Yalnizca %PROGRAMDATA%\Personel\agent\logs\ altindaki yerel tani gunlugunun ayrinti duzeyini etkiler. Arkamaya gonderilen veriyi ETKILEMEZ.
+
+  error - Yalnizca hatalar (uretim varsayilani adayi).
+  warn  - Hatalar ve uyarilar.
+  info  - Normal operasyon (varsayilan).
+  debug - Ayrintili, toplayici durumlarini icerir. Yalnizca kisa sureli sorun giderme icin kullanin; disk etkisi azimsanmayacak duzeydedir.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Mevcut yapilar PERSONEL_LOG degiskenini surec ortamindan okuyor.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\DiagnosticLogLevel (REG_SZ)</string>
+      <string id="DiagnosticLogLevel_Error">Hata</string>
+      <string id="DiagnosticLogLevel_Warn">Uyari</string>
+      <string id="DiagnosticLogLevel_Info">Bilgi (varsayilan)</string>
+      <string id="DiagnosticLogLevel_Debug">Hata ayiklama (yalnizca sorun giderme)</string>
+
+      <!-- ExcludedAppsAdditional -->
+      <string id="ExcludedAppsAdditional">Ek ekran yakalama istisnalari</string>
+      <string id="ExcludedAppsAdditional_Help">Ekran yakalamadan haric tutulacak ek surec isimleri (her satira bir tane). Bu liste derlenmis hassaslik istisna listesine (bankacilik uygulamalari, parola yoneticileri, gizli mod tarayici pencereleri) EKLENIR, onu degistirmez.
+
+Surec temel adinda buyuk-kucuk harfe duyarsiz eslesme, ornegin:
+  teams.exe
+  zoom.exe
+  outlook.exe
+
+KVKK notu: calisan gizliligini koruyan istisnalar Aydinlatma Metni'ne yansitilmalidir. Bildirimi guncellemeden BURAYA istisna eklemek kabul edilebilir; istisna KALDIRMAK yeniden yayimlama gerektirebilir.
+
+Durum: [TANIMLANDI] Sadece ilke yuzeyi. Mevcut yapilar yalnizca derlenmis listeyi okuyor.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\ExcludedAppsAdditional (REG_MULTI_SZ)</string>
+
+      <!-- DLPOptInAcknowledged -->
+      <string id="DLPOptInAcknowledged">DLP opt-in onayi (ADR 0013)</string>
+      <string id="DLPOptInAcknowledged_Help">ADR 0013 DLP opt-in toreninin calisma zamani karsiligi. clipboard_content_redacted toplayicisinin etkinlestirilmesine izin verilmesi icin bu ilke Etkinlestirilmis olmalidir. Bu ilke opt-in torenini YERINE KOYMAZ (DPIA ek sozlesmesi, imzali opt-in formu, Vault Secret ID temini, seffaflik portali banneri) — toren tamamlandigini makine tarafindan zorlanabilir son kapidir.
+
+KRITIK: Bu ilkeyi ADR 0013 toreni tamamlanmadan etkinlestirmek bir KVKK uyum ihlalidir. Sorumluluk musterinin DPO'sundadir.
+
+Devre Disi Birakildiginda (varsayilan), Vault Secret ID mevcut olsa bile ajan herhangi bir DLP toplayicisini calistirmayi reddeder. Bu guvenli, KVKK ile uyumlu durumdur ve toren imzalanana kadar her OU icin varsayilan olmalidir.
+
+Durum: [TANIMLANDI] Ilke yuzeyi son kapidir. Ajan, Phase 5 DLP baglama sprintinde zorlayacaktir.
+
+Kayit defteri: HKLM\SOFTWARE\Policies\Personel\Agent\DLPOptInAcknowledged (REG_DWORD, 0 veya 1)</string>
+
+    </stringTable>
+
+    <presentationTable>
+
+      <presentation id="AgentEnrollmentToken">
+        <textBox refId="AgentEnrollmentToken_Text">
+          <label>Kayit belirteci:</label>
+        </textBox>
+      </presentation>
+
+      <presentation id="GatewayURL">
+        <textBox refId="GatewayURL_Text">
+          <label>Gateway URL (https://sunucu:port):</label>
+        </textBox>
+      </presentation>
+
+      <presentation id="DataDirectoryOverride">
+        <textBox refId="DataDirectoryOverride_Text">
+          <label>Veri dizini (mutlak yol):</label>
+        </textBox>
+      </presentation>
+
+      <presentation id="HeartbeatIntervalSeconds">
+        <decimalTextBox refId="HeartbeatIntervalSeconds_Decimal" defaultValue="30">Kalp atisi araligi (saniye):</decimalTextBox>
+      </presentation>
+
+      <presentation id="ScreenshotIntervalSeconds">
+        <decimalTextBox refId="ScreenshotIntervalSeconds_Decimal" defaultValue="300">Ekran goruntusu taban araligi (saniye):</decimalTextBox>
+      </presentation>
+
+      <presentation id="ScreenshotQuality">
+        <decimalTextBox refId="ScreenshotQuality_Decimal" defaultValue="75">WebP kalitesi (1-100):</decimalTextBox>
+      </presentation>
+
+      <presentation id="AutoUpdateCheckInterval">
+        <decimalTextBox refId="AutoUpdateCheckInterval_Decimal" defaultValue="21600">Kontrol araligi (saniye):</decimalTextBox>
+      </presentation>
+
+      <presentation id="AutoUpdateChannel">
+        <dropdownList refId="AutoUpdateChannel_Enum" defaultItem="0">Guncelleme kanali:</dropdownList>
+      </presentation>
+
+      <presentation id="DiagnosticLogLevel">
+        <dropdownList refId="DiagnosticLogLevel_Enum" defaultItem="2">Gunluk seviyesi:</dropdownList>
+      </presentation>
+
+      <presentation id="ExcludedAppsAdditional">
+        <multiTextBox refId="ExcludedAppsAdditional_MultiText">Surec isimleri (her satira bir tane):</multiTextBox>
+      </presentation>
+
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

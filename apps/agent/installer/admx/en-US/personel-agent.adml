@@ -1,0 +1,231 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  personel-agent.adml (en-US) — English display strings for personel-agent.admx
+-->
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+                           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                           revision="1.0"
+                           schemaVersion="1.0"
+                           xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+
+  <displayName>Personel Agent Group Policy Template</displayName>
+  <description>Administrative template for the Personel UAM agent. Configures enrollment, operational tunables, and KVKK-sensitive privacy controls via Active Directory Group Policy.</description>
+
+  <resources>
+    <stringTable>
+
+      <!-- Support matrix -->
+      <string id="SUPPORTED_PersonelAgent_1_0">Personel Agent 1.0 or later on Windows 10 / 11 / Server 2019+</string>
+
+      <!-- Category labels -->
+      <string id="Cat_Personel">Personel</string>
+      <string id="Cat_PersonelAgent">Personel Agent</string>
+      <string id="Cat_PersonelAgent_Help">Configuration for the Personel User Activity Monitoring agent. All settings here are written to HKLM\SOFTWARE\Policies\Personel\Agent and are consumed by the PersonelAgent Windows service at startup and on policy refresh.</string>
+
+      <string id="Cat_Enrollment">Enrollment</string>
+      <string id="Cat_Enrollment_Help">Settings that let the agent join its tenant on first run without needing a manual msiexec TENANT_TOKEN property. Useful for fully automated GPO-based rollouts.</string>
+
+      <string id="Cat_Operations">Operations</string>
+      <string id="Cat_Operations_Help">Runtime tunables: heartbeat cadence, screenshot capture rhythm, auto-update channel, log verbosity. These do not change what is collected, only how often.</string>
+
+      <string id="Cat_PrivacyDLP">Privacy and DLP</string>
+      <string id="Cat_PrivacyDLP_Help">KVKK-sensitive controls. Changes here must be reviewed by the customer Data Protection Officer and reflected in the employee Aydinlatma Metni (KVKK m.10 notice) before deployment. The DLP opt-in acknowledgement policy is the runtime counterpart to ADR 0013.</string>
+
+      <!-- AgentEnrollmentToken -->
+      <string id="AgentEnrollmentToken">Enrollment token</string>
+      <string id="AgentEnrollmentToken_Help">Base64url-encoded one-time enrollment token issued by the Personel admin console for this tenant. If this policy is Enabled and a token is supplied, the agent will use it on first startup instead of requiring the TENANT_TOKEN msiexec property at install time.
+
+The token is single-use and expires; rotate it by pushing a new value or by rolling back to msiexec-time enrollment.
+
+Status: [DEFINED] The policy surface exists but the agent does not yet read this key; it will be wired in a later release. Setting it today is safe and future-proof.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\EnrollmentToken (REG_SZ)</string>
+
+      <!-- GatewayURL -->
+      <string id="GatewayURL">Gateway URL</string>
+      <string id="GatewayURL_Help">Overrides the gRPC gateway URL the agent connects to. Must be a full HTTPS URL including port, for example: https://personel-gw.example.com:8443
+
+If not set, the agent uses the value written to HKLM\SOFTWARE\Personel\Agent\Config\GatewayUrl at MSI install time, or the compiled-in default. A policy value takes precedence over the install-time value at the next policy refresh.
+
+Status: [WIRED] Agent honours this setting (falls back to install-time registry or config.toml).
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\GatewayUrl (REG_SZ)</string>
+
+      <!-- DataDirectoryOverride -->
+      <string id="DataDirectoryOverride">Data directory override</string>
+      <string id="DataDirectoryOverride_Help">Overrides the default data directory (%PROGRAMDATA%\Personel\agent) where the agent stores its offline queue, DPAPI-sealed keys, and configuration. Useful for endpoints with a read-only system volume or a separate data partition.
+
+The directory must be writable by LocalSystem. The agent will create it if it does not exist. Environment variables are NOT expanded; provide a literal path.
+
+Status: [DEFINED] Policy surface only. Agent currently reads %PROGRAMDATA% exclusively.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\DataDirectory (REG_SZ)</string>
+
+      <!-- HeartbeatIntervalSeconds -->
+      <string id="HeartbeatIntervalSeconds">Heartbeat interval (seconds)</string>
+      <string id="HeartbeatIntervalSeconds_Help">How often the agent sends a heartbeat to the gateway, in seconds. Default: 30.
+
+Lower values improve liveness detection (Flow 7 employee-initiated disable) at the cost of bandwidth. Higher values reduce chatter for low-bandwidth sites.
+
+Valid range: 5 to 3600 seconds. Recommended: 30-60 seconds.
+
+Status: [DEFINED] Policy surface only. Agent currently uses a compiled-in 30s default.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\HeartbeatIntervalSeconds (REG_DWORD)</string>
+
+      <!-- ScreenshotIntervalSeconds -->
+      <string id="ScreenshotIntervalSeconds">Screenshot interval (seconds)</string>
+      <string id="ScreenshotIntervalSeconds_Help">Base screen capture interval in seconds before adaptive frequency adjustment. Default: 300 (5 minutes).
+
+The agent applies adaptive frequency on top of this base: idle sessions extend to 30s-minute cadence, and active sessions may capture as fast as once per minute. See EnableScreenshotOnIdleFastTick to disable adaptive behaviour.
+
+Valid range: 30 to 7200 seconds.
+
+Status: [DEFINED] Policy surface only. Current agent uses compiled-in defaults.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\ScreenshotIntervalSeconds (REG_DWORD)</string>
+
+      <!-- ScreenshotQuality -->
+      <string id="ScreenshotQuality">Screenshot WebP quality</string>
+      <string id="ScreenshotQuality_Help">WebP encoder quality from 1 to 100. Default: 75.
+
+Lower values reduce upload bandwidth and storage cost (ClickHouse + MinIO) at the expense of OCR accuracy downstream. 75 balances quality and size; do not go below 50 if ocr-service is in the pipeline.
+
+Status: [DEFINED] Policy surface only.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\ScreenshotQuality (REG_DWORD)</string>
+
+      <!-- EnableScreenshotOnIdleFastTick -->
+      <string id="EnableScreenshotOnIdleFastTick">Enable adaptive screenshot frequency</string>
+      <string id="EnableScreenshotOnIdleFastTick_Help">When enabled (default), the agent adapts its screenshot capture rate based on user activity: idle sessions extend the interval up to 30 seconds of idle time, and active sessions capture more frequently (1-5 minutes). When disabled, the agent captures on a fixed ScreenshotIntervalSeconds cadence regardless of activity.
+
+Disable this for deterministic sampling (e.g. compliance audits that require fixed-cadence evidence).
+
+Status: [DEFINED] Policy surface only. Agent adaptive tick is baked in until Phase 5 wiring lands.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\EnableScreenshotOnIdleFastTick (REG_DWORD, 0 or 1)</string>
+
+      <!-- AutoUpdateCheckInterval -->
+      <string id="AutoUpdateCheckInterval">Auto-update check interval (seconds)</string>
+      <string id="AutoUpdateCheckInterval_Help">How often the agent checks for new versions from the admin API update manifest, in seconds. Default: 21600 (6 hours).
+
+Lower values get patches faster but generate more API traffic. For large fleets, stagger this via GPO inheritance.
+
+Valid range: 300 to 604800 seconds (5 minutes to 7 days).
+
+Status: [DEFINED] Policy surface only. Current builds do not run an update checker loop.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\AutoUpdateCheckInterval (REG_DWORD)</string>
+
+      <!-- AutoUpdateChannel -->
+      <string id="AutoUpdateChannel">Auto-update channel</string>
+      <string id="AutoUpdateChannel_Help">Selects which update track the agent follows.
+
+  stable - Production releases only (default). Recommended for all production OUs.
+  beta   - Release candidates and late-cycle preview builds. Suitable for pilot OUs.
+  dev    - Nightly and dev-branch builds. Internal QA only.
+
+Status: [DEFINED] Policy surface only.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\AutoUpdateChannel (REG_SZ: "stable", "beta", "dev")</string>
+      <string id="AutoUpdateChannel_Stable">Stable (production)</string>
+      <string id="AutoUpdateChannel_Beta">Beta (pilot)</string>
+      <string id="AutoUpdateChannel_Dev">Dev (QA only)</string>
+
+      <!-- DiagnosticLogLevel -->
+      <string id="DiagnosticLogLevel">Diagnostic log level</string>
+      <string id="DiagnosticLogLevel_Help">Sets the PERSONEL_LOG environment variable for the agent and watchdog services. Affects verbosity of the local diagnostic log under %PROGRAMDATA%\Personel\agent\logs\ only. Does NOT affect what is sent to the backend.
+
+  error - Failures only (production default candidate).
+  warn  - Failures and warnings.
+  info  - Normal operations (default).
+  debug - Verbose, includes collector state. Use for short-term troubleshooting only; disk impact is non-trivial.
+
+Status: [DEFINED] Policy surface only. Current builds read PERSONEL_LOG from the process environment.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\DiagnosticLogLevel (REG_SZ)</string>
+      <string id="DiagnosticLogLevel_Error">Error</string>
+      <string id="DiagnosticLogLevel_Warn">Warning</string>
+      <string id="DiagnosticLogLevel_Info">Info (default)</string>
+      <string id="DiagnosticLogLevel_Debug">Debug (troubleshooting only)</string>
+
+      <!-- ExcludedAppsAdditional -->
+      <string id="ExcludedAppsAdditional">Additional screen-capture exclusions</string>
+      <string id="ExcludedAppsAdditional_Help">Additional process names (one per line) to exclude from screen capture. These are ADDITIVE to the hard-coded sensitivity exclusion list (banking apps, password managers, incognito browser windows), not a replacement.
+
+Match is case-insensitive on the process base name, for example:
+  teams.exe
+  zoom.exe
+  outlook.exe
+
+KVKK note: exclusions that shield employee privacy must be reflected in the Aydinlatma Metni. Adding an exclusion here without updating the notice is acceptable; REMOVING one may require republication.
+
+Status: [DEFINED] Policy surface only. Current builds read the hard-coded list exclusively.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\ExcludedAppsAdditional (REG_MULTI_SZ)</string>
+
+      <!-- DLPOptInAcknowledged -->
+      <string id="DLPOptInAcknowledged">DLP opt-in acknowledged (ADR 0013)</string>
+      <string id="DLPOptInAcknowledged_Help">Runtime companion to the ADR 0013 DLP opt-in ceremony. This policy MUST be Enabled before the clipboard_content_redacted collector is allowed to activate. It does not replace the opt-in ceremony (DPIA amendment, signed opt-in form, Vault Secret ID issuance, transparency portal banner) — it is the final machine-enforceable gate that the ceremony was completed.
+
+CRITICAL: Enabling this policy without completing the full ADR 0013 ceremony is a KVKK compliance violation. The customer DPO is accountable.
+
+When Disabled (default), the agent refuses to run any DLP collector even if the Vault Secret ID is present. This is the safe, KVKK-compliant state and should be the default for every OU until the ceremony is signed.
+
+Status: [DEFINED] Policy surface is the final gate. Agent will enforce in the Phase 5 DLP wiring sprint.
+
+Registry: HKLM\SOFTWARE\Policies\Personel\Agent\DLPOptInAcknowledged (REG_DWORD, 0 or 1)</string>
+
+    </stringTable>
+
+    <presentationTable>
+
+      <presentation id="AgentEnrollmentToken">
+        <textBox refId="AgentEnrollmentToken_Text">
+          <label>Enrollment token:</label>
+        </textBox>
+      </presentation>
+
+      <presentation id="GatewayURL">
+        <textBox refId="GatewayURL_Text">
+          <label>Gateway URL (https://host:port):</label>
+        </textBox>
+      </presentation>
+
+      <presentation id="DataDirectoryOverride">
+        <textBox refId="DataDirectoryOverride_Text">
+          <label>Data directory (absolute path):</label>
+        </textBox>
+      </presentation>
+
+      <presentation id="HeartbeatIntervalSeconds">
+        <decimalTextBox refId="HeartbeatIntervalSeconds_Decimal" defaultValue="30">Heartbeat interval (seconds):</decimalTextBox>
+      </presentation>
+
+      <presentation id="ScreenshotIntervalSeconds">
+        <decimalTextBox refId="ScreenshotIntervalSeconds_Decimal" defaultValue="300">Screenshot base interval (seconds):</decimalTextBox>
+      </presentation>
+
+      <presentation id="ScreenshotQuality">
+        <decimalTextBox refId="ScreenshotQuality_Decimal" defaultValue="75">WebP quality (1-100):</decimalTextBox>
+      </presentation>
+
+      <presentation id="AutoUpdateCheckInterval">
+        <decimalTextBox refId="AutoUpdateCheckInterval_Decimal" defaultValue="21600">Check interval (seconds):</decimalTextBox>
+      </presentation>
+
+      <presentation id="AutoUpdateChannel">
+        <dropdownList refId="AutoUpdateChannel_Enum" defaultItem="0">Update channel:</dropdownList>
+      </presentation>
+
+      <presentation id="DiagnosticLogLevel">
+        <dropdownList refId="DiagnosticLogLevel_Enum" defaultItem="2">Log level:</dropdownList>
+      </presentation>
+
+      <presentation id="ExcludedAppsAdditional">
+        <multiTextBox refId="ExcludedAppsAdditional_MultiText">Process names (one per line):</multiTextBox>
+      </presentation>
+
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>
