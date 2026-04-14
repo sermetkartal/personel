@@ -235,6 +235,15 @@ export function canViewSettings(role: Role): boolean {
   return role === "admin" || role === "dpo";
 }
 
+/**
+ * Internal system status page — admin + IT manager only.
+ * Shows container health, version info, and raw infra state that
+ * HR/DPO/Manager roles shouldn't see.
+ */
+export function canViewSystem(role: Role): boolean {
+  return role === "admin" || role === "it_manager";
+}
+
 export function canViewSilenceGaps(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "dpo" || role === "auditor";
 }
@@ -290,6 +299,7 @@ export type Action =
   | "view:silence-gaps"
   | "view:reports"
   | "view:settings"
+  | "view:system"
   | "manage:kvkk"
   | "view:kvkk";
 
@@ -329,6 +339,7 @@ const ACTION_CHECKS: Record<Action, (role: Role) => boolean> = {
   "view:silence-gaps": canViewSilenceGaps,
   "view:reports": canViewReports,
   "view:settings": canViewSettings,
+  "view:system": canViewSystem,
   "manage:kvkk": canManageKVKK,
   "view:kvkk": canViewKVKK,
 };
