@@ -2,7 +2,11 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { ShieldAlert, Construction } from "lucide-react";
+import { ShieldAlert } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { getDpia, type DpiaInfo } from "@/lib/api/kvkk";
+import { DpiaForm } from "./dpia-form";
 
 interface KvkkDpiaPageProps {
   params: Promise<{ locale: string }>;
@@ -11,6 +15,14 @@ interface KvkkDpiaPageProps {
 export async function generateMetadata() {
   const t = await getTranslations("kvkk.dpia");
   return { title: t("title") };
+}
+
+// DLP state is not exposed via a stable getter from the console right now —
+// it's an operator-toggled profile at the compose level. Sprint 2C only
+// needs to *display* this; the guidance to the operator is the real value.
+// If/when `/v1/system/module-state` lands, replace the hardcoded false here.
+async function fetchDlpState(): Promise<boolean> {
+  return false;
 }
 
 export default async function KvkkDpiaPage({
@@ -24,7 +36,19 @@ export default async function KvkkDpiaPage({
   }
 
   const t = await getTranslations("kvkk.dpia");
-  const tc = await getTranslations("common");
+
+  let initial: DpiaInfo | null = null;
+  try {
+    const resp = await getDpia({ token: session.user.access_token });
+    if (resp?.amendment_key) {
+      initial = resp;
+    }
+  } catch {
+    // Degraded state.
+  }
+
+  const dlpActive = await fetchDlpState();
+  const canUpload = can(session.user.role, "manage:kvkk");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -37,18 +61,32 @@ export default async function KvkkDpiaPage({
       </div>
 
       <p className="text-sm text-muted-foreground">{t("intro")}</p>
-      <p className="text-sm font-medium">{t("dlpStatusInactive")}</p>
 
-      <div className="rounded-lg border bg-card p-5">
-        <h2 className="mb-2 text-lg font-semibold">{t("whyNeededTitle")}</h2>
-        <p className="text-sm text-muted-foreground">{t("whyNeededBody")}</p>
+      <div>
+        {dlpActive ? (
+          <Badge variant="critical">{t("dlpStatusActive")}</Badge>
+        ) : (
+          <Badge variant="outline">{t("dlpStatusInactive")}</Badge>
+        )}
       </div>
 
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-12 text-center">
-        <Construction className="mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
-        <p className="text-muted-foreground text-sm">{tc("comingSoon")}</p>
-        <p className="text-muted-foreground/70 text-xs mt-1">{tc("comingSoonHint")}</p>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("whyNeededTitle")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">{t("whyNeededBody")}</p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("upload")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <DpiaForm initial={initial} canUpload={canUpload} />
+        </CardContent>
+      </Card>
     </div>
   );
 }

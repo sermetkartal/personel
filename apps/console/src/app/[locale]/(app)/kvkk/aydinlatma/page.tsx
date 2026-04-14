@@ -2,7 +2,10 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { FilePen, Construction } from "lucide-react";
+import { FilePen } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getAydinlatma, type AydinlatmaInfo } from "@/lib/api/kvkk";
+import { AydinlatmaEditor } from "./aydinlatma-editor";
 
 interface KvkkAydinlatmaPageProps {
   params: Promise<{ locale: string }>;
@@ -24,7 +27,18 @@ export default async function KvkkAydinlatmaPage({
   }
 
   const t = await getTranslations("kvkk.aydinlatma");
-  const tc = await getTranslations("common");
+
+  let initial: AydinlatmaInfo | null = null;
+  try {
+    const resp = await getAydinlatma({ token: session.user.access_token });
+    if (resp?.markdown || resp?.version != null) {
+      initial = resp;
+    }
+  } catch {
+    // Degraded: editor still loads with blank content.
+  }
+
+  const canPublish = can(session.user.role, "manage:kvkk");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -38,11 +52,14 @@ export default async function KvkkAydinlatmaPage({
 
       <p className="text-sm text-muted-foreground">{t("intro")}</p>
 
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center">
-        <Construction className="mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
-        <p className="text-muted-foreground text-sm">{tc("comingSoon")}</p>
-        <p className="text-muted-foreground/70 text-xs mt-1">{tc("comingSoonHint")}</p>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">{t("editorLabel")}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AydinlatmaEditor initial={initial} canPublish={canPublish} />
+        </CardContent>
+      </Card>
     </div>
   );
 }
