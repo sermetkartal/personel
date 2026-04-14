@@ -55,9 +55,12 @@ mod win {
     use tracing::{debug, trace, warn};
 
     use windows::core::PWSTR;
-    use windows::Win32::Foundation::{CloseHandle, HANDLE, HLOCAL, LocalFree};
+    use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HLOCAL, LocalFree};
     use windows::Win32::Security::Authorization::ConvertSidToStringSidW;
     use windows::Win32::Security::{GetTokenInformation, TokenUser, TOKEN_USER};
+    use windows::Win32::System::Registry::{
+        RegEnumKeyExW, HKEY_USERS,
+    };
     use windows::Win32::System::RemoteDesktop::{
         WTSGetActiveConsoleSessionId, WTSQueryUserToken,
     };
@@ -96,32 +99,124 @@ mod win {
         }
     }
 
-    /// Walks the 4-step chain (console session → user token → TOKEN_USER →
-    /// SID string). Returns `Ok(None)` when there is no interactive user
-    /// (boot, logoff, lock screen) and `Err` only when an API we expected
-    /// to succeed actually failed.
+    /// Walks the resolution chain. Tries the fast WTS path first
+    /// (interactive/dev boxes where session 0 isolation is not enforced
+    /// or the agent is running outside session 0), then falls back to
+    /// enumerating `HKEY_USERS` for the most recently modified
+    /// `S-1-5-21-*` user profile hive.
+    ///
+    /// Returns `Ok(None)` when no interactive user can be identified
+    /// (boot, logoff, lock screen with no loaded hive) and `Err` only
+    /// when an API we expected to succeed actually failed.
+    ///
+    /// # Session 0 isolation
+    ///
+    /// On Windows 7+, services running in session 0 cannot call
+    /// `WTSQueryUserToken` on users in session 1+ (console, RDP) —
+    /// even with `SE_TCB_NAME`. The call fails with
+    /// `ERROR_PRIVILEGE_NOT_HELD` (1314) or `ERROR_ACCESS_DENIED` (5).
+    /// The HKU fallback is not subject to this isolation because HKU
+    /// root key enumeration only needs `KEY_READ`, which LocalSystem
+    /// has unconditionally.
     fn resolve_active_console_sid() -> Result<Option<String>, String> {
         // SAFETY: all Win32 calls below use handles we own and buffers sized
         // via the standard two-pass `GetTokenInformation` pattern.
         unsafe {
+            // Fast path — works on interactive boxes, dev machines, and
+            // any host where the agent process somehow has cross-session
+            // token access.
             let session_id = WTSGetActiveConsoleSessionId();
-            if session_id == 0xFFFF_FFFF {
-                return Ok(None);
+            if session_id != 0xFFFF_FFFF {
+                let mut token = HANDLE::default();
+                match WTSQueryUserToken(session_id, &mut token) {
+                    Ok(_) => {
+                        let sid_str = sid_from_token(token);
+                        let _ = CloseHandle(token);
+                        return sid_str.map(Some);
+                    }
+                    Err(e) => {
+                        // Session 0 isolation or privilege not held.
+                        // Win32 error codes: 5 = ACCESS_DENIED,
+                        // 1314 = PRIVILEGE_NOT_HELD, 8 = NO_TOKEN.
+                        // Log the real code so operators can diagnose.
+                        debug!(
+                            win32_error = e.code().0,
+                            "user_sid: WTSQueryUserToken failed — falling back to HKU enum"
+                        );
+                    }
+                }
+            } else {
+                debug!("user_sid: no active console session — trying HKU fallback");
             }
 
-            let mut token = HANDLE::default();
-            if WTSQueryUserToken(session_id, &mut token).is_err() {
-                // ERROR_NO_TOKEN / ERROR_PRIVILEGE_NOT_HELD both land here.
-                // The former is a normal "nobody logged in" state; the
-                // latter means the agent is NOT running as LocalSystem,
-                // which is a deployment bug — log a warning on that path.
-                return Ok(None);
-            }
-
-            let sid_str = sid_from_token(token);
-            let _ = CloseHandle(token);
-            sid_str.map(Some)
+            // Fallback — enumerate HKEY_USERS and pick the most-recently
+            // modified `S-1-5-21-*` subkey. Heuristic: the currently
+            // active user's hive is the one whose keys get touched most
+            // recently (profile service, user processes, etc.).
+            resolve_sid_via_hku()
         }
+    }
+
+    /// Fallback SID resolver: enumerates `HKEY_USERS` and picks the
+    /// most recently modified `S-1-5-21-*` user profile hive. Works
+    /// from session 0 LocalSystem because HKU root enumeration only
+    /// needs `KEY_READ`, which LocalSystem has unconditionally.
+    ///
+    /// Filters:
+    /// - Skips non-`S-1-5-21-` SIDs (LocalSystem/LocalService/etc.)
+    /// - Skips `*_Classes` shadow subkeys
+    ///
+    /// Returns `Ok(None)` when no loaded user hive qualifies (host at
+    /// boot screen, RDP-only with no console session).
+    unsafe fn resolve_sid_via_hku() -> Result<Option<String>, String> {
+        let mut best_sid: Option<String> = None;
+        let mut best_ft = FILETIME::default();
+        let mut best_u64: u64 = 0;
+
+        for idx in 0u32.. {
+            let mut name_buf = [0u16; 256];
+            let mut name_len: u32 = 256;
+            let mut ft = FILETIME::default();
+
+            let ret = RegEnumKeyExW(
+                HKEY_USERS,
+                idx,
+                PWSTR(name_buf.as_mut_ptr()),
+                &mut name_len,
+                None,
+                PWSTR::null(),
+                None,
+                Some(&mut ft),
+            );
+            if ret.is_err() {
+                // ERROR_NO_MORE_ITEMS — clean loop exit.
+                break;
+            }
+
+            let name = String::from_utf16_lossy(&name_buf[..name_len as usize]);
+            if !name.starts_with("S-1-5-21-") {
+                continue;
+            }
+            if name.ends_with("_Classes") {
+                continue;
+            }
+
+            let ft_u64 = ((ft.dwHighDateTime as u64) << 32) | (ft.dwLowDateTime as u64);
+            if ft_u64 > best_u64 {
+                best_u64 = ft_u64;
+                best_ft = ft;
+                best_sid = Some(name);
+            }
+        }
+
+        if best_sid.is_some() {
+            debug!(
+                sid = %best_sid.as_deref().unwrap_or(""),
+                "user_sid: HKU fallback resolved"
+            );
+        }
+        let _ = best_ft; // silence unused_mut warning when best path is cold
+        Ok(best_sid)
     }
 
     /// Extracts the SID out of a primary token and returns it in canonical
