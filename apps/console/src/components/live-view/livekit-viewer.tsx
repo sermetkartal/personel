@@ -79,8 +79,19 @@ export function LiveKitViewer({
     }
   }, [secondsRemaining, t]);
 
+  // Detect placeholder/unreachable LiveKit URLs. In the vm3 dev pilot the
+  // SFU is not deployed, so we render a clear "simulation" placeholder
+  // instead of bubbling up a misleading connection error toast.
+  const livekitAvailable =
+    livekitUrl && !livekitUrl.includes("localhost:7880") && !livekitUrl.startsWith("disabled://");
+
   // Connect to LiveKit room
   useEffect(() => {
+    if (!livekitAvailable) {
+      setConnectionStatus("disconnected");
+      return;
+    }
+
     const room = new Room({
       // View-only: do not request publish permissions
       adaptiveStream: true,
@@ -110,7 +121,7 @@ export function LiveKitViewer({
     };
     // viewer_token intentionally not in deps — it's a one-time credential
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [livekitUrl, router]);
+  }, [livekitUrl, router, livekitAvailable]);
 
   const handleTerminate = useCallback(async () => {
     if (!terminateReason.trim()) return;
@@ -199,13 +210,26 @@ export function LiveKitViewer({
         aria-label={t("screenLabel")}
         role="region"
       >
-        {connectionStatus === "connecting" && (
+        {/* LiveKit server unavailable (dev pilot) — render a friendly placeholder
+            instead of the generic "disconnected" error state. */}
+        {!livekitAvailable && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-muted p-6 text-center">
+            <Monitor className="h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
+            <p className="text-sm font-medium text-foreground">
+              {t("serverUnavailableTitle")}
+            </p>
+            <p className="max-w-sm text-xs text-muted-foreground">
+              {t("serverUnavailableBody")}
+            </p>
+          </div>
+        )}
+        {livekitAvailable && connectionStatus === "connecting" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
             <Loader2 className="h-8 w-8 animate-spin" aria-hidden="true" />
             <p className="text-sm">{t("connecting")}</p>
           </div>
         )}
-        {connectionStatus === "disconnected" && (
+        {livekitAvailable && connectionStatus === "disconnected" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white">
             <WifiOff className="h-8 w-8" aria-hidden="true" />
             <p className="text-sm">{t("disconnected")}</p>

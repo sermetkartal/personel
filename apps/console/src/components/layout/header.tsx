@@ -7,13 +7,13 @@ import {
   LogOut,
   User,
   ChevronDown,
-  Bell,
-  Moon,
-  Sun,
 } from "lucide-react";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { DLPStateIndicator } from "@/components/dlp/state-indicator";
 import { RoleBadge } from "./role-badge";
+import { MobileNav } from "./mobile-nav";
+import { NotificationBell } from "./notification-bell";
+import { LocaleSwitcher } from "./locale-switcher";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,23 +43,22 @@ export function Header({ className }: HeaderProps): JSX.Element {
       )}
       role="banner"
     >
-      {/* Left: breadcrumb placeholder (filled by page) */}
-      <div className="flex items-center gap-2" id="header-breadcrumb" />
+      {/* Left: mobile nav trigger (<md) + breadcrumb placeholder */}
+      <div className="flex items-center gap-2">
+        <MobileNav />
+        <div id="header-breadcrumb" />
+      </div>
 
-      {/* Right: DLP badge + notifications + user menu */}
-      <div className="flex items-center gap-3">
+      {/* Right: DLP badge + locale + notifications + user menu */}
+      <div className="flex items-center gap-1 sm:gap-3">
         {/* DLP State — always visible per ADR 0013 */}
-        <DLPStateIndicator />
+        <div className="hidden sm:block">
+          <DLPStateIndicator />
+        </div>
 
-        {/* Notification bell placeholder */}
-        <Button
-          variant="ghost"
-          size="icon"
-          aria-label="Bildirimler"
-          className="relative"
-        >
-          <Bell className="h-4 w-4" />
-        </Button>
+        <LocaleSwitcher />
+
+        <NotificationBell />
 
         {/* User menu */}
         {isLoading ? (

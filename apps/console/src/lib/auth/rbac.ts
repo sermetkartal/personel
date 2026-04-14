@@ -48,6 +48,35 @@ export function canManageEndpoints(role: Role): boolean {
   return role === "admin" || role === "dpo";
 }
 
+/**
+ * Who can operationally deactivate / refresh tokens / wipe endpoints.
+ * These are day-to-day IT fleet ops — not KVKK-scoped moves.
+ */
+export function canDeactivateEndpoint(role: Role): boolean {
+  return role === "admin" || role === "it_manager";
+}
+
+export function canWipeEndpoint(role: Role): boolean {
+  return role === "admin" || role === "it_manager" || role === "investigator";
+}
+
+export function canRefreshEndpointToken(role: Role): boolean {
+  return role === "admin" || role === "it_manager";
+}
+
+export function canRevokeEndpointCert(role: Role): boolean {
+  return role === "admin" || role === "dpo";
+}
+
+/**
+ * Erasure requests (KVKK m.11/f) can only be finally executed by a DPO.
+ * Non-DPO roles (including admin) can inspect dry-run projections but not
+ * commit destruction.
+ */
+export function canExecuteDSRErasure(role: Role): boolean {
+  return role === "dpo";
+}
+
 export function canViewEmployees(role: Role): boolean {
   return (
     role === "admin" ||
@@ -209,6 +238,11 @@ export function canViewReports(role: Role): boolean {
 export type Action =
   | "view:endpoints"
   | "manage:endpoints"
+  | "deactivate:endpoint"
+  | "wipe:endpoint"
+  | "refresh:endpoint-token"
+  | "revoke:endpoint-cert"
+  | "execute:dsr-erasure"
   | "view:employees"
   | "view:policies"
   | "manage:policies"
@@ -240,6 +274,11 @@ export type Action =
 const ACTION_CHECKS: Record<Action, (role: Role) => boolean> = {
   "view:endpoints": canViewEndpoints,
   "manage:endpoints": canManageEndpoints,
+  "deactivate:endpoint": canDeactivateEndpoint,
+  "wipe:endpoint": canWipeEndpoint,
+  "refresh:endpoint-token": canRefreshEndpointToken,
+  "revoke:endpoint-cert": canRevokeEndpointCert,
+  "execute:dsr-erasure": canExecuteDSRErasure,
   "view:employees": canViewEmployees,
   "view:policies": canViewPolicies,
   "manage:policies": canManagePolicies,

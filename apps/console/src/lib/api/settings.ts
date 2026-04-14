@@ -2,7 +2,7 @@
  * Settings API query functions — tenants, users.
  */
 
-import { apiClient } from "./client";
+import { apiClient, type FetchOptions } from "./client";
 import type {
   PaginationParams,
   Role,
@@ -10,6 +10,7 @@ import type {
   Tenant,
   TenantCreate,
   TenantList,
+  TenantSettings,
   TenantUpdate,
   User,
   UserCreate,
@@ -23,28 +24,44 @@ export const tenantKeys = {
   all: ["tenants"] as const,
   list: (params: PaginationParams) => ["tenants", "list", params] as const,
   detail: (id: string) => ["tenants", "detail", id] as const,
+  settings: (id: string) => ["tenants", "settings", id] as const,
 };
 
 export async function listTenants(
   params: PaginationParams = {},
+  opts?: FetchOptions,
 ): Promise<TenantList> {
   const qs = apiClient.buildQuery(params);
-  return apiClient.get<TenantList>(`/v1/tenants${qs}`);
+  return apiClient.get<TenantList>(`/v1/tenants${qs}`, opts);
 }
 
-export async function getTenant(id: string): Promise<Tenant> {
-  return apiClient.get<Tenant>(`/v1/tenants/${id}`);
+export async function getTenant(
+  id: string,
+  opts?: FetchOptions,
+): Promise<Tenant> {
+  return apiClient.get<Tenant>(`/v1/tenants/${id}`, opts);
 }
 
-export async function createTenant(req: TenantCreate): Promise<Tenant> {
-  return apiClient.post<Tenant>("/v1/tenants", req);
+export async function createTenant(
+  req: TenantCreate,
+  opts?: FetchOptions,
+): Promise<Tenant> {
+  return apiClient.post<Tenant>("/v1/tenants", req, opts);
 }
 
 export async function updateTenant(
   id: string,
   req: TenantUpdate,
+  opts?: FetchOptions,
 ): Promise<Tenant> {
-  return apiClient.patch<Tenant>(`/v1/tenants/${id}`, req);
+  return apiClient.patch<Tenant>(`/v1/tenants/${id}`, req, opts);
+}
+
+export async function getTenantSettings(
+  id: string,
+  opts?: FetchOptions,
+): Promise<TenantSettings> {
+  return apiClient.get<TenantSettings>(`/v1/tenants/${id}/settings`, opts);
 }
 
 // ── Users ─────────────────────────────────────────────────────────────────────

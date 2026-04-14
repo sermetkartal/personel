@@ -65,7 +65,11 @@
     },
     "kvkk": "KVKK",
     "copy": "Kopyala",
-    "copied": "Kopyalandı"
+    "copied": "Kopyalandı",
+    "openNavigation": "Navigasyonu aç",
+    "closeNavigation": "Navigasyonu kapat",
+    "mainNavigation": "Ana navigasyon",
+    "skipToContent": "İçeriğe geç"
   },
 
   "auth": {
@@ -129,6 +133,10 @@
       "users": "Kullanıcılar",
       "integrations": "Entegrasyonlar",
       "profile": "Profil"
+    },
+    "auditMenu": {
+      "list": "Kayıt Listesi",
+      "search": "Tam Metin Arama"
     }
   },
 
@@ -183,6 +191,30 @@
       "mostIdle": {
         "title": "En Çok Boşta Geçiren"
       }
+    },
+    "live": {
+      "title": "Canlı Aktivite",
+      "description": "Gerçek zamanlı denetim olayları akışı",
+      "connecting": "Bağlanıyor...",
+      "connected": "Canlı",
+      "reconnecting": "Yeniden bağlanıyor",
+      "disconnected": "Bağlantı kesildi",
+      "pollingFallback": "Yedek mod (anket)",
+      "noEventsYet": "Henüz olay yok",
+      "waitingEvents": "Olaylar bekleniyor...",
+      "all": "Tüm eylemler",
+      "filterAll": "Önemli eylemler",
+      "filterLiveView": "Canlı İzleme",
+      "filterDSR": "KVKK Talepleri",
+      "filterPolicy": "Politika ve DLP"
+    },
+    "liveMetrics": {
+      "title": "Canlı Metrikler",
+      "lastUpdated": "Son güncelleme: {time}",
+      "activeEndpoints": "Aktif Uç Noktalar",
+      "openDsrs": "Açık DSR Sayısı",
+      "liveViewPending": "Bekleyen Canlı İzleme",
+      "policyViolations": "Politika İhlalleri"
     }
   },
 
@@ -214,15 +246,61 @@
       "offline": "Çevrimdışı"
     },
     "actions": {
-      "revoke": "Token İptal Et",
+      "revoke": "Sertifikayı İptal Et",
       "delete": "Uç Noktayı Sil",
+      "deactivate": "Devre Dışı Bırak",
+      "wipe": "Sil (Kripto-silme)",
+      "refresh": "Token Yenile",
       "requestLiveView": "Canlı İzleme Talep Et",
-      "revokeConfirm": "Bu uç noktanın token'ını iptal etmek istediğinizden emin misiniz? Ajan bir daha bağlanamayacak.",
-      "deleteConfirm": "Bu uç noktayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz."
+      "revokeConfirm": "Bu uç noktanın sertifikasını iptal etmek istediğinizden emin misiniz? Ajan bir daha bağlanamayacak (soft revoke).",
+      "deleteConfirm": "Bu uç noktayı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.",
+      "deactivateTitle": "Uç Noktayı Devre Dışı Bırak",
+      "deactivateDesc": "'{hostname}' cihazı yumuşak şekilde devre dışı bırakılacak. Cihaz komut almayı durduracak, ancak kayıtlı kalacak.",
+      "deactivateReasonLabel": "Gerekçe (zorunlu)",
+      "deactivateReasonPlaceholder": "Örn. çalışan ayrıldı, cihaz stokta",
+      "confirmWipe": "'{hostname}' cihazını SİLMEK üzeresiniz. Bu işlem GERİ ALINAMAZ — tüm yerel veriler, anahtarlar ve ajan yapılandırması silinir.",
+      "wipeReasonLabel": "Gerekçe (zorunlu)",
+      "wipeReasonPlaceholder": "Örn. çalınan cihaz, incident #1234",
+      "typeToConfirm": "Onaylamak için SIL yazın",
+      "typeToConfirmToken": "SIL",
+      "legalHoldBlock": "Bu cihaz yasal saklama altında. Silme işlemi reddedildi.",
+      "refreshTitle": "Token Yenile",
+      "refreshDesc": "Ajanın mTLS sertifikası yenilenecek. Cihaz bir sonraki bağlantıda yeni sertifikayı alacak.",
+      "refreshRateLimit": "Kalan yenileme hakkı: {remaining}",
+      "bulkLimitExceeded": "Toplu işlemler en fazla {limit} cihaz destekler.",
+      "bulkTitle": "Toplu işlem: {operation}",
+      "bulkDesc": "{count} cihaza '{operation}' işlemi uygulanacak. Gerekçe girmeniz zorunludur.",
+      "bulkReasonLabel": "Toplu işlem gerekçesi",
+      "bulkApply": "Seçili cihazlara uygula",
+      "bulkSelected": "{count} cihaz seçildi",
+      "bulkSuccess": "{accepted} cihaz işleme alındı, {rejected} reddedildi.",
+      "rateLimitHit": "Token yenileme hızı sınırı aşıldı. Lütfen birkaç dakika sonra tekrar deneyin."
     },
     "filters": {
       "allStatuses": "Tüm Durumlar",
+      "allOs": "Tüm İşletim Sistemleri",
+      "allDepartments": "Tüm Departmanlar",
       "searchPlaceholder": "Bilgisayar adına göre ara..."
+    },
+    "detailTabs": {
+      "overview": "Genel Bakış",
+      "commands": "Komut Geçmişi",
+      "policies": "Politikalar",
+      "actions": "Eylemler"
+    },
+    "commandHistory": {
+      "empty": "Henüz komut gönderilmedi.",
+      "type": "Tür",
+      "status": "Durum",
+      "queuedAt": "Kuyruğa Alındı",
+      "ackedAt": "Onaylandı",
+      "issuedBy": "İşlemi Başlatan",
+      "reason": "Gerekçe"
+    },
+    "liveness": {
+      "currentlyActive": "Şu an aktif",
+      "recentlyOffline": "Yakın zamanda çevrimdışı",
+      "stale": "Uzun süredir sessiz"
     },
     "enrollment": {
       "hostname": "Bilgisayar Adı",
@@ -432,6 +510,8 @@
       "cancel": "İptal",
       "connecting": "Bağlanıyor...",
       "disconnected": "Bağlantı kesildi. Yönlendiriliyor...",
+      "serverUnavailableTitle": "LiveKit Sunucusu Kullanılamıyor",
+      "serverUnavailableBody": "LiveKit SFU bu ortamda çalıştırılmıyor. Oturum başlatıldı ve denetim izine yazıldı, ancak canlı video akışı simüle ediliyor. Üretim ortamında bu alanda gerçek ekran akışı görünecektir.",
       "screenLabel": "Uç nokta ekranı",
       "status": {
         "connecting": "Bağlanıyor",
@@ -535,6 +615,30 @@
       "reject": "Reddet",
       "erase": "Veriyi Sil",
       "exportData": "Veriyi Dışa Aktar",
+      "fulfillAccess": "Veri Erişim Talebini Karşıla",
+      "fulfillErasure": "Silme Talebini Karşıla",
+      "dryRun": "Simülasyon (Dry Run)",
+      "executeErasure": "Kalıcı Sil",
+      "accessExportGenerated": "Dışa aktarma hazır",
+      "downloadArtifact": "Yanıt Paketini İndir",
+      "artifactExpires": "Bağlantı {date} tarihine kadar geçerli",
+      "artifactSize": "{size} · SHA-256: {hash}",
+      "artifactRecordCount": "{count} kayıt paketlendi",
+      "erasureReport": "Silme Raporu",
+      "erasureDryRunTitle": "Simülasyon Sonucu",
+      "erasureDryRunDesc": "Aşağıdaki kayıtlar gerçek silme işlemiyle birlikte kaldırılacaktır. Şu ana kadar hiçbir veri silinmedi.",
+      "erasureConfirmTitle": "Kalıcı Silme Onayı",
+      "erasureConfirmDesc": "Bu işlem geri alınamaz. Aşağıdaki veriler kalıcı olarak silinecektir. DPO dışındaki roller bu işlemi gerçekleştiremez.",
+      "erasureTypeToConfirm": "Onaylamak için SIL yazın",
+      "erasureNotAllowed": "Yalnızca Veri Koruma Görevlisi (DPO) kalıcı silme işlemi yapabilir.",
+      "legalHoldBlock": "Yasal saklama altındaki cihazlar var — silme işlemi KVKK m.13/f uyarınca reddedildi",
+      "slaOverdue": "{days} gün süresi geçti — acil müdahale gerekli",
+      "pgRows": "Postgres satırı",
+      "chRows": "ClickHouse satırı",
+      "minioKeys": "MinIO nesne anahtarı",
+      "vaultKeys": "Vault transit anahtarı",
+      "completedAt": "Tamamlanma",
+      "auditLogId": "Audit Kayıt ID",
       "noActions": "Bu durumdaki talepler için işlem yapılamaz: {state}",
       "respondTitle": "Talebi Yanıtla",
       "respondDesc": "Yanıt belgesinin referansını girerek talebi kapatın.",
@@ -782,6 +886,47 @@
       "legalHoldReleased": "Hukuki Saklama Kaldırıldı",
       "retentionDestructionReportGenerated": "İmha Raporu Oluşturuldu",
       "agentSilenceAcknowledged": "Ajan Sessizliği Onaylandı"
+    },
+    "search": {
+      "title": "Audit Kayıt Arama",
+      "subtitle": "OpenSearch destekli tam metin arama ve filtreleme",
+      "backToLog": "Kayıt Listesi",
+      "placeholder": "Eylem, aktör veya hedef ara...",
+      "resultsLabel": "Arama sonuçları",
+      "totalHits": "{total} kayıt bulundu ({ms}ms)",
+      "noResults": "Hiç kayıt bulunamadı",
+      "noResultsHint": "Filtreleri gevşetmeyi veya tarih aralığını genişletmeyi deneyin.",
+      "error": "Arama başarısız oldu",
+      "retry": "Tekrar Dene",
+      "offline": "Arama servisi çevrimdışı — temel liste görüntüleniyor",
+      "degradedTitle": "Arama Servisi Çevrimdışı",
+      "clearFilters": "Filtreleri Temizle",
+      "refresh": "Yenile",
+      "exportCsv": "CSV İndir",
+      "prev": "Önceki",
+      "next": "Sonraki",
+      "pageOf": "Sayfa {page}/{total}",
+      "filters": {
+        "action": "Eylem",
+        "allActions": "Tüm Eylemler",
+        "login": "Giriş / Çıkış",
+        "liveView": "Canlı İzleme",
+        "dsr": "DSR",
+        "legalHold": "Yasal Durdurma",
+        "policy": "Politika",
+        "endpoint": "Uç Nokta",
+        "user": "Kullanıcı",
+        "dlp": "DLP",
+        "screenshot": "Ekran Görüntüsü",
+        "actor": "Aktör UUID",
+        "dateRange": "Tarih Aralığı",
+        "last24h": "Son 24 saat",
+        "last7d": "Son 7 gün",
+        "last30d": "Son 30 gün",
+        "custom": "Özel",
+        "customFrom": "Başlangıç",
+        "customTo": "Bitiş"
+      }
     }
   },
 
@@ -789,7 +934,9 @@
     "title": "Politikalar",
     "subtitle": "Ajan izleme politikalarını yönetin",
     "create": "Politika Oluştur",
-    "push": "Uç Noktalara Gönder",
+    "edit": "Düzenle",
+    "emptyList": "Henüz politika tanımlanmamış. İlk politikanızı oluşturun.",
+    "listUpdated": "Son Güncelleme",
     "detail": {
       "title": "Politika Detayı",
       "name": "Ad",
@@ -828,6 +975,52 @@
       "confirm": "Gönder",
       "success": "Politika gönderim kuyruğuna alındı.",
       "pushDescription": "Bu politika seçilen uç noktalara NATS üzerinden imzalı olarak gönderilecektir."
+    },
+    "editor": {
+      "title": "Politika Düzenleyici",
+      "newTitle": "Yeni Politika",
+      "editTitle": "Politikayı Düzenle",
+      "subtitle": "Görsel kural tabanlı SensitivityGuard politikası",
+      "backToList": "Politika Listesine Dön",
+      "meta": "Politika Bilgileri",
+      "name": "Politika Adı",
+      "namePlaceholder": "Örn: Varsayılan Ofis Politikası",
+      "description": "Açıklama",
+      "descPlaceholder": "Bu politikanın kimleri etkilediği ve neyi kapsadığı",
+      "palette": "Kural Paleti",
+      "preview": "Önizleme (JSON)",
+      "readOnly": "Salt Okunur",
+      "test": "Örnek Olay ile Test Et",
+      "testNotImplemented": "Test koşumu Faz 2.11'de gerçek backend ile bağlanacak.",
+      "emptyRules": "Henüz kural eklenmemiş",
+      "emptyRulesHint": "Sol paletden bir kural türü seçerek başlayın",
+      "add": "Ekle",
+      "remove": "Kaldır",
+      "removeRule": "Kuralı Kaldır",
+      "noValues": "Henüz değer eklenmemiş",
+      "saveDraft": "Taslak Kaydet",
+      "saveDraftSuccess": "Taslak kaydedildi",
+      "publish": "Yayınla",
+      "publishSuccess": "Politika yayınlandı ve dağıtım kuyruğuna alındı",
+      "publishConfirmTitle": "Politikayı Yayınlamayı Onaylayın",
+      "publishConfirmBody": "Bu politika imzalanarak tüm aktif uç noktalara anında dağıtılacak.",
+      "publishWarningTitle": "Dikkat",
+      "publishWarningBody": "Yayınlandıktan sonra geri alınamaz. Yeni bir versiyonla üzerine yazılabilir.",
+      "confirmPublish": "Evet, Yayınla",
+      "cancel": "İptal",
+      "saveError": "Kaydetme başarısız",
+      "dlpWarnTitle": "DLP Etkinleştirme Konsoldan Yapılamaz",
+      "dlpWarnBody": "Klavye içeriği DLP işleme, ADR 0013 gereği varsayılan olarak KAPALIDIR ve yalnızca Vault töreniyle etkinleştirilir.",
+      "dlpWarnAdr": "Etkinleştirmek için: DPIA güncellemesi + yazılı onay formu + Vault operatör betiği. Bu konsolda etkinleştirme düğmesi TASARIM GEREĞİ bulunmamaktadır.",
+      "understood": "Anladım",
+      "goToDlpSettings": "DLP Ayarlarına Git",
+      "errors": {
+        "empty": "Değer boş olamaz",
+        "duplicate": "Bu değer zaten ekli",
+        "invalid_regex": "Geçersiz regex deseni",
+        "too_many_stars": "Çok fazla * karakteri",
+        "bad_chars": "Desende geçersiz karakterler var"
+      }
     }
   },
 
@@ -887,33 +1080,154 @@
 
   "settings": {
     "title": "Ayarlar",
+    "subtitle": "Sistem, kiracı ve entegrasyon yapılandırmaları",
     "tabs": {
+      "general": "Genel",
       "dlp": "DLP",
       "tenants": "Kiracılar",
       "users": "Kullanıcılar",
       "integrations": "Entegrasyonlar",
+      "evidence": "SOC 2 Kanıt Kasası",
       "profile": "Profil"
+    },
+    "general": {
+      "title": "Genel Ayarlar",
+      "subtitle": "Kiracı kimliği, dil, saat dilimi ve marka",
+      "tenantSectionTitle": "Kiracı Profili",
+      "displayName": "Görünen Ad",
+      "displayNamePlaceholder": "Örn: Acme Corporation Türkiye",
+      "defaultLocale": "Varsayılan Dil",
+      "timezone": "Saat Dilimi",
+      "timezoneHint": "Raporlar ve DSR SLA süreleri bu saat dilimine göre hesaplanır.",
+      "brandingTitle": "Logo ve Marka",
+      "brandingHint": "Konsol ve Şeffaflık Portalı üst çubuğunda gösterilecek logo yüklemesi",
+      "comingSoon": "Yakında",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor...",
+      "saveScaffold": "Kaydedildi (iskelet — backend wiring Faz 2.11)"
     },
     "tenants": {
       "title": "Kiracı Ayarları",
-      "liveViewHistoryRestricted": "Çalışanların Canlı İzleme Geçmişi Görünürlüğünü Kısıtla",
-      "liveViewHistoryRestrictedHint": "Kapatıldığında VKG yazılı gerekçe sağlamalı ve denetim kaydı oluşturulmalıdır.",
-      "maxScreenshotRetention": "Maksimum Ekran Görüntüsü Saklama Süresi (gün)"
+      "listTitle": "Kiracılar",
+      "listSubtitle": "Sisteme kayıtlı tüm kiracıları yönetin",
+      "detailTitle": "Kiracı Detayı",
+      "profileTitle": "Kiracı Profili",
+      "metadataTitle": "Metadata",
+      "empty": "Henüz kiracı kaydı yok.",
+      "create": "Yeni Kiracı Oluştur",
+      "createSubtitle": "Yeni bir kiracı organizasyon ekleyin",
+      "creating": "Oluşturuluyor...",
+      "createSuccess": "Kiracı oluşturuldu",
+      "createError": "Kiracı oluşturulamadı",
+      "saveSuccess": "Değişiklikler kaydedildi",
+      "saveError": "Kaydetme başarısız",
+      "backToList": "Kiracı Listesine Dön",
+      "name": "Ad",
+      "displayName": "Görünen Ad",
+      "displayNamePlaceholder": "Örn: Acme Corporation Türkiye",
+      "slug": "Slug",
+      "slugImmutable": "Slug oluşturulduktan sonra değiştirilemez.",
+      "slugHint": "Küçük harf, rakam ve tire. Kiracıyı URL'lerde ve Vault yollarında tanımlar.",
+      "created": "Oluşturulma",
+      "updated": "Güncellenme",
+      "view": "Görüntüle",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor...",
+      "yes": "Evet",
+      "no": "Hayır",
+      "liveViewHistoryRestricted": "Canlı İzleme Geçmişi Kısıtlı",
+      "liveViewHistoryRestrictedHint": "Kapatıldığında çalışanların VKG yazılı gerekçesi ve denetim kaydı gerekir.",
+      "screenshotRetentionDays": "Ekran Görüntüsü Saklama Süresi (gün)",
+      "retentionHintKvkk": "KVKK m.7 uyarınca maksimum saklama süresini tanımlayın. 180 gün önerilir.",
+      "dlpTitle": "DLP Durumu",
+      "dlpHint": "ADR 0013 — klavye içeriği DLP varsayılan olarak kapalıdır",
+      "openDlp": "DLP Ayarlarına Git",
+      "retentionTitle": "Saklama Politikası",
+      "retentionHint": "KVKK saklama sürelerini ve canlı izleme görünürlüğünü yönetin",
+      "integrationsTitle": "Entegrasyonlar",
+      "integrationsHint": "HRIS, SIEM ve gözlemlenebilirlik uçları",
+      "openIntegrations": "Entegrasyonları Yönet",
+      "dangerZoneTitle": "Tehlikeli Alan",
+      "deactivateTitle": "Kiracıyı Devre Dışı Bırak",
+      "deactivateBody": "Devre dışı bırakma ajan bağlantısını keser ama veri silinmez. Denetim için 5 yıl saklanır.",
+      "deactivate": "Kiracıyı Devre Dışı Bırak",
+      "deactivateNotImplemented": "Devre dışı bırakma akışı Faz 2.11'de açılacak",
+      "errors": {
+        "slugInvalid": "Slug küçük harf, rakam ve tireden oluşmalı (2-64 karakter)"
+      }
     },
     "users": {
       "title": "Kullanıcı Yönetimi",
+      "subtitle": "Keycloak'tan senkronize edilen kullanıcıları ve rollerini yönetin.",
       "createUser": "Kullanıcı Ekle",
       "username": "Kullanıcı Adı",
       "email": "E-posta",
       "role": "Rol",
-      "disabled": "Devre Dışı"
+      "disabled": "Devre Dışı",
+      "active": "Aktif",
+      "status": "Durum",
+      "createdAt": "Oluşturulma",
+      "actions": "İşlemler",
+      "searchLabel": "Kullanıcı ara",
+      "searchPlaceholder": "Kullanıcı adı veya e-posta...",
+      "filterByRole": "Role göre filtrele",
+      "allRoles": "Tüm roller",
+      "syncKeycloak": "Keycloak'tan Sync",
+      "syncSuccess": "Senkronizasyon tamamlandı: {count} kullanıcı.",
+      "syncPending": "Keycloak senkronizasyonu Faz 2'de gelecek.",
+      "noUsers": "Kullanıcı bulunamadı.",
+      "tableCaption": "Sistemdeki kullanıcılar ve rolleri",
+      "totalUsers": "Toplam {count} kullanıcı",
+      "you": "Siz",
+      "viewDetails": "Detayları görüntüle",
+      "changeRole": "Rol değiştir",
+      "deactivate": "Devre dışı bırak",
+      "reactivate": "Yeniden etkinleştir",
+      "changeRoleTitle": "Rol Değiştir",
+      "changeRoleDesc": "{user} kullanıcısının rolü değiştirilecek. Bu işlem denetim izine kaydedilir.",
+      "newRole": "Yeni rol",
+      "roleChangeWarning": "Rol değişiklikleri kullanıcının yetkilerini hemen etkiler. Kullanıcının mevcut oturumu sonlandırılabilir.",
+      "roleUpdated": "Rol başarıyla güncellendi.",
+      "deactivated": "Kullanıcı devre dışı bırakıldı.",
+      "reactivated": "Kullanıcı yeniden etkinleştirildi.",
+      "cancel": "İptal",
+      "save": "Kaydet",
+      "saving": "Kaydediliyor..."
     },
     "integrations": {
       "title": "Entegrasyonlar",
+      "subtitle": "HRIS, SIEM ve gözlemlenebilirlik entegrasyonları",
+      "scaffoldBadge": "İskelet — Faz 2.11",
       "keycloak": "Keycloak OIDC",
       "livekit": "LiveKit SFU",
       "vault": "HashiCorp Vault",
-      "status": "Bağlantı Durumu"
+      "status": "Bağlantı Durumu",
+      "hrisTitle": "İK Sistem Entegrasyonları (HRIS)",
+      "hrisHint": "Çalışan senkronizasyonu, departman ve yönetici bilgileri için HRIS bağlayıcıları",
+      "bambooDescription": "BambooHR üzerinden çalışan senkronizasyonu",
+      "logoTigerDescription": "Logo Tiger HR üzerinden çalışan senkronizasyonu (TR yerli)",
+      "bambooSubdomain": "Subdomain",
+      "apiKey": "API Anahtarı",
+      "baseUrl": "Temel URL",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "testConnection": "Bağlantıyı Test Et",
+      "connect": "Bağlan",
+      "statusConnected": "Bağlı",
+      "statusDisconnected": "Bağlı Değil",
+      "statusError": "Hata",
+      "lastSync": "Son Senkronizasyon",
+      "siemTitle": "SIEM Dışa Aktarım",
+      "siemHint": "Güvenlik olaylarını ve denetim kayıtlarını üçüncü parti SIEM sistemlerine yönlendirin",
+      "splunkDescription": "Splunk HTTP Event Collector (HEC) üzerinden aktarım",
+      "sentinelDescription": "Microsoft Sentinel Data Collection Rule (DCR) üzerinden aktarım",
+      "hecUrl": "HEC URL",
+      "hecToken": "HEC Token",
+      "dceUrl": "Data Collection Endpoint",
+      "dcrImmutableId": "DCR Immutable ID",
+      "streamName": "Stream Adı",
+      "observabilityTitle": "Gözlemlenebilirlik",
+      "observabilityHint": "Bu uçlar Docker Compose yığını tarafından sağlanır ve yönetilir."
     },
     "profile": {
       "title": "Profilim",
@@ -972,6 +1286,42 @@
     "contactAdmin": "Erişim için sistem yöneticinize başvurun.",
     "backToDashboard": "Panele Dön",
     "backHome": "Ana Sayfaya Dön"
+  },
+
+  "notifications": {
+    "title": "Bildirimler",
+    "ariaLabel": "Bildirimler ({count} okunmamış)",
+    "unreadCount": "{count} okunmamış bildirim",
+    "noUnread": "Okunmamış bildirim yok",
+    "empty": "Henüz bildirim yok",
+    "markRead": "Okundu olarak işaretle",
+    "markAllRead": "Tümünü okundu işaretle",
+    "allMarkedRead": "Tüm bildirimler okundu olarak işaretlendi.",
+    "view": "Görüntüle",
+    "justNow": "az önce",
+    "minutesAgo": "{n} dk önce",
+    "hoursAgo": "{n} sa önce",
+    "daysAgo": "{n} gün önce",
+    "types": {
+      "dsr_new": {
+        "title": "Yeni Veri Talebi (KVKK m.11)"
+      },
+      "dsr_overdue": {
+        "title": "Süresi Dolan Veri Talebi"
+      },
+      "live_view_request": {
+        "title": "Yeni Canlı İzleme Talebi"
+      },
+      "policy_violation": {
+        "title": "Politika İhlali"
+      },
+      "tamper_alert": {
+        "title": "Kurcalama Uyarısı"
+      },
+      "backup_failed": {
+        "title": "Yedekleme Başarısız"
+      }
+    }
   },
 
   "errors": {

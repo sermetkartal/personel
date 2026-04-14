@@ -35,37 +35,99 @@ export async function listDSRs(
   return apiClient.get<DSRList>(`/v1/dsr${qs}`, opts);
 }
 
-export async function getDSR(id: string): Promise<DSRRequest> {
-  return apiClient.get<DSRRequest>(`/v1/dsr/${id}`);
+export async function getDSR(
+  id: string,
+  opts: { token?: string } = {},
+): Promise<DSRRequest> {
+  return apiClient.get<DSRRequest>(`/v1/dsr/${id}`, opts);
 }
 
-export async function submitDSR(req: DSRCreate): Promise<DSRRequest> {
-  return apiClient.post<DSRRequest>("/v1/dsr", req);
+export async function submitDSR(
+  req: DSRCreate,
+  opts: { token?: string } = {},
+): Promise<DSRRequest> {
+  return apiClient.post<DSRRequest>("/v1/dsr", req, opts);
 }
 
-export async function assignDSR(id: string, req: DSRAssign): Promise<DSRRequest> {
-  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/assign`, req);
+export async function assignDSR(
+  id: string,
+  req: DSRAssign,
+  opts: { token?: string } = {},
+): Promise<DSRRequest> {
+  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/assign`, req, opts);
 }
 
 export async function respondDSR(
   id: string,
   req: DSRRespond,
+  opts: { token?: string } = {},
 ): Promise<DSRRequest> {
-  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/respond`, req);
+  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/respond`, req, opts);
 }
 
 export async function extendDSR(
   id: string,
   req: DSRExtend,
+  opts: { token?: string } = {},
 ): Promise<DSRRequest> {
-  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/extend`, req);
+  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/extend`, req, opts);
 }
 
 export async function rejectDSR(
   id: string,
   req: DSRReject,
+  opts: { token?: string } = {},
 ): Promise<DSRRequest> {
-  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/reject`, req);
+  return apiClient.post<DSRRequest>(`/v1/dsr/${id}/reject`, req, opts);
+}
+
+// ── Fulfillment (Phase 2 — real KVKK m.11/b and m.11/f workflows) ────────────
+
+export interface DSRAccessFulfillment {
+  artifact_ref: string;
+  artifact_url: string;
+  artifact_sha256: string;
+  artifact_size_bytes: number;
+  expires_at: string;
+  record_count: number;
+}
+
+/**
+ * DSR erasure report shape. Either returned fully populated for a real run,
+ * or with `dry_run: true` and only the projected counts for a simulation.
+ */
+export interface DSRErasureReport {
+  dry_run: boolean;
+  postgres_rows_deleted: number;
+  clickhouse_rows_deleted: number;
+  minio_keys_erased: number;
+  vault_keys_destroyed: number;
+  completed_at?: string | null;
+  audit_log_id?: string | null;
+  blocking_legal_holds?: { id: string; reason_code: string }[];
+}
+
+export async function fulfillDSRAccess(
+  id: string,
+  opts: { token?: string } = {},
+): Promise<DSRAccessFulfillment> {
+  return apiClient.post<DSRAccessFulfillment>(
+    `/v1/dsr/${id}/fulfill-access`,
+    undefined,
+    opts,
+  );
+}
+
+export async function fulfillDSRErasure(
+  id: string,
+  dryRun: boolean,
+  opts: { token?: string } = {},
+): Promise<DSRErasureReport> {
+  return apiClient.post<DSRErasureReport>(
+    `/v1/dsr/${id}/fulfill-erasure`,
+    { dry_run: dryRun },
+    opts,
+  );
 }
 
 /**

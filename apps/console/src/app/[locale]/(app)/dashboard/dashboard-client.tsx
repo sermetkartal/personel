@@ -22,6 +22,8 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import type { AuditRecord, DLPStateResponse, Role } from "@/lib/api/types";
 import { formatRelativeTR } from "@/lib/utils";
+import { LiveActivityFeed } from "@/components/dashboard/live-activity-feed";
+import { LiveMetrics } from "@/components/dashboard/live-metrics";
 
 function formatHoursShort(mins: number): string {
   if (mins < 60) return `${mins} dk`;
@@ -41,6 +43,8 @@ interface DashboardClientProps {
   dlpState: DLPStateResponse | null;
   uam: UAMWidgets;
   userRole: Role;
+  /** Bearer token forwarded from server component for WebSocket + polling. */
+  accessToken?: string;
 }
 
 interface StatCardProps {
@@ -100,7 +104,12 @@ export function DashboardClient({
   dlpState,
   uam,
   userRole,
+  accessToken,
 }: DashboardClientProps): JSX.Element {
+  // Live feed gated to admin / dpo / investigator per spec. Other roles
+  // (manager / hr / it_operator / auditor) see static cards only.
+  const canSeeLiveFeed =
+    userRole === "admin" || userRole === "dpo" || userRole === "investigator";
   const t = useTranslations("dashboard");
   const tUam = useTranslations("dashboard.uam");
   const tDlp = useTranslations("dlp");
@@ -208,6 +217,16 @@ export function DashboardClient({
           />
         )}
       </div>
+
+      {/* Live metrics — 15s polling with sparklines (#98) */}
+      {canSeeLiveFeed && (
+        <LiveMetrics token={accessToken} />
+      )}
+
+      {/* Live activity feed — WebSocket stream (#66 + #98) */}
+      {canSeeLiveFeed && (
+        <LiveActivityFeed token={accessToken} />
+      )}
 
       {/* UAM widgets — "what are employees doing right now" row */}
       {can(userRole, "view:employees") && (

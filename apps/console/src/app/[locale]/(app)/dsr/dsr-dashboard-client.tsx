@@ -3,8 +3,8 @@
 import { useTranslations, useLocale } from "next-intl";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { listDSRs, dsrKeys, dsrDaysElapsed } from "@/lib/api/dsr";
-import type { DSRList, DSRRequest, DSRState } from "@/lib/api/types";
+import { listDSRs, dsrKeys, dsrDaysElapsed, dsrDaysRemaining } from "@/lib/api/dsr";
+import type { DSRList, DSRRequest, DSRState, DSRType } from "@/lib/api/types";
 import { formatDateTR } from "@/lib/utils";
 import { RequestTimeline } from "@/components/dsr/request-timeline";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +43,15 @@ function DSRRow({ request }: { request: DSRRequest }): JSX.Element {
   const locale = useLocale();
   const stateConfig = STATE_BADGE[request.state];
   const daysElapsed = dsrDaysElapsed(request);
+  const daysRemaining = dsrDaysRemaining(request);
+  const slaColor =
+    daysRemaining < 0
+      ? "text-red-600 font-semibold"
+      : daysRemaining < 3
+        ? "text-red-600"
+        : daysRemaining < 7
+          ? "text-amber-600"
+          : "text-muted-foreground";
 
   return (
     <tr className="border-b hover:bg-muted/30 transition-colors">
@@ -89,7 +98,11 @@ function DSRRow({ request }: { request: DSRRequest }): JSX.Element {
               aria-label={`${daysElapsed} gün geçti`}
             />
           </div>
-          <span className="text-xs text-muted-foreground">{daysElapsed}/30 gün</span>
+          <span className={`text-xs ${slaColor}`}>
+            {daysRemaining < 0
+              ? t("detail.daysOverdue", { days: Math.abs(daysRemaining) })
+              : t("detail.daysRemaining", { days: daysRemaining })}
+          </span>
         </div>
       </td>
       <td className="px-4 py-3 text-right">
@@ -115,20 +128,26 @@ export function DSRDashboardClient({
   const locale = useLocale();
   const router = useRouter();
   const [stateFilter, setStateFilter] = useState<string>(currentState ?? "all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const { data } = useQuery({
     queryKey: dsrKeys.list({
       state: stateFilter === "all" ? undefined : (stateFilter as DSRState),
+      type: typeFilter === "all" ? undefined : (typeFilter as DSRType),
       page: currentPage,
       page_size: 20,
     }),
     queryFn: () =>
       listDSRs({
         state: stateFilter === "all" ? undefined : (stateFilter as DSRState),
+        type: typeFilter === "all" ? undefined : (typeFilter as DSRType),
         page: currentPage,
         page_size: 20,
       }),
-    initialData: stateFilter === (currentState ?? "all") ? initialList : undefined,
+    initialData:
+      stateFilter === (currentState ?? "all") && typeFilter === "all"
+        ? initialList
+        : undefined,
   });
 
   const handleStateChange = (value: string) => {
@@ -193,7 +212,7 @@ export function DSRDashboardClient({
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Select value={stateFilter} onValueChange={handleStateChange}>
           <SelectTrigger className="w-48" aria-label="Durum filtresi">
             <SelectValue placeholder="Tüm Durumlar" />
@@ -208,10 +227,25 @@ export function DSRDashboardClient({
           </SelectContent>
         </Select>
 
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-48" aria-label="Talep türü filtresi">
+            <SelectValue placeholder="Tüm Türler" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tüm Türler</SelectItem>
+            <SelectItem value="access">{t("types.access")}</SelectItem>
+            <SelectItem value="rectify">{t("types.rectify")}</SelectItem>
+            <SelectItem value="erase">{t("types.erase")}</SelectItem>
+            <SelectItem value="object">{t("types.object")}</SelectItem>
+            <SelectItem value="restrict">{t("types.restrict")}</SelectItem>
+            <SelectItem value="portability">{t("types.portability")}</SelectItem>
+          </SelectContent>
+        </Select>
+
         <Button variant="outline" size="sm" asChild>
           <Link href={`/${locale}/dsr/new`}>
             <FileText className="h-4 w-4" aria-hidden="true" />
-            Yeni Talep
+            Yeni DSR Oluştur
           </Link>
         </Button>
       </div>

@@ -2,12 +2,13 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect, notFound } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { getEndpoint } from "@/lib/api/endpoints";
-import { Link } from "@/lib/i18n/navigation";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { ChevronLeft } from "lucide-react";
-import { formatDateTR } from "@/lib/utils";
+import {
+  getEndpoint,
+  listEndpointCommands,
+  type EndpointCommandList,
+} from "@/lib/api/endpoints";
+import { EndpointDetailClient } from "./endpoint-detail-client";
+import type { Endpoint } from "@/lib/api/types";
 
 interface EndpointDetailPageProps {
   params: Promise<{ locale: string; id: string }>;
@@ -15,14 +16,9 @@ interface EndpointDetailPageProps {
 
 export async function generateMetadata({ params }: EndpointDetailPageProps) {
   const { id } = await params;
-  return { title: `Endpoint ${id.slice(0, 8)}` };
+  const t = await getTranslations("endpoints");
+  return { title: `${t("detail.title")} · ${id.slice(0, 8)}` };
 }
-
-const STATUS_VARIANTS = {
-  active: "success",
-  revoked: "destructive",
-  offline: "warning",
-} as const;
 
 export default async function EndpointDetailPage({
   params,
@@ -34,60 +30,29 @@ export default async function EndpointDetailPage({
     redirect(`/${locale}/unauthorized`);
   }
 
-  const t = await getTranslations("endpoints");
+  const tokenOpts = { token: session.user.access_token };
 
-  let endpoint;
+  let endpoint: Endpoint;
   try {
-    endpoint = await getEndpoint(id);
+    endpoint = await getEndpoint(id, tokenOpts);
   } catch {
     notFound();
   }
 
+  // Command history is best-effort — if the backend hasn't shipped the
+  // endpoint yet we still render the detail page with an empty list.
+  let commands: EndpointCommandList = { items: [] };
+  try {
+    commands = await listEndpointCommands(id, tokenOpts);
+  } catch {
+    commands = { items: [] };
+  }
+
   return (
-    <div className="space-y-6 max-w-3xl animate-fade-in">
-      <Button variant="ghost" size="sm" className="-ml-2" asChild>
-        <Link href="/endpoints">
-          <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
-          {t("backToList")}
-        </Link>
-      </Button>
-
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight font-mono">{endpoint.hostname}</h1>
-          <code className="text-xs text-muted-foreground">{endpoint.id}</code>
-        </div>
-        <Badge variant={STATUS_VARIANTS[endpoint.status] ?? "default"}>
-          {endpoint.status}
-        </Badge>
-      </div>
-
-      <dl className="grid grid-cols-2 gap-4 rounded-lg border bg-card p-4 text-sm">
-        <div>
-          <dt className="text-xs text-muted-foreground">{t("detail.osVersion")}</dt>
-          <dd>{endpoint.os_version ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t("detail.agentVersion")}</dt>
-          <dd>{endpoint.agent_version ?? "—"}</dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t("detail.enrolledAt")}</dt>
-          <dd>
-            <time dateTime={endpoint.enrolled_at}>{formatDateTR(endpoint.enrolled_at)}</time>
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">{t("detail.lastSeen")}</dt>
-          <dd>
-            {endpoint.last_seen_at ? (
-              <time dateTime={endpoint.last_seen_at}>{formatDateTR(endpoint.last_seen_at)}</time>
-            ) : "—"}
-          </dd>
-        </div>
-      </dl>
-
-      <p className="text-sm text-muted-foreground">Phase 2: timeline, screenshots, sessions</p>
-    </div>
+    <EndpointDetailClient
+      endpoint={endpoint}
+      initialCommands={commands}
+      role={session.user.role}
+    />
   );
 }

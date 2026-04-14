@@ -147,6 +147,7 @@ export default async function DashboardPage(): Promise<JSX.Element> {
           dlpState={data.dlpState}
           uam={data.uam}
           userRole={session?.user.role ?? "admin"}
+          accessToken={session?.user.access_token}
         />
       </Suspense>
     </div>

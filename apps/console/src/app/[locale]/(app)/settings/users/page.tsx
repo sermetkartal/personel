@@ -2,15 +2,15 @@ import { getTranslations } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { can } from "@/lib/auth/rbac";
-import { Construction } from "lucide-react";
+import { UsersClient } from "./users-client";
 
 interface UsersSettingsPageProps {
   params: Promise<{ locale: string }>;
 }
 
 export async function generateMetadata() {
-  const t = await getTranslations("settings");
-  return { title: t("users.title") };
+  const t = await getTranslations("settings.users");
+  return { title: t("title") };
 }
 
 export default async function UsersSettingsPage({
@@ -23,12 +23,16 @@ export default async function UsersSettingsPage({
     redirect(`/${locale}/unauthorized`);
   }
 
+  const t = await getTranslations("settings.users");
+
   return (
-    <div className="space-y-6 max-w-3xl animate-fade-in">
-      <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center">
-        <Construction className="mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
-        <p className="text-muted-foreground text-sm">Phase 2 — user management</p>
+    <div className="space-y-6 animate-fade-in">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
+        <p className="text-muted-foreground">{t("subtitle")}</p>
       </div>
+
+      <UsersClient currentUserId={session.user.id} />
     </div>
   );
 }

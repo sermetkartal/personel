@@ -65,7 +65,11 @@
     },
     "kvkk": "KVKK",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "openNavigation": "Open navigation",
+    "closeNavigation": "Close navigation",
+    "mainNavigation": "Main navigation",
+    "skipToContent": "Skip to content"
   },
 
   "auth": {
@@ -129,6 +133,10 @@
       "users": "Users",
       "integrations": "Integrations",
       "profile": "Profile"
+    },
+    "auditMenu": {
+      "list": "Record List",
+      "search": "Full-Text Search"
     }
   },
 
@@ -183,6 +191,30 @@
       "mostIdle": {
         "title": "Most Idle Today"
       }
+    },
+    "live": {
+      "title": "Live Activity",
+      "description": "Real-time audit event stream",
+      "connecting": "Connecting...",
+      "connected": "Live",
+      "reconnecting": "Reconnecting",
+      "disconnected": "Disconnected",
+      "pollingFallback": "Fallback mode (polling)",
+      "noEventsYet": "No events yet",
+      "waitingEvents": "Waiting for events...",
+      "all": "All actions",
+      "filterAll": "Important actions",
+      "filterLiveView": "Live View",
+      "filterDSR": "KVKK Requests",
+      "filterPolicy": "Policy and DLP"
+    },
+    "liveMetrics": {
+      "title": "Live Metrics",
+      "lastUpdated": "Last updated: {time}",
+      "activeEndpoints": "Active Endpoints",
+      "openDsrs": "Open DSRs",
+      "liveViewPending": "Pending Live View",
+      "policyViolations": "Policy Violations"
     }
   },
 
@@ -214,15 +246,61 @@
       "offline": "Offline"
     },
     "actions": {
-      "revoke": "Revoke Token",
+      "revoke": "Revoke Certificate",
       "delete": "Delete Endpoint",
+      "deactivate": "Deactivate",
+      "wipe": "Wipe (Crypto-erase)",
+      "refresh": "Refresh Token",
       "requestLiveView": "Request Live View",
-      "revokeConfirm": "Are you sure you want to revoke this endpoint's token? The agent will no longer be able to connect.",
-      "deleteConfirm": "Are you sure you want to delete this endpoint? This action cannot be undone."
+      "revokeConfirm": "Are you sure you want to revoke this endpoint's certificate? The agent will no longer be able to connect (soft revoke).",
+      "deleteConfirm": "Are you sure you want to delete this endpoint? This action cannot be undone.",
+      "deactivateTitle": "Deactivate Endpoint",
+      "deactivateDesc": "'{hostname}' will be soft-deactivated. The device will stop accepting commands but its enrollment record is preserved.",
+      "deactivateReasonLabel": "Reason (required)",
+      "deactivateReasonPlaceholder": "e.g. employee offboarded, device in stock",
+      "confirmWipe": "You are about to WIPE '{hostname}'. This action CANNOT be undone — all local data, keys and agent configuration will be destroyed.",
+      "wipeReasonLabel": "Reason (required)",
+      "wipeReasonPlaceholder": "e.g. stolen device, incident #1234",
+      "typeToConfirm": "Type WIPE to confirm",
+      "typeToConfirmToken": "WIPE",
+      "legalHoldBlock": "This device is under legal hold. Wipe operation refused.",
+      "refreshTitle": "Refresh Token",
+      "refreshDesc": "The agent's mTLS certificate will be re-issued. The device picks up the new cert on its next connection.",
+      "refreshRateLimit": "Refresh quota remaining: {remaining}",
+      "bulkLimitExceeded": "Bulk operations support at most {limit} devices.",
+      "bulkTitle": "Bulk operation: {operation}",
+      "bulkDesc": "'{operation}' will be applied to {count} devices. A reason is required.",
+      "bulkReasonLabel": "Bulk operation reason",
+      "bulkApply": "Apply to selected devices",
+      "bulkSelected": "{count} devices selected",
+      "bulkSuccess": "{accepted} devices accepted, {rejected} rejected.",
+      "rateLimitHit": "Token refresh rate limit exceeded. Try again in a few minutes."
     },
     "filters": {
       "allStatuses": "All Statuses",
+      "allOs": "All Operating Systems",
+      "allDepartments": "All Departments",
       "searchPlaceholder": "Search by hostname..."
+    },
+    "detailTabs": {
+      "overview": "Overview",
+      "commands": "Command History",
+      "policies": "Policies",
+      "actions": "Actions"
+    },
+    "commandHistory": {
+      "empty": "No commands issued yet.",
+      "type": "Type",
+      "status": "Status",
+      "queuedAt": "Queued",
+      "ackedAt": "Acknowledged",
+      "issuedBy": "Issued By",
+      "reason": "Reason"
+    },
+    "liveness": {
+      "currentlyActive": "Currently active",
+      "recentlyOffline": "Recently offline",
+      "stale": "Long silent"
     },
     "enrollment": {
       "hostname": "Hostname",
@@ -432,6 +510,8 @@
       "cancel": "Cancel",
       "connecting": "Connecting...",
       "disconnected": "Disconnected. Redirecting...",
+      "serverUnavailableTitle": "LiveKit Server Unavailable",
+      "serverUnavailableBody": "The LiveKit SFU is not running in this environment. The session was started and recorded in the audit trail, but the live video feed is being simulated. In production this area will show the actual endpoint screen stream.",
       "screenLabel": "Endpoint screen",
       "status": {
         "connecting": "Connecting",
@@ -535,6 +615,30 @@
       "reject": "Reject",
       "erase": "Erase Data",
       "exportData": "Export Data",
+      "fulfillAccess": "Fulfill Access Request",
+      "fulfillErasure": "Fulfill Erasure Request",
+      "dryRun": "Dry Run",
+      "executeErasure": "Permanently Erase",
+      "accessExportGenerated": "Export ready",
+      "downloadArtifact": "Download Response Pack",
+      "artifactExpires": "Link valid until {date}",
+      "artifactSize": "{size} · SHA-256: {hash}",
+      "artifactRecordCount": "{count} records packed",
+      "erasureReport": "Erasure Report",
+      "erasureDryRunTitle": "Dry Run Result",
+      "erasureDryRunDesc": "The records below will be removed when the real erasure is committed. No data has been deleted yet.",
+      "erasureConfirmTitle": "Confirm Permanent Erasure",
+      "erasureConfirmDesc": "This action cannot be undone. The records below will be permanently destroyed. Only the DPO role can execute this operation.",
+      "erasureTypeToConfirm": "Type ERASE to confirm",
+      "erasureNotAllowed": "Only the Data Protection Officer (DPO) can execute permanent erasure.",
+      "legalHoldBlock": "Some target devices are under legal hold — erasure refused per KVKK Art. 13/f",
+      "slaOverdue": "{days} days overdue — immediate action required",
+      "pgRows": "Postgres rows",
+      "chRows": "ClickHouse rows",
+      "minioKeys": "MinIO object keys",
+      "vaultKeys": "Vault transit keys",
+      "completedAt": "Completed",
+      "auditLogId": "Audit Log ID",
       "noActions": "No actions available for this state: {state}",
       "respondTitle": "Respond to Request",
       "respondDesc": "Enter the response artifact reference to close the request.",
@@ -782,6 +886,47 @@
       "legalHoldReleased": "Legal Hold Released",
       "retentionDestructionReportGenerated": "Destruction Report Generated",
       "agentSilenceAcknowledged": "Agent Silence Acknowledged"
+    },
+    "search": {
+      "title": "Audit Log Search",
+      "subtitle": "OpenSearch-backed full-text search and filtering",
+      "backToLog": "Record List",
+      "placeholder": "Search action, actor, or target...",
+      "resultsLabel": "Search results",
+      "totalHits": "{total} records found ({ms}ms)",
+      "noResults": "No records found",
+      "noResultsHint": "Try relaxing filters or widening the date range.",
+      "error": "Search failed",
+      "retry": "Retry",
+      "offline": "Search service offline — showing basic list",
+      "degradedTitle": "Search Service Offline",
+      "clearFilters": "Clear Filters",
+      "refresh": "Refresh",
+      "exportCsv": "Export CSV",
+      "prev": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page}/{total}",
+      "filters": {
+        "action": "Action",
+        "allActions": "All Actions",
+        "login": "Login / Logout",
+        "liveView": "Live View",
+        "dsr": "DSR",
+        "legalHold": "Legal Hold",
+        "policy": "Policy",
+        "endpoint": "Endpoint",
+        "user": "User",
+        "dlp": "DLP",
+        "screenshot": "Screenshot",
+        "actor": "Actor UUID",
+        "dateRange": "Date Range",
+        "last24h": "Last 24 hours",
+        "last7d": "Last 7 days",
+        "last30d": "Last 30 days",
+        "custom": "Custom",
+        "customFrom": "From",
+        "customTo": "To"
+      }
     }
   },
 
@@ -789,7 +934,9 @@
     "title": "Policies",
     "subtitle": "Manage agent monitoring policies",
     "create": "Create Policy",
-    "push": "Push to Endpoints",
+    "edit": "Edit",
+    "emptyList": "No policies defined yet. Create your first one.",
+    "listUpdated": "Last updated",
     "detail": {
       "title": "Policy Detail",
       "name": "Name",
@@ -828,6 +975,52 @@
       "confirm": "Push",
       "success": "Policy queued for delivery.",
       "pushDescription": "This policy will be signed and delivered to the selected endpoints via NATS."
+    },
+    "editor": {
+      "title": "Policy Editor",
+      "newTitle": "New Policy",
+      "editTitle": "Edit Policy",
+      "subtitle": "Visual rule-based SensitivityGuard policy",
+      "backToList": "Back to policies",
+      "meta": "Policy Information",
+      "name": "Policy Name",
+      "namePlaceholder": "e.g. Default Office Policy",
+      "description": "Description",
+      "descPlaceholder": "Who this policy applies to and what it covers",
+      "palette": "Rule Palette",
+      "preview": "Preview (JSON)",
+      "readOnly": "Read-only",
+      "test": "Test with Sample Event",
+      "testNotImplemented": "Test run will be wired to the real backend in Phase 2.11.",
+      "emptyRules": "No rules added yet",
+      "emptyRulesHint": "Select a rule type from the palette on the left",
+      "add": "Add",
+      "remove": "Remove",
+      "removeRule": "Remove rule",
+      "noValues": "No values added yet",
+      "saveDraft": "Save Draft",
+      "saveDraftSuccess": "Draft saved",
+      "publish": "Publish",
+      "publishSuccess": "Policy published and queued for distribution",
+      "publishConfirmTitle": "Confirm Publish",
+      "publishConfirmBody": "This policy will be signed and immediately distributed to all active endpoints.",
+      "publishWarningTitle": "Warning",
+      "publishWarningBody": "Published versions cannot be rolled back — only overwritten by a new version.",
+      "confirmPublish": "Yes, Publish",
+      "cancel": "Cancel",
+      "saveError": "Save failed",
+      "dlpWarnTitle": "DLP Cannot Be Enabled from the Console",
+      "dlpWarnBody": "Keystroke content DLP is OFF by default per ADR 0013 and can only be enabled via the Vault ceremony.",
+      "dlpWarnAdr": "Enabling requires: DPIA amendment + signed opt-in form + Vault operator script. There is NO enable toggle in this console — this is by design.",
+      "understood": "Understood",
+      "goToDlpSettings": "Go to DLP Settings",
+      "errors": {
+        "empty": "Value cannot be empty",
+        "duplicate": "This value is already added",
+        "invalid_regex": "Invalid regex pattern",
+        "too_many_stars": "Too many * characters",
+        "bad_chars": "Invalid characters in pattern"
+      }
     }
   },
 
@@ -887,33 +1080,154 @@
 
   "settings": {
     "title": "Settings",
+    "subtitle": "System, tenant, and integration configuration",
     "tabs": {
+      "general": "General",
       "dlp": "DLP",
       "tenants": "Tenants",
       "users": "Users",
       "integrations": "Integrations",
+      "evidence": "SOC 2 Evidence",
       "profile": "Profile"
+    },
+    "general": {
+      "title": "General Settings",
+      "subtitle": "Tenant identity, locale, timezone, and branding",
+      "tenantSectionTitle": "Tenant Profile",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "e.g. Acme Corporation Turkey",
+      "defaultLocale": "Default Locale",
+      "timezone": "Timezone",
+      "timezoneHint": "Reports and DSR SLA deadlines are computed in this timezone.",
+      "brandingTitle": "Logo & Branding",
+      "brandingHint": "Upload a logo shown in the console and portal top bars",
+      "comingSoon": "Coming soon",
+      "save": "Save",
+      "saving": "Saving...",
+      "saveScaffold": "Saved (scaffold — backend wiring in Phase 2.11)"
     },
     "tenants": {
       "title": "Tenant Settings",
-      "liveViewHistoryRestricted": "Restrict Employee Live View History Visibility",
+      "listTitle": "Tenants",
+      "listSubtitle": "Manage all tenants registered in the system",
+      "detailTitle": "Tenant Detail",
+      "profileTitle": "Tenant Profile",
+      "metadataTitle": "Metadata",
+      "empty": "No tenants yet.",
+      "create": "Create Tenant",
+      "createSubtitle": "Onboard a new tenant organisation",
+      "creating": "Creating...",
+      "createSuccess": "Tenant created",
+      "createError": "Failed to create tenant",
+      "saveSuccess": "Changes saved",
+      "saveError": "Save failed",
+      "backToList": "Back to tenants",
+      "name": "Name",
+      "displayName": "Display Name",
+      "displayNamePlaceholder": "e.g. Acme Corporation Turkey",
+      "slug": "Slug",
+      "slugImmutable": "Slug cannot be changed after creation.",
+      "slugHint": "Lowercase, digits, and hyphens. Identifies the tenant in URLs and Vault paths.",
+      "created": "Created",
+      "updated": "Updated",
+      "view": "View",
+      "save": "Save",
+      "saving": "Saving...",
+      "yes": "Yes",
+      "no": "No",
+      "liveViewHistoryRestricted": "Live View History Restricted",
       "liveViewHistoryRestrictedHint": "When disabled, DPO must provide written justification and an audit record is created.",
-      "maxScreenshotRetention": "Maximum Screenshot Retention (days)"
+      "screenshotRetentionDays": "Screenshot Retention (days)",
+      "retentionHintKvkk": "KVKK m.7 maximum retention period. 180 days recommended.",
+      "dlpTitle": "DLP Status",
+      "dlpHint": "ADR 0013 — keystroke content DLP is off by default",
+      "openDlp": "Open DLP Settings",
+      "retentionTitle": "Retention Policy",
+      "retentionHint": "Manage KVKK retention durations and live view visibility",
+      "integrationsTitle": "Integrations",
+      "integrationsHint": "HRIS, SIEM, and observability endpoints",
+      "openIntegrations": "Manage Integrations",
+      "dangerZoneTitle": "Danger Zone",
+      "deactivateTitle": "Deactivate Tenant",
+      "deactivateBody": "Deactivation disconnects agents but does not delete data. Records are retained for 5 years for audit.",
+      "deactivate": "Deactivate Tenant",
+      "deactivateNotImplemented": "Deactivation flow ships in Phase 2.11",
+      "errors": {
+        "slugInvalid": "Slug must be lowercase letters, digits, or hyphens (2-64 chars)"
+      }
     },
     "users": {
       "title": "User Management",
+      "subtitle": "Manage users synchronised from Keycloak and their roles.",
       "createUser": "Add User",
       "username": "Username",
       "email": "Email",
       "role": "Role",
-      "disabled": "Disabled"
+      "disabled": "Disabled",
+      "active": "Active",
+      "status": "Status",
+      "createdAt": "Created",
+      "actions": "Actions",
+      "searchLabel": "Search users",
+      "searchPlaceholder": "Username or email...",
+      "filterByRole": "Filter by role",
+      "allRoles": "All roles",
+      "syncKeycloak": "Sync from Keycloak",
+      "syncSuccess": "Sync complete: {count} users.",
+      "syncPending": "Keycloak sync will be available in Phase 2.",
+      "noUsers": "No users found.",
+      "tableCaption": "System users and their roles",
+      "totalUsers": "{count} users total",
+      "you": "You",
+      "viewDetails": "View details",
+      "changeRole": "Change role",
+      "deactivate": "Deactivate",
+      "reactivate": "Reactivate",
+      "changeRoleTitle": "Change Role",
+      "changeRoleDesc": "The role of {user} will be changed. This action is logged in the audit trail.",
+      "newRole": "New role",
+      "roleChangeWarning": "Role changes take effect immediately. The user's current session may be terminated.",
+      "roleUpdated": "Role successfully updated.",
+      "deactivated": "User deactivated.",
+      "reactivated": "User reactivated.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving..."
     },
     "integrations": {
       "title": "Integrations",
+      "subtitle": "HRIS, SIEM, and observability integrations",
+      "scaffoldBadge": "Scaffold — Phase 2.11",
       "keycloak": "Keycloak OIDC",
       "livekit": "LiveKit SFU",
       "vault": "HashiCorp Vault",
-      "status": "Connection Status"
+      "status": "Connection Status",
+      "hrisTitle": "HRIS Connectors",
+      "hrisHint": "HRIS connectors for employee sync, department, and manager data",
+      "bambooDescription": "Employee sync via BambooHR",
+      "logoTigerDescription": "Employee sync via Logo Tiger HR (Turkish market)",
+      "bambooSubdomain": "Subdomain",
+      "apiKey": "API Key",
+      "baseUrl": "Base URL",
+      "clientId": "Client ID",
+      "clientSecret": "Client Secret",
+      "testConnection": "Test Connection",
+      "connect": "Connect",
+      "statusConnected": "Connected",
+      "statusDisconnected": "Disconnected",
+      "statusError": "Error",
+      "lastSync": "Last Sync",
+      "siemTitle": "SIEM Export",
+      "siemHint": "Forward security events and audit records to third-party SIEM systems",
+      "splunkDescription": "Export via Splunk HTTP Event Collector (HEC)",
+      "sentinelDescription": "Export via Microsoft Sentinel Data Collection Rule (DCR)",
+      "hecUrl": "HEC URL",
+      "hecToken": "HEC Token",
+      "dceUrl": "Data Collection Endpoint",
+      "dcrImmutableId": "DCR Immutable ID",
+      "streamName": "Stream Name",
+      "observabilityTitle": "Observability",
+      "observabilityHint": "These endpoints are provisioned and managed by the Docker Compose stack."
     },
     "profile": {
       "title": "My Profile",
@@ -972,6 +1286,42 @@
     "contactAdmin": "Contact your system administrator to request access.",
     "backToDashboard": "Back to Dashboard",
     "backHome": "Return to Home"
+  },
+
+  "notifications": {
+    "title": "Notifications",
+    "ariaLabel": "Notifications ({count} unread)",
+    "unreadCount": "{count} unread notifications",
+    "noUnread": "No unread notifications",
+    "empty": "No notifications yet",
+    "markRead": "Mark as read",
+    "markAllRead": "Mark all as read",
+    "allMarkedRead": "All notifications marked as read.",
+    "view": "View",
+    "justNow": "just now",
+    "minutesAgo": "{n}m ago",
+    "hoursAgo": "{n}h ago",
+    "daysAgo": "{n}d ago",
+    "types": {
+      "dsr_new": {
+        "title": "New Data Subject Request (KVKK Art. 11)"
+      },
+      "dsr_overdue": {
+        "title": "Overdue Data Subject Request"
+      },
+      "live_view_request": {
+        "title": "New Live View Request"
+      },
+      "policy_violation": {
+        "title": "Policy Violation"
+      },
+      "tamper_alert": {
+        "title": "Tamper Alert"
+      },
+      "backup_failed": {
+        "title": "Backup Failed"
+      }
+    }
   },
 
   "errors": {

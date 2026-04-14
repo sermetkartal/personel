@@ -3,136 +3,13 @@
 import Link from "next/link";
 import { usePathname, useParams } from "next/navigation";
 import { useTranslations } from "next-intl";
-import {
-  LayoutDashboard,
-  Monitor,
-  Users,
-  BarChart3,
-  Eye,
-  FileText,
-  Shield,
-  Trash2,
-  ClipboardList,
-  Settings,
-  Activity,
-  Lock,
-  FileArchive,
-  ChevronDown,
-  ChevronRight,
-} from "lucide-react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/hooks/use-current-user";
 import { can } from "@/lib/auth/rbac";
-import type { Action } from "@/lib/auth/rbac";
 import type { Role } from "@/lib/api/types";
-
-interface NavItem {
-  key: string;
-  icon: React.ElementType;
-  href: string;
-  requiredAction?: Action;
-  children?: NavItem[];
-}
-
-function buildNavItems(locale: string): NavItem[] {
-  return [
-    {
-      key: "dashboard",
-      icon: LayoutDashboard,
-      href: `/${locale}/dashboard`,
-    },
-    {
-      key: "endpoints",
-      icon: Monitor,
-      href: `/${locale}/endpoints`,
-      requiredAction: "manage:endpoints",
-    },
-    {
-      key: "employees",
-      icon: Users,
-      href: `/${locale}/employees`,
-    },
-    {
-      key: "reports",
-      icon: BarChart3,
-      href: `/${locale}/reports`,
-      requiredAction: "view:reports",
-    },
-    {
-      key: "liveView",
-      icon: Eye,
-      href: `/${locale}/live-view`,
-      requiredAction: "view:live-view-sessions",
-    },
-    {
-      key: "dsr",
-      icon: FileText,
-      href: `/${locale}/dsr`,
-      requiredAction: "manage:dsr",
-    },
-    {
-      key: "legalHold",
-      icon: Lock,
-      href: `/${locale}/legal-hold`,
-      requiredAction: "place:legal-hold",
-    },
-    {
-      key: "destructionReports",
-      icon: Trash2,
-      href: `/${locale}/destruction-reports`,
-      requiredAction: "view:destruction-reports",
-    },
-    {
-      key: "evidence",
-      icon: FileArchive,
-      href: `/${locale}/evidence`,
-      requiredAction: "view:evidence",
-    },
-    {
-      key: "audit",
-      icon: ClipboardList,
-      href: `/${locale}/audit`,
-      requiredAction: "view:audit-trail",
-    },
-    {
-      key: "policies",
-      icon: Shield,
-      href: `/${locale}/policies`,
-      requiredAction: "manage:policies",
-    },
-    {
-      key: "silence",
-      icon: Activity,
-      href: `/${locale}/silence`,
-      requiredAction: "view:silence",
-    },
-    {
-      key: "settings",
-      icon: Settings,
-      href: `/${locale}/settings`,
-      children: [
-        {
-          key: "settingsMenu.dlp",
-          icon: Shield,
-          href: `/${locale}/settings/dlp`,
-        },
-        {
-          key: "settingsMenu.tenants",
-          icon: Settings,
-          href: `/${locale}/settings/tenants`,
-          requiredAction: "manage:tenants",
-        },
-        {
-          key: "settingsMenu.users",
-          icon: Users,
-          href: `/${locale}/settings/users`,
-          requiredAction: "manage:users",
-        },
-      ],
-    },
-  ];
-}
+import { buildNavItems, type NavItem } from "./sidebar-nav-items";
 
 interface NavLinkProps {
   item: NavItem;
@@ -224,7 +101,7 @@ export function Sidebar(): JSX.Element {
 
   return (
     <aside
-      className="flex h-full w-sidebar flex-col bg-sidebar"
+      className="hidden h-full w-sidebar flex-col bg-sidebar md:flex"
       role="navigation"
       aria-label="Ana navigasyon"
     >
