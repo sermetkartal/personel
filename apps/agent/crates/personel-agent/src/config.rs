@@ -71,6 +71,12 @@ pub struct AgentConfig {
     /// Whether to run in verbose debug logging mode.
     #[serde(default)]
     pub debug_logging: bool,
+    /// Screenshot capture preset: "minimal", "low", "medium", "high",
+    /// or "max". `None` falls through to the built-in default (`"high"`).
+    /// Persisted in `config.toml` by the MSI / installer from the tenant
+    /// preference fetched from `/v1/tenants/me/screenshot-preset`.
+    #[serde(default)]
+    pub screenshot_preset: Option<String>,
 }
 
 impl AgentConfig {

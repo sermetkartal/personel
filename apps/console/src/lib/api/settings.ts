@@ -64,6 +64,43 @@ export async function getTenantSettings(
   return apiClient.get<TenantSettings>(`/v1/tenants/${id}/settings`, opts);
 }
 
+// ── Screenshot preset ────────────────────────────────────────────────────────
+// Per-tenant capture preset controlling agent-side screenshot footprint.
+// Backed by /v1/tenants/me/screenshot-preset (migration 0037). Written from
+// Settings/General; agent reads it at boot via PERSONEL_SCREENSHOT_PRESET env.
+
+export type ScreenshotPreset = "minimal" | "low" | "medium" | "high" | "max";
+
+export interface ScreenshotPresetResponse {
+  preset: ScreenshotPreset;
+}
+
+export interface ScreenshotPresetPatchResponse {
+  preset: ScreenshotPreset;
+  previous: ScreenshotPreset;
+  valid_presets: ScreenshotPreset[];
+}
+
+export async function getTenantScreenshotPreset(
+  opts?: FetchOptions,
+): Promise<ScreenshotPresetResponse> {
+  return apiClient.get<ScreenshotPresetResponse>(
+    "/v1/tenants/me/screenshot-preset",
+    opts,
+  );
+}
+
+export async function updateTenantScreenshotPreset(
+  preset: ScreenshotPreset,
+  opts?: FetchOptions,
+): Promise<ScreenshotPresetPatchResponse> {
+  return apiClient.patch<ScreenshotPresetPatchResponse>(
+    "/v1/tenants/me/screenshot-preset",
+    { preset },
+    opts,
+  );
+}
+
 // ── Users ─────────────────────────────────────────────────────────────────────
 
 export interface ListUsersParams extends PaginationParams {

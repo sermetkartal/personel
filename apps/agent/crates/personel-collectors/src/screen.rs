@@ -1179,13 +1179,33 @@ fn capture_loop(
         last_frame_hash_per_monitor.insert(monitor_idx, hash);
         info!(monitor_idx, bytes = frame.pixels.len(), "screen: frame accepted, encoding");
 
+        // ── Downscale to policy max_height (Faz 3 #21, now applied) ──────
+        // Dedup hash above runs on the RAW native frame so changing the
+        // policy preset never invalidates dedup mid-session. Everything
+        // below this point operates on the downscaled buffer.
+        let max_height = ctx.policy().screenshot.max_height;
+        let (work_pixels, work_w, work_h) =
+            if max_height > 0 && frame.height > max_height {
+                let (buf, nw, nh) = personel_os::capture::downscale_bgra(
+                    &frame.pixels, frame.width, frame.height, max_height,
+                );
+                info!(
+                    from_w = frame.width, from_h = frame.height,
+                    to_w = nw, to_h = nh, max_height,
+                    "screen: downscaled frame to policy max_height"
+                );
+                (buf, nw, nh)
+            } else {
+                (frame.pixels.clone(), frame.width, frame.height)
+            };
+
         // ── Optional OCR preprocess (#26) + WebP encode (#24) ─────────────
         let quality = ctx.policy().screenshot.quality_percent as f32;
         let (encoded_opt, format, ocr_pre) = if OCR_MODE_DEFAULT {
-            let luma = preprocess_for_ocr(&frame.pixels, frame.width, frame.height);
-            (encode_webp_grayscale(&luma, frame.width, frame.height, quality), "webp-gray", true)
+            let luma = preprocess_for_ocr(&work_pixels, work_w, work_h);
+            (encode_webp_grayscale(&luma, work_w, work_h, quality), "webp-gray", true)
         } else {
-            (encode_webp_color(&frame.pixels, frame.width, frame.height, quality), "webp", false)
+            (encode_webp_color(&work_pixels, work_w, work_h, quality), "webp", false)
         };
 
         let (final_bytes, final_format) = match encoded_opt {
@@ -1194,9 +1214,9 @@ fn capture_loop(
                 // WebP failed — fall back to JPEG via the existing encoder.
                 warn!("screen: WebP encode failed — falling back to JPEG");
                 match personel_os::capture::DxgiCapture::encode_jpeg(
-                    &frame.pixels,
-                    frame.width,
-                    frame.height,
+                    &work_pixels,
+                    work_w,
+                    work_h,
                     quality.clamp(1.0, 100.0) as u8,
                 ) {
                     Ok(jpeg) => (jpeg, "jpeg"),
@@ -1234,8 +1254,8 @@ fn capture_loop(
         let json = build_screenshot_payload(
             &payload,
             final_format,
-            frame.width,
-            frame.height,
+            work_w,
+            work_h,
             monitor_idx,
             &monitor_name,
             bounds_left,

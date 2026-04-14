@@ -194,12 +194,27 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 
 		// --- Tenants ---
 		r.Route("/tenants", func(r chi.Router) {
-			r.Use(auth.RequireRole(auth.RoleAdmin))
-			r.Get("/", tenant.ListHandler(svc.Tenant))
-			r.Post("/", tenant.CreateHandler(svc.Tenant))
-			r.Route("/{tenantID}", func(r chi.Router) {
-				r.Get("/", tenant.GetHandler(svc.Tenant))
-				r.Patch("/", tenant.UpdateHandler(svc.Tenant))
+			// Tenant-scoped preference: screenshot capture preset.
+			// GET is open to any authenticated user in the tenant
+			// (read-only preference). PATCH is locked to admin +
+			// it_manager via inline `.With(...)` override.
+			if svc.Tenant != nil {
+				r.Get("/me/screenshot-preset",
+					tenant.GetScreenshotPresetHandler(svc.Tenant))
+				r.With(auth.RequireRole(auth.RoleAdmin, auth.RoleITManager)).
+					Patch("/me/screenshot-preset",
+						tenant.PatchScreenshotPresetHandler(svc.Tenant))
+			}
+
+			// Admin-only CRUD on the tenant collection itself.
+			r.Group(func(r chi.Router) {
+				r.Use(auth.RequireRole(auth.RoleAdmin))
+				r.Get("/", tenant.ListHandler(svc.Tenant))
+				r.Post("/", tenant.CreateHandler(svc.Tenant))
+				r.Route("/{tenantID}", func(r chi.Router) {
+					r.Get("/", tenant.GetHandler(svc.Tenant))
+					r.Patch("/", tenant.UpdateHandler(svc.Tenant))
+				})
 			})
 		})
 

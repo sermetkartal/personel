@@ -83,6 +83,14 @@ pub async fn run_agent(config: AgentConfig, mut shutdown_rx: oneshot::Receiver<(
     });
 
     // ── Policy engine ─────────────────────────────────────────────────────────
+    // Export any on-disk screenshot preset BEFORE constructing the policy
+    // engine so `PolicyView::default()` picks it up. This is the stopgap
+    // wire until PolicyPush apply lands; once it does, the tenant preset
+    // flows through the live bundle path as well.
+    if let Some(ref preset) = config.screenshot_preset {
+        std::env::set_var("PERSONEL_SCREENSHOT_PRESET", preset);
+        info!(preset = %preset, "policy: screenshot preset loaded from config");
+    }
     // TODO: load the real Ed25519 policy-signing public key from config.
     // Placeholder key (all zeros) — will fail on real policy bundles.
     let signing_key_bytes = [0u8; 32];

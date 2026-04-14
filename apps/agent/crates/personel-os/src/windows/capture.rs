@@ -217,6 +217,54 @@ impl DxgiCapture {
     }
 
     // ── unsafe implementation helpers ─────────────────────────────────────────
+}
+
+/// Downscales a raw BGRA frame buffer to a target maximum height while
+/// preserving aspect ratio. Used by the screen collector to bound
+/// screenshot payload sizes per the active policy preset.
+///
+/// Short-circuits when the source is already small enough or when
+/// `max_height == 0` (meaning "no downscale"), returning the input
+/// buffer unchanged. Otherwise uses the Triangle filter, which is fast
+/// (~15-30 ms on a 4K frame on modern x86) and gives better quality
+/// than nearest-neighbour for typical desktop content.
+///
+/// The channel order is preserved: BGRA in → BGRA out. The filter
+/// operates per-channel as linear combinations over neighbours, so
+/// treating BGRA as if it were RGBA is mathematically identical —
+/// colours are correct end-to-end without any swap.
+#[must_use]
+pub fn downscale_bgra(
+    bgra: &[u8],
+    width: u32,
+    height: u32,
+    max_height: u32,
+) -> (Vec<u8>, u32, u32) {
+    if max_height == 0 || height <= max_height {
+        return (bgra.to_vec(), width, height);
+    }
+    // Preserve aspect ratio — width scales by the same factor.
+    let new_h = max_height;
+    let new_w = ((width as u64 * new_h as u64) / height as u64) as u32;
+    // Use `image::imageops::resize` on an Rgba<u8> buffer. The channel
+    // layout is BGRA but the filter is channel-agnostic, so the output
+    // byte order matches the input byte order — still BGRA.
+    let Some(img) = image::ImageBuffer::<image::Rgba<u8>, Vec<u8>>::from_raw(
+        width, height, bgra.to_vec(),
+    ) else {
+        // Unexpected buffer size; return input unchanged so the caller
+        // can still proceed with native resolution.
+        return (bgra.to_vec(), width, height);
+    };
+    let resized = image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Triangle);
+    (resized.into_raw(), new_w, new_h)
+}
+
+// ── DxgiCapture method block closer ──────────────────────────────────────────
+// (intentional empty impl block to match the brace the `}` above closes out
+// of the `impl DxgiCapture` block that preceded `downscale_bgra`)
+impl DxgiCapture {
+    // ── unsafe implementation helpers ─────────────────────────────────────────
 
     unsafe fn open_impl(monitor_index: u32, quality: u8) -> std::result::Result<Self, CaptureError> {
         // 1. Create D3D11 hardware device.

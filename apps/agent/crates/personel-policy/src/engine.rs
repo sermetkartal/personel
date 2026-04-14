@@ -48,8 +48,47 @@ pub struct PolicyView {
     pub blocked_host_globs: Vec<(String, String)>,
 }
 
+/// Resolves a screenshot preset name to a full [`ScreenshotSettings`] value.
+///
+/// Presets are the canonical way administrators adjust capture footprint
+/// without touching raw fields. The five preset triples (interval,
+/// max_height, quality) are chosen for target payload sizes: minimal ~5 KB,
+/// low ~10 KB, medium ~25 KB, high ~50 KB (default), max ~100 KB.
+///
+/// Unknown preset strings fall through to `"high"` defaults so misconfig
+/// never disables capture.
+#[must_use]
+pub fn preset_screenshot(preset: &str) -> ScreenshotSettings {
+    let (interval, max_h, quality): (u32, u32, u32) = match preset {
+        "minimal" => (300, 540, 25),
+        "low"     => (180, 720, 35),
+        "medium"  => (120, 900, 50),
+        "max"     => (30, 1440, 80),
+        _         => (60, 1080, 65), // "high" — the production default
+    };
+    ScreenshotSettings {
+        interval_seconds: interval,
+        on_foreground_change: false,
+        max_width: (max_h as f64 * 16.0 / 9.0) as u32, // 16:9 aspect, agent also computes from source
+        max_height: max_h,
+        quality_percent: quality,
+        blur_when_off_hours: false,
+        blur_exe_names: vec![],
+        blur_host_patterns: vec![],
+        exclude_apps: vec![],
+    }
+}
+
 impl Default for PolicyView {
     fn default() -> Self {
+        // Allow operators to override the boot-time default via a single
+        // env var. The admin console / MSI installer writes this from the
+        // tenant preference (see `apps/api/internal/tenant/screenshot_handler.go`
+        // and `apps/console/src/app/[locale]/(app)/settings/general/`).
+        let preset = std::env::var("PERSONEL_SCREENSHOT_PRESET")
+            .ok()
+            .unwrap_or_else(|| "high".to_string());
+        let screenshot = preset_screenshot(&preset);
         Self {
             version: "default-v0".into(),
             collectors: CollectorFlags {
@@ -67,20 +106,7 @@ impl Default for PolicyView {
                 screenshot: true,
                 screen_clip: false,
             },
-            screenshot: ScreenshotSettings {
-                interval_seconds: 300,
-                on_foreground_change: false,
-                max_width: 1920,
-                max_height: 1080,
-                quality_percent: 75,
-                blur_when_off_hours: false,
-                blur_exe_names: vec![],
-                blur_host_patterns: vec![],
-                // ADR 0013 / KVKK m.6 Gap 1: suppress screenshots when the
-                // foreground process is one of the listed sensitive apps
-                // (health portals, HR self-service, etc.). Empty default.
-                exclude_apps: vec![],
-            },
+            screenshot,
             queue: QueueSettings {
                 max_bytes: 200 * 1024 * 1024,
                 upload_batch_size: 100,

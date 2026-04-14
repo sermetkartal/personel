@@ -6,6 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Image as ImageIcon } from "lucide-react";
 import { GeneralSettingsForm } from "./general-form";
+import {
+  getTenantScreenshotPreset,
+  type ScreenshotPreset,
+} from "@/lib/api/settings";
 
 interface GeneralSettingsPageProps {
   params: Promise<{ locale: string }>;
@@ -28,6 +32,22 @@ export default async function GeneralSettingsPage({
 
   const t = await getTranslations("settings.general");
 
+  // Read the current screenshot preset. Defaults to "high" if the backend
+  // is not yet reachable or the column is NULL — the form is still
+  // renderable in a degraded state.
+  let initialScreenshotPreset: ScreenshotPreset = "high";
+  try {
+    const resp = await getTenantScreenshotPreset({
+      token: session.user.access_token,
+    });
+    if (resp?.preset) {
+      initialScreenshotPreset = resp.preset;
+    }
+  } catch {
+    // Degraded: endpoint unreachable, keep the default. Toast shown
+    // client-side on first interaction if the PATCH also fails.
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -45,7 +65,10 @@ export default async function GeneralSettingsPage({
             initialSlug={""}
             initialLocale={locale}
             initialTimezone="Europe/Istanbul"
+            initialScreenshotPreset={initialScreenshotPreset}
             canEdit={can(session.user.role, "manage:tenants")}
+            canEditScreenshot={can(session.user.role, "manage:screenshot-preset")}
+            token={session.user.access_token}
           />
         </CardContent>
       </Card>

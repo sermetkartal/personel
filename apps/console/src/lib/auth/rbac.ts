@@ -204,6 +204,11 @@ export function canManageTenants(role: Role): boolean {
   return role === "admin";
 }
 
+/** Manage per-tenant screenshot capture preset — admin + IT manager. */
+export function canManageScreenshotPreset(role: Role): boolean {
+  return role === "admin" || role === "it_manager";
+}
+
 export function canViewDLPSettings(role: Role): boolean {
   return role === "admin" || role === "dpo";
 }
@@ -265,6 +270,7 @@ export type Action =
   | "verify:audit-chain"
   | "manage:users"
   | "manage:tenants"
+  | "manage:screenshot-preset"
   | "view:dlp-settings"
   | "view:silence"
   | "view:silence-gaps"
@@ -301,6 +307,7 @@ const ACTION_CHECKS: Record<Action, (role: Role) => boolean> = {
   "verify:audit-chain": canVerifyAuditChain,
   "manage:users": canManageUsers,
   "manage:tenants": canManageTenants,
+  "manage:screenshot-preset": canManageScreenshotPreset,
   "view:dlp-settings": canViewDLPSettings,
   "view:silence": canViewSilence,
   "view:silence-gaps": canViewSilenceGaps,

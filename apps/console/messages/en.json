@@ -1104,7 +1104,37 @@
       "comingSoon": "Coming soon",
       "save": "Save",
       "saving": "Saving...",
-      "saveScaffold": "Saved (scaffold — backend wiring in Phase 2.11)"
+      "saveScaffold": "Saved (scaffold — backend wiring in Phase 2.11)",
+      "screenshot": {
+        "title": "Screenshot capture",
+        "description": "Controls how often and how detailed the agent captures screens. Lower presets reduce disk cost; higher presets keep more readable detail.",
+        "presetLabel": "Preset",
+        "currentLabel": "Selected profile",
+        "rbacNote": "Only Admin or IT Manager roles can change this setting.",
+        "saveSuccess": "Screenshot preset updated: {preset}",
+        "saveError": "Failed to update screenshot preset",
+        "preset": {
+          "minimal": "Minimal",
+          "low": "Low",
+          "medium": "Medium",
+          "high": "High (default)",
+          "max": "Max"
+        },
+        "hint": {
+          "minimal": "540p · ~5 KB · 5 min interval · minimal disk, overview only",
+          "low": "720p · ~10 KB · 3 min interval · basic audit coverage",
+          "medium": "900p · ~25 KB · 2 min interval · balanced quality and cost",
+          "high": "1080p · ~50 KB · 1 min interval · high quality, OCR-ready",
+          "max": "1440p · ~100 KB · 30 sec interval · maximum detail"
+        },
+        "current": {
+          "minimal": "540p · quality 25 · 300 sec",
+          "low": "720p · quality 35 · 180 sec",
+          "medium": "900p · quality 50 · 120 sec",
+          "high": "1080p · quality 65 · 60 sec",
+          "max": "1440p · quality 80 · 30 sec"
+        }
+      }
     },
     "tenants": {
       "title": "Tenant Settings",

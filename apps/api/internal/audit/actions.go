@@ -123,6 +123,14 @@ const (
 	ActionScreenclipViewed   Action = "screenclip.viewed"
 )
 
+// --- Tenant preferences ---
+const (
+	// Per-tenant screenshot capture preset update (minimal/low/medium/
+	// high/max). Written by the /v1/tenants/me/screenshot-preset PATCH
+	// handler; audit details include before+after preset values.
+	ActionTenantScreenshotPreset Action = "tenant.screenshot_preset.update"
+)
+
 // --- Event detail views ---
 const (
 	ActionFileEventViewed    Action = "file_event.viewed"
@@ -328,6 +336,7 @@ var AllActions = []Action{
 	ActionScreenshotViewed,
 	ActionScreenshotExported,
 	ActionScreenclipViewed,
+	ActionTenantScreenshotPreset,
 	ActionFileEventViewed,
 	ActionNetworkEventViewed,
 	ActionLiveViewRequested,

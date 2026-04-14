@@ -1104,7 +1104,37 @@
       "comingSoon": "Yakında",
       "save": "Kaydet",
       "saving": "Kaydediliyor...",
-      "saveScaffold": "Kaydedildi (iskelet — backend wiring Faz 2.11)"
+      "saveScaffold": "Kaydedildi (iskelet — backend wiring Faz 2.11)",
+      "screenshot": {
+        "title": "Ekran Görüntüsü Yakalama",
+        "description": "Agent'ın ekran görüntülerini hangi sıklıkta ve ne kadar detayla yakaladığını kontrol eder. Düşük preset'ler disk maliyetini azaltır, yüksek preset'ler daha fazla okunabilir detay yakalar.",
+        "presetLabel": "Preset",
+        "currentLabel": "Seçili Paket",
+        "rbacNote": "Bu ayarı yalnızca Admin veya BT Müdürü rolü değiştirebilir.",
+        "saveSuccess": "Screenshot preset güncellendi: {preset}",
+        "saveError": "Screenshot preset güncellenemedi",
+        "preset": {
+          "minimal": "Minimal",
+          "low": "Düşük",
+          "medium": "Orta",
+          "high": "Yüksek (varsayılan)",
+          "max": "Maksimum"
+        },
+        "hint": {
+          "minimal": "540p · ~5 KB · 5 dk aralık · disk dostu, sadece genel akış",
+          "low": "720p · ~10 KB · 3 dk aralık · temel audit için yeterli",
+          "medium": "900p · ~25 KB · 2 dk aralık · orta kalite, makul disk maliyeti",
+          "high": "1080p · ~50 KB · 1 dk aralık · yüksek kalite, OCR-ready",
+          "max": "1440p · ~100 KB · 30 sn aralık · en yüksek detay"
+        },
+        "current": {
+          "minimal": "540p · kalite 25 · 300 sn",
+          "low": "720p · kalite 35 · 180 sn",
+          "medium": "900p · kalite 50 · 120 sn",
+          "high": "1080p · kalite 65 · 60 sn",
+          "max": "1440p · kalite 80 · 30 sn"
+        }
+      }
     },
     "tenants": {
       "title": "Kiracı Ayarları",
