@@ -105,6 +105,81 @@ Herhangi bir aşama `fail` ise operator aşağıdaki artefaktları ticket'a ekle
 - Sürüm bump'larında hem `thresholds.yaml` hem bu runbook güncellenir.
 - Yılda bir kez DPO incelemesi (denetim hazırlığı için).
 
+## 8. Wave 8 + Wave 9 sonrası ek doğrulama adımları
+
+Wave 8 (screenshot preset + user_sid HKU + keystroke diagnostic) ve Wave 9
+(KVKK menü + Settings genişletme + Admin bypass) deploy edildikten sonra
+`final-smoke-test.sh` çıktısına ek olarak şu manuel kontroller koşulmalı.
+
+### Wave 8 — Agent pipeline
+
+```bash
+# 1. Real user SID (LocalSystem değil, gerçek S-1-5-21-* SID)
+docker exec personel-clickhouse clickhouse-client --user=personel_admin \
+  --password=clickhouse_admin_pass --query \
+  "SELECT DISTINCT user_sid FROM personel.events_raw WHERE received_at > now() - INTERVAL 5 MINUTE"
+# Beklenen: S-1-5-21-... (S-1-5-18 değil)
+
+# 2. Screenshot boyut preset'e uyuyor mu
+docker exec personel-clickhouse clickhouse-client --user=personel_admin \
+  --password=clickhouse_admin_pass --query \
+  "SELECT event_type, max(length(payload)) FROM personel.events_raw
+   WHERE event_type='screenshot.captured' AND received_at > now() - INTERVAL 10 MINUTE GROUP BY event_type"
+# Beklenen high preset'te < 60 KB, max preset'te < 130 KB
+
+# 3. Keystroke events 30s sonrası görünüyor mu
+# Windows'ta Notepad'e 10+ karakter yaz, 35s bekle, sonra:
+docker exec personel-clickhouse clickhouse-client --user=personel_admin \
+  --password=clickhouse_admin_pass --query \
+  "SELECT count() FROM personel.events_raw
+   WHERE event_type='keystroke.window_stats' AND received_at > now() - INTERVAL 5 MINUTE"
+# Beklenen: >= 1
+```
+
+### Wave 9 — KVKK + Settings
+
+```bash
+# 1. /v1/kvkk/verbis endpoint aktif mi
+curl -sk -H "Authorization: Bearer $JWT" https://192.168.5.44:8000/v1/kvkk/verbis
+# Beklenen: 200 ile {registration_number: null, registered_at: null}
+
+# 2. Yeni settings endpoint'leri
+curl -sk -H "Authorization: Bearer $JWT" https://192.168.5.44:8000/v1/settings/retention
+# Beklenen: KVKK defaults {audit_years:5, event_days:365, ...}
+
+curl -sk -H "Authorization: Bearer $JWT" https://192.168.5.44:8000/v1/settings/ca-mode
+# Beklenen: {mode:"internal", config:{}}
+
+curl -sk -H "Authorization: Bearer $JWT" https://192.168.5.44:8000/v1/settings/integrations
+# Beklenen: {"items":[]}
+
+# 3. Admin bypass — live view request
+# Admin JWT ile /v1/liveview/request çağırıldığında session direkt "approved"
+# state'inde açılmalı. details.admin_bypass=true audit log'da görünmeli.
+curl -sk -H "Authorization: Bearer $ADMIN_JWT" https://192.168.5.44:8000/v1/audit \
+  | jq '.items[] | select(.details.admin_bypass==true) | {action, actor_id, created_at}'
+```
+
+### Console UI doğrulama (tarayıcı)
+
+- `/tr/kvkk/guide` → KVKK rehberi sayfası yükleniyor, 7 adım görünür
+- `/tr/kvkk/dsr` → eski `/tr/dsr` oradan 301 ile yönleniyor mu test et
+- `/tr/settings/integrations` → 5 servis kartı (MaxMind pre-fill 891169)
+- `/tr/settings/retention` → 6 alan + KVKK minimum hint
+- `/tr/settings/backup` → "Yeni Storage Ekle" modal'ı 7 backend türü gösteriyor
+- `/tr/settings/security/tls` → 3 mode radio card (Internal default)
+
+### Phase 2 / Faz 2 kelimesi kalmadı mı
+
+```bash
+grep -rE "[Pp]hase.?2|[Ff]az.?2" apps/console/messages/ apps/portal/messages/
+# Beklenen: sadece kod yorumları varsa, user-facing text görünmemeli
+```
+
+Wave 8 + Wave 9 deploy doğrulama tamamlanmadan Phase 1 exit kontrolü
+otomatik "stale" sayılır — bu ek adımlar `final-smoke-test.sh` v2'ye
+dahil edilecek (ileri sprint).
+
 ---
 
-*Son güncelleme*: 2026-04-14 — Faz 17 #187 closeout polish.
+*Son güncelleme*: 2026-04-14 — Wave 9 closeout (Sprint 6).

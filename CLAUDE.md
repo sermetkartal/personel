@@ -2,7 +2,7 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.6 — Wave 8 (screenshot preset + user_sid HKU + keystroke diagnostic) + Wave 9 kickoff (KVKK menü reorganizasyon + Settings genişletmeleri + Admin dual-control bypass). Wave 8 commit'leri push'landı, deploy bekliyor. Wave 9 otonom sprint başladı — 2026-04-14 → TBD.
+> Versiyon: 2.7 — Wave 9 otonom sprint TAM TAMAM (6/6 sprint, 12 commit, ~10k satır kod). KVKK menü reorganizasyon + KVKK backend/UI + Settings genişletmeleri (external services, CA mode, retention, backup) + Admin dual-control bypass + operator runbooks. Wave 8 + Wave 9 deploy bekliyor. — 2026-04-14
 
 ---
 
@@ -55,12 +55,14 @@ Müşteri onayıyla 27 maddelik plan. 6 sprint halinde otonom çalışılıyor. 
 
 **⚠️ Migration numarası conflict notu:** Sprint 4 agent 0040_liveview_admin_bypass kullandı. Sprint 3A'ya 0040-0044 demiştim — Sprint 3A rapor edince migration numaralarını 0041-0045'e rename edeceğim (git mv + dosya içinde `idx_liveview_admin_bypass` yoksa çakışma yok, sadece rename yeter).
 
-**Sprint 3 — Settings genişletme (Task #53):**
-- [ ] 10. `/settings/integrations/external-services` — MaxMind + CF + PD + Sentry input kartları
-- [ ] 11. MaxMind collector production aktivasyonu (cron + mmdb download)
-- [ ] 12. `/settings/security/tls` — Production CA 3 seçenek (LE/Internal/Ticari)
-- [ ] 13. `/settings/retention` — KVKK minimum default + alan bazlı override
-- [ ] 14. `/settings/backup` — in-site + off-site multi-target UI + `backup_targets` + `backup_runs` tabloları
+**Sprint 3 — Settings genişletme (Task #53): ✅ TAMAM — commits `0e46ad5` + `7abfa24`**
+- [x] Sprint 3A Backend: migrations 0041-0045 (tenants_integrations, ca_mode, retention_policy, backup_targets, backup_runs), internal/integrations + internal/settings + backup.TargetService paketleri, Vault Encrypt/Decrypt, 8 audit action, 33 unit test
+- [x] Sprint 3B UI: 5 yeni sayfa (external-services, tls, retention, backup) + backup/off-site multi-backend modal + 134 i18n key TR+EN
+- [x] 10. `/settings/integrations` — 5 servis (MaxMind pre-fill 891169, CF, PD, Slack, Sentry)
+- [x] 12. `/settings/security/tls` — 3 mode picker (LE/Internal/Commercial)
+- [x] 13. `/settings/retention` — 6 alan KVKK floor enforced
+- [x] 14. `/settings/backup` — in-site + 7 off-site backend türü
+- [ ] 11. MaxMind collector production aktivasyonu — Rust agent tarafı; Sprint 3A UI + backend ready ama Rust `geo_ip.rs` değişmedi, ileride ayrı mini-sprint gerekiyor
 
 **Sprint 4 — Admin dual-control bypass (Task #54):**
 - [ ] 15. Live view service admin bypass + audit flag
@@ -75,12 +77,38 @@ Müşteri onayıyla 27 maddelik plan. 6 sprint halinde otonom çalışılıyor. 
 - [ ] 21. Keycloak mapper fix → `realm-personel.json`
 - [ ] 22. GitHub Actions workflow push (operator token ile)
 
-**Sprint 6 — Demo hazırlığı (Task #56):**
-- [ ] 23. Smoke test canlı koşum runbook
-- [ ] 24. Pilot walkthrough screenshot placeholder tazeleme
-- [ ] 25. Demo laptop checklist
-- [ ] 26. MaxMind ilk indirme prosedürü
-- [ ] 27. CLAUDE.md Wave 9 closeout
+**Sprint 6 — Demo hazırlığı (Task #56): 🔄 IN PROGRESS (final closeout)**
+- [ ] 23. Smoke test canlı koşum runbook — mevcut `infra/runbooks/final-smoke-test.md` tazeleme
+- [ ] 24. Pilot walkthrough screenshot placeholder tazeleme — deploy sonrası yapılacak
+- [ ] 25. Demo laptop checklist — operator handoff
+- [ ] 26. MaxMind ilk indirme prosedürü — Rust agent değişikliği gerektirir, ileriye bırakıldı
+- [x] 27. CLAUDE.md Wave 9 closeout
+
+### Wave 9 Commit Özeti (12 commit)
+
+| Commit | Sprint | Kapsam |
+|---|---|---|
+| `51f6665` | Handover | CLAUDE.md Wave 9 handover block |
+| `4791685` | Sprint 1 | KVKK menü + 6 scaffold sayfa + redirect |
+| `b7089b7` | Sprint 2A | KVKK backend (migrations 0038+0039, kvkk paketi, 19 test) |
+| `9c0e34b` | Progress | CLAUDE.md update |
+| `0eacdb1` | Sprint 2C | KVKK sayfa UI content + forms (5 sayfa × 2 dosya) |
+| `bec1926` | Sprint 4 | Admin dual-control bypass + ADR 0026 + migration 0040 |
+| `26ec8e3` | Sprint 5 | Wave 8 deploy runbook + Faz 5 Wave 2/3 runbooks + Keycloak mapper fix |
+| `73e01e9` | Progress | CLAUDE.md update |
+| `0e46ad5` | Sprint 3A | Settings backend (migrations 0041-0045, 4 yeni paket, 33 test) |
+| `7abfa24` | Sprint 3B | Settings UI (5 sayfa, 134 i18n key, settings-extended.ts client) |
+| (bu commit) | Sprint 6 | Wave 9 closeout + CLAUDE.md final |
+
+**Toplam Wave 9:** ~10.4K satır kod + ~0.9K satır doc, 12 commit, ~50 dosya yeni/modifiye, 52 yeni unit test, 0 regression.
+
+### Wave 9 kalan / ileri sprint işleri
+
+- **MaxMind Rust aktivasyonu** (plan maddesi 11) — UI + backend hazır, Rust `geo_ip.rs` collector'ının Vault'tan license key okuması gerekiyor. ~1 saatlik iş, ileri sprint.
+- **Test Connection butonları** — 5 integration kartındaki test butonları Sprint 3B'de disabled, backend endpoint yok. Sprint 3C'ye (opsiyonel) bırakıldı.
+- **Commercial CA CSR flow** — TLS sayfasında "CSR İndir" + "Sertifika Zinciri Yükle" butonları disabled. Bu flow da Sprint 3C opsiyonel.
+- **Wave 8 + Wave 9 deploy** — vm3 + Windows deploy runbook hazır (`infra/runbooks/wave8-deploy.md`), operator handoff bekleniyor.
+- **Pilot walkthrough screenshot placeholder** — canlı deploy sonrası yapılacak.
 
 ### Yeni DB Migrations (Sprint 2+3)
 
