@@ -102,13 +102,22 @@ Müşteri onayıyla 27 maddelik plan. 6 sprint halinde otonom çalışılıyor. 
 
 **Toplam Wave 9:** ~10.4K satır kod + ~0.9K satır doc, 12 commit, ~50 dosya yeni/modifiye, 52 yeni unit test, 0 regression.
 
-### Wave 9 kalan / ileri sprint işleri
+### Wave 9 Sprint 3C — Polish + Deploy
 
-- **MaxMind Rust aktivasyonu** (plan maddesi 11) — UI + backend hazır, Rust `geo_ip.rs` collector'ının Vault'tan license key okuması gerekiyor. ~1 saatlik iş, ileri sprint.
-- **Test Connection butonları** — 5 integration kartındaki test butonları Sprint 3B'de disabled, backend endpoint yok. Sprint 3C'ye (opsiyonel) bırakıldı.
-- **Commercial CA CSR flow** — TLS sayfasında "CSR İndir" + "Sertifika Zinciri Yükle" butonları disabled. Bu flow da Sprint 3C opsiyonel.
-- **Wave 8 + Wave 9 deploy** — vm3 + Windows deploy runbook hazır (`infra/runbooks/wave8-deploy.md`), operator handoff bekleniyor.
-- **Pilot walkthrough screenshot placeholder** — canlı deploy sonrası yapılacak.
+Kullanıcı "kalan maddeleri kapat + deploy" dedi, otonom mod.
+
+- **Sprint 3C-1** (agent `a320b8`): Server-side enricher geo_ip lookup + MaxMind download script + systemd timer — Rust agent yerine enricher Go tarafı (tek merkezi mmdb, kolay güncelleme)
+- **Sprint 3C-2** (agent `a61bc7`): Test Connection endpoints (5 servis için ping/format validation) + UI enable
+- **Commercial CA CSR** — SKIP (müşteri internal veya LE kullanacak, stub yeterli)
+- **Pilot walkthrough screenshot** — SKIP (deploy sonrası)
+
+### Deploy Planı
+
+1. vm3 (plink SSH): git pull → migrations 0037-0045 apply → API rebuild → console rebuild → restart
+2. Windows VM (lokal): git pull → cargo build → service restart
+3. Doğrulama: smoke test §8 komutları
+
+Bu oturum Windows VM'de (192.168.5.30) çalışıyor — lokal komutlar + vm3 için plink.exe kullanılıyor.
 
 ### Yeni DB Migrations (Sprint 2+3)
 
