@@ -259,3 +259,18 @@ systemd `personel-backup.service` unit'i ŞU AN `infra/backup.sh` çalıştırı
 Geçiş için unit dosyasının `ExecStart` satırını
 `/opt/personel/infra/scripts/backup-orchestrator.sh` olarak güncelle ve
 `systemctl daemon-reload && systemctl restart personel-backup.timer` koş.
+
+---
+
+## Son kontrol — 2026-04-14 (Wave 9 Sprint 5)
+
+- Runbook içeriği Wave 1 deploy kuyruğunda AWAITING operator action
+  olarak korunuyor. vm3'te `personel-backup.timer` henüz etkin değil;
+  yedek yok.
+- Wave 3 DR runbook (`faz5-wave3-disaster-recovery.md`) bu runbook'un
+  genişletilmiş hâlidir: restore drill + PITR + off-site mirror eklenir.
+  Bring-up'ta Wave 1 backup önce, Wave 3 DR sonra etkinleştirilir.
+- Prosedür 2026-04-13 sürümünden değişmedi. Postgres 16 pg_dump default'u
+  (`-Fc`) ve ClickHouse BACKUP TO disk syntax aynı kalıyor.
+- Eksik RTO ölçümü — restore drill canlı koşulmadan ölçülemiyor; bu
+  AWAITING listesi CLAUDE.md §0'da #59 olarak kalıyor.

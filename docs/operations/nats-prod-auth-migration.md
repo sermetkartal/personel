@@ -239,3 +239,18 @@ Bu kayıt SOC 2 Type II observation window'unda CC8.1 (change authorization) kon
 ---
 
 *Versiyon 1.0 — 2026-04-13 — Faz 5 madde #47 scaffold*
+
+---
+
+## Son kontrol — 2026-04-14 (Wave 9 Sprint 5)
+
+- Runbook içeriği Wave 1 deploy kuyruğunda AWAITING operator action
+  olarak korunuyor. vm3'te NATS hâlâ auth'suz dev konfigürasyonunda
+  çalışıyor (tek node, JetStream açık, at-rest encryption KAPALI).
+- Bring-up sırasında yeni operator JWT + NKeys çiftleri Vault
+  `kv/personel/nats/operator` altında oluşturulmalı (Adım 3).
+- Bring-up sırası: **postgres-tls tamamlanmadan NATS auth bring-up'ına
+  başlamayın** — API ve gateway aynı anda her iki yeni konfigürasyonu
+  alacağı için atomicity bozulabilir.
+- Prosedür 2026-04-13 sürümünden değişmedi. Yeni CVE veya NATS 2.11
+  breaking change yok.

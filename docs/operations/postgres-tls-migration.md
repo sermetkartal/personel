@@ -200,3 +200,19 @@ audit checkpoint, postgres TLS aktif olduğunu evidence locker'a kaydeder
 
 KVKK m.12 (veri güvenliği) açısından bu adım pilot sonrası zorunlu
 operasyonel kontroldür ve kurum DPIA dosyasına eklenmelidir.
+
+---
+
+## Son kontrol — 2026-04-14 (Wave 9 Sprint 5)
+
+- Runbook içeriği Faz 5 Wave 1 deploy öncesi AWAITING operator action
+  olarak korunuyor. vm3'te `sslmode=disable` dev kısayolu hâlâ aktif.
+- Bring-up sırasında `docker-compose.dev-override.yaml` disable edilmeli,
+  `docker-compose.tls.yaml` dahil edilmeli (Adım 4 bkz.).
+- İlgili diğer Wave 1 runbook'ları: `nats-prod-auth-migration.md`,
+  `minio-worm-migration.md`, `all-services-tls-migration.md`,
+  `secret-rotation.md`, `healthcheck-restoration.md`, `backup-restore.md`.
+  Bring-up sıralaması: **vault → postgres-tls → all-services-tls →
+  nats-auth → minio-worm → healthcheck-restore → secret-rotation →
+  backup-automation**.
+- Değişiklik yok; mevcut prosedür 2026-04-13 sürümünden aynen geçerli.

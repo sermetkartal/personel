@@ -124,3 +124,18 @@ kontrolleri için canlı kanıt sağlar:
 Bu geçiş tamamlandıktan sonra `infra/runbooks/install.md` içindeki
 "production checklist" bölümü güncellenmeli (`-f
 docker-compose.healthcheck-override.yaml` flag'ı eklenmeli).
+
+---
+
+## Son kontrol — 2026-04-14 (Wave 9 Sprint 5)
+
+- Runbook içeriği Wave 1 deploy kuyruğunda AWAITING operator action
+  olarak korunuyor. vm3 hâlâ `docker-compose.dev-override.yaml` ile
+  çalışıyor — tüm `service_healthy` deps'leri `service_started` olarak
+  gevşetilmiş durumda.
+- Geçişten önce `postgres-tls-migration.md` + `all-services-tls-migration.md`
+  + `nats-prod-auth-migration.md` tamamlanmalı. Aksi halde strict
+  healthcheck TLS handshake timing'i nedeniyle crash loop tetikler.
+- Prosedür 2026-04-13 sürümünden değişmedi; 5 dakikalık bütçe hâlâ
+  geçerli, healthcheck override compose `infra/compose/docker-compose.healthcheck-override.yaml`
+  içinde.

@@ -199,3 +199,19 @@ DPO sign-off için: `infra/runbooks/soc2-evidence-pack-retrieval.md` içindeki m
 - Madde 54 (sister agent): `rotate-certs.sh` + `cert-inventory.yaml` — otomatik 30 günlük yenileme
 - Madde 56: compose `service_started` → `service_healthy` ve TLS'i runtime'da zorla
 - Madde 41: Vault auto-unseal sealed file → bu runbook'tan sonra, kalıcı production setup için
+
+---
+
+## Son kontrol — 2026-04-14 (Wave 9 Sprint 5)
+
+- Runbook içeriği Wave 1 deploy kuyruğunda AWAITING operator action
+  olarak korunuyor. vm3'te 18 servisten 4'ü (Vault, Gateway, API,
+  ClickHouse subset) self-signed cert kullanıyor; diğerleri TLS
+  olmadan çalışıyor.
+- Bring-up sırasında `infra/scripts/rotate-all-certs.sh` ilk kez full
+  cycle koşulmalı. Cert TTL default 90 gün (rol konfigürasyonunda).
+- Önkoşul zinciri: **vault-prod-migration tamamlanmış olmalı** + PKI
+  engine `pki` altında, `server-cert` ve `agent-cert` rolleri doğrulanmış
+  olmalı.
+- `cert-inventory.yaml` eksiksiz olmalı; yeni servis ekleyen commit
+  (ör. ml-classifier) bu dosyayı da güncellemek zorunda.

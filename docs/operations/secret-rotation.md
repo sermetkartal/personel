@@ -132,3 +132,17 @@ Rotation script atomic swap'tan **önce** verify yaptığı için "yarım rotati
 ## 8. DPO İçin Özet (3 cümle)
 
 Personel platformu statik kimlik bilgilerini düzenli olarak (yüksek-risk = 30 gün, orta-risk = 90 gün) otomatik döndürür; her döndürme SOC 2 CC6.1 audit zincirine yazılır ve doğrulama başarısız olursa eski kimlik bilgisi yerinde kalır. Cadence'ı genişletmek (ör. 30 → 60 gün) DPO onayı gerektirir; daraltmak gerektirmez. Tüm rotasyon olayları `audit_log` tablosunda `action=secret.rotated` ile izlenebilir ve aylık SOC 2 evidence pack içinde yer alır.
+
+---
+
+## Son kontrol — 2026-04-14 (Wave 9 Sprint 5)
+
+- Runbook içeriği Wave 1 deploy kuyruğunda AWAITING operator action
+  olarak korunuyor. vm3'te systemd timer (`personel-secret-rotate.timer`)
+  henüz etkinleştirilmedi; dev ortamda default parolalar sabit.
+- Önkoşul: `vault-prod-migration.md` tamamlanmış + Vault transit key
+  `kv/personel/rotation/*` yolları oluşturulmuş olmalı.
+- Rotasyon öncesi `backup-restore.md` nightly backup son 24 saat içinde
+  başarılı olmalı (script precondition).
+- Prosedür 2026-04-13 sürümünden değişmedi. Yeni statik secret eklendiyse
+  (Wave 8'de eklenmedi) `rotate.sh` hedef listesi güncellenmeli.

@@ -112,16 +112,31 @@
       },
       "protocolMappers": [
         {
-          "name": "tenant_id",
+          "name": "tenant_id-mapper",
           "protocol": "openid-connect",
-          "protocolMapper": "oidc-hardcoded-claim-mapper",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
           "consentRequired": false,
           "config": {
+            "user.attribute": "tenant_id",
             "claim.name": "tenant_id",
-            "claim.value": "CHANGEME_TENANT_ID",
+            "jsonType.label": "String",
             "id.token.claim": "true",
             "access.token.claim": "true",
-            "userinfo.token.claim": "true"
+            "userinfo.token.claim": "true",
+            "multivalued": "false",
+            "aggregate.attrs": "false"
+          }
+        },
+        {
+          "name": "aud-personel-admin-api",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.client.audience": "personel-admin-api",
+            "included.custom.audience": "",
+            "id.token.claim": "false",
+            "access.token.claim": "true"
           }
         }
       ]
