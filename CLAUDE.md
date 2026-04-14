@@ -2,11 +2,134 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.5 — Faz 1-17 otonom kısım COMPLETE; Final 4/4 (items 187-190) COMPLETE; toplam 178/190 otomasyonla, kalan 12 madde insan-in-the-loop blocker (EV cert, pentest contract, DPA lawyer, VERBİS, Faz 5 Wave 1 operator handoff, restore drill RTO). Pilot walkthrough + final smoke test harness hazır. — 2026-04-14
+> Versiyon: 2.6 — Wave 8 (screenshot preset + user_sid HKU + keystroke diagnostic) + Wave 9 kickoff (KVKK menü reorganizasyon + Settings genişletmeleri + Admin dual-control bypass). Wave 8 commit'leri push'landı, deploy bekliyor. Wave 9 otonom sprint başladı — 2026-04-14 → TBD.
 
 ---
 
-## 0. MEVCUT DURUM + 190-MADDE PRODUCTION ROADMAP (2026-04-14)
+## 0. WAVE 9 — OTONOM SPRINT HANDOVER (2026-04-14 başladı)
+
+> **Bu bölüm context kaybı durumunda yeniden devam için kritik.** Yeni oturum buraya bakıp nerede kaldığını görebilmeli.
+
+### Plan
+
+Müşteri onayıyla 27 maddelik plan. 6 sprint halinde otonom çalışılıyor. Kapatılan pre-plan maddeler: pentest sözleşmesi (müşteri ekibi yapacak), kod denetim (kapatıldı), hukuki danışmanlık (müşteri avukatları), Vault HSM (yazılım kalıyor).
+
+### Müşteri girdi ve kararları
+
+- **MaxMind GeoLite2:** account_id=`891169`, license_key → Vault transit engine'de şifreli saklanacak (key değeri `docs/.secrets-local.md` gitignored dosyasında — repo'ya commit edilmeyecek)
+- **Vault:** Yazılım Shamir 3-of-5 kalıcı (HSM yok)
+- **Production CA:** 3 seçenek sunulacak (Let's Encrypt DNS-01 / Internal Vault PKI / Ticari cert CSR upload), müşteri settings'ten seçer
+- **Backup retention:** Settings'te ayarlanabilir, default KVKK minimum (5 yıl audit, 1 yıl event, 30 gün screenshot, 6 ay keystroke)
+- **Backup storage:** In-site + off-site ayrı, off-site için multi-backend plugin UI (S3, Azure Blob, GCS, SFTP, NFS, MinIO peer)
+- **Admin yetkisi:** En yetkili rol — canlı izleme için HR dual-control onayı ATLANIR, ADR 0020 ile yazılı hale getirilecek, audit log'da flag ile işaretlenecek
+- **Cloudflare / PagerDuty / Sentry:** Müşteri seçer, settings UI'da input alanları + guide'lar hazırlanır
+
+### 27-Madde Plan — İlerleme Durumu
+
+**Sprint 1 — KVKK menü yapısı (Task #51):**
+- [ ] 1. KVKK menü bölümü (`nav.kvkk`, sidebar entry)
+- [ ] 2. `/dsr`, `/legal-hold`, `/destruction-reports`, `/dlp` → `/kvkk/*` redirect
+- [ ] 3. 6 yeni scaffold sayfası: verbis, aydinlatma, dpa, dpia, acik-riza, guide
+
+**Sprint 2 — KVKK sayfa içerikleri (Task #52):**
+- [ ] 4. `/kvkk/verbis` — rehber + registration_number input
+- [ ] 5. `/kvkk/aydinlatma` — Markdown editor + yayınla butonu + portal entegrasyon
+- [ ] 6. `/kvkk/dpa` — PDF upload + imzacı metadata
+- [ ] 7. `/kvkk/dpia` — DLP durumu + DPIA upload
+- [ ] 8. `/kvkk/acik-riza` — form template + per-user signature tracking + `user_consent` tablosu
+- [ ] 9. `/kvkk/guide` — ana rehber index
+
+**Sprint 3 — Settings genişletme (Task #53):**
+- [ ] 10. `/settings/integrations/external-services` — MaxMind + CF + PD + Sentry input kartları
+- [ ] 11. MaxMind collector production aktivasyonu (cron + mmdb download)
+- [ ] 12. `/settings/security/tls` — Production CA 3 seçenek (LE/Internal/Ticari)
+- [ ] 13. `/settings/retention` — KVKK minimum default + alan bazlı override
+- [ ] 14. `/settings/backup` — in-site + off-site multi-target UI + `backup_targets` + `backup_runs` tabloları
+
+**Sprint 4 — Admin dual-control bypass (Task #54):**
+- [ ] 15. Live view service admin bypass + audit flag
+- [ ] 16. RBAC admin-everywhere kontrol + ACTION_CHECKS tutarlılık
+- [ ] ADR 0020 yazımı
+
+**Sprint 5 — Deploy + operator handoff (Task #55):**
+- [ ] 17. Wave 8 deploy runbook tazeleme (5 adım)
+- [ ] 18. Faz 5 Wave 1 operator runbook güncelleme (9 adım)
+- [ ] 19. Faz 5 Wave 2 cluster bring-up (6 adım, vm5 mevcut, 3. node TBD)
+- [ ] 20. Faz 5 Wave 3 DR test (3 adım)
+- [ ] 21. Keycloak mapper fix → `realm-personel.json`
+- [ ] 22. GitHub Actions workflow push (operator token ile)
+
+**Sprint 6 — Demo hazırlığı (Task #56):**
+- [ ] 23. Smoke test canlı koşum runbook
+- [ ] 24. Pilot walkthrough screenshot placeholder tazeleme
+- [ ] 25. Demo laptop checklist
+- [ ] 26. MaxMind ilk indirme prosedürü
+- [ ] 27. CLAUDE.md Wave 9 closeout
+
+### Yeni DB Migrations (Sprint 2+3)
+
+Migration numaraları: **0038 → 0044** (0037 screenshot_preset zaten Wave 8'de alındı):
+
+- 0038: `tenants` — verbis_registration_number, verbis_registered_at, aydinlatma_markdown, aydinlatma_published_at, aydinlatma_version, dpa_signed_at, dpa_document_key, dpa_signatories, dpia_amendment_key, dpia_completed_at
+- 0039: `user_consent` tablosu (user_id, consent_type, signed_at, document_key, created_at)
+- 0040: `tenants_integrations` (tenant_id, service_name, config_encrypted, enabled, updated_at, audit_actor_id)
+- 0041: `tenants` — ca_mode ENUM, ca_config JSONB
+- 0042: `tenants` — retention_policy JSONB
+- 0043: `backup_targets` (id, tenant_id, name, backend, config_encrypted, enabled, created_at, updated_at)
+- 0044: `backup_runs` (id, target_id, type, started_at, completed_at, status, size_bytes, sha256, error_message)
+
+### Yeni Audit Actions
+
+- `kvkk.verbis.update`
+- `kvkk.aydinlatma.publish`
+- `kvkk.dpa.upload`
+- `kvkk.dpia.upload`
+- `kvkk.consent.record`
+- `integration.external_service.update`
+- `settings.ca_mode.update`
+- `settings.retention.update`
+- `backup.target.create|update|delete`
+- `backup.run.trigger`
+- `liveview.admin_bypass` (Sprint 4 için flag, yeni action değil — mevcut live view audit'a ek alan)
+
+### Kritik Kararlar (implementasyon sırasında değiştirme)
+
+- **Secret şifreleme:** Vault transit engine (`transit/encrypt/tenants-integrations`) — Settings UI'da masked gösterim, hiçbir secret DB'ye plaintext yazılmayacak
+- **Aydınlatma editor:** Markdown (TipTap değil) — diff alınabilir, audit'te versiyon karşılaştırma mümkün
+- **DPA upload:** PDF max 10 MB, sha256 hash + MinIO `/dpa-documents/{tenant}/{timestamp}.pdf`
+- **Admin bypass live view recording:** Phase 2'de kalıyor, şu an sadece onay kapısı atlanıyor — recording eklenmeyecek
+- **Backup target password:** Vault transit ile şifrele, config_encrypted BYTEA kolonuna yaz
+
+### Çalışma Disiplini
+
+1. Her sprint sonunda bu §0 bloğunu güncelle — tamamlanan maddeyi `[x]` işaretle
+2. Commit cadence: her sprint tek commit, message'da madde numaraları
+3. Push after commit (autonomous mode)
+4. Build green olmadan commit etme (`cargo check`, `go build`, `pnpm build`)
+5. Paralel agent kullan: nextjs-developer × N, backend-developer × M, devops-engineer × K — çakışma olmayacak dosyalar paralel
+6. Sıkışınca: WIP commit → bu §0'ı güncelle → push → user'a nerede kaldığını özet ver
+
+### Context Loss Recovery
+
+Eğer context limit'e ulaşılırsa, yeni oturum şunları yapar:
+1. Bu §0'ı oku (Wave 9 handover block)
+2. `git log --oneline -20` çalıştır — son commit'leri gör
+3. `TaskList` çağır — açık sprint görev ID'sini al
+4. Checklist'te `[ ]` işaretli ilk maddeden devam et
+5. Sprint sonunda §0'ı güncelle + commit + push
+
+### Wave 8 Deploy Durumu (henüz canlı değil)
+
+Commit'ler repo'da (`b6189bc`, `50ef60f`, `babc88a`, `ee4696b`), deploy bekleniyor:
+- vm3: migration 0037 + API rebuild + console rebuild
+- Windows: agent binary yenileme
+- Verification: real SID, screenshot boyut, keystroke events
+
+Sprint 5'te operator handoff runbook olarak dokümante edilecek.
+
+---
+
+## 0.1. ÖNCEKİ DURUM — 190-MADDE PRODUCTION ROADMAP (2026-04-14)
 
 ### 📌 Session Log (6-Wave Autonomous Sprint, 2026-04-13 → 2026-04-14)
 

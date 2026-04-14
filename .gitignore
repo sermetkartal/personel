@@ -134,3 +134,4 @@ apps/agent/installer/dist/
 *.wixpdb
 *.cab
 *.msi
+docs/.secrets-local.md
