@@ -143,7 +143,7 @@ export function DashboardClient({
               : t("dlpBanner.disabled.description")}
           </span>
           <Button variant="outline" size="sm" asChild>
-            <Link href={`/${locale}/settings/dlp`}>
+            <Link href={`/${locale}/kvkk/dlp`}>
               {dlpIsActive
                 ? t("dlpBanner.active.action")
                 : t("dlpBanner.disabled.action")}
@@ -164,7 +164,7 @@ export function DashboardClient({
               müdahale gereklidir.
             </span>
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/${locale}/dsr?state=overdue`}>
+              <Link href={`/${locale}/kvkk/dsr?state=overdue`}>
                 Görüntüle <ArrowRight className="ml-1.5 h-3 w-3" aria-hidden="true" />
               </Link>
             </Button>
@@ -191,7 +191,7 @@ export function DashboardClient({
             value={openDSRs + atRiskDSRs}
             icon={FileText}
             variant={atRiskDSRs > 0 ? "warning" : "default"}
-            href="/dsr"
+            href="/kvkk/dsr"
           />
         )}
 
@@ -202,7 +202,7 @@ export function DashboardClient({
             value={overdueDSRs}
             icon={AlertTriangle}
             variant="critical"
-            href="/dsr?state=overdue"
+            href="/kvkk/dsr?state=overdue"
           />
         )}
 
@@ -371,7 +371,7 @@ export function DashboardClient({
           )}
           {can(userRole, "manage:dsr") && (
             <Button variant="outline" size="sm" asChild>
-              <Link href={`/${locale}/dsr`}>
+              <Link href={`/${locale}/kvkk/dsr`}>
                 <FileText className="h-4 w-4" aria-hidden="true" />
                 {t("quickActions.viewPendingDsrs")}
               </Link>

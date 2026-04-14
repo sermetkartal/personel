@@ -20,6 +20,12 @@ import {
   Activity,
   Lock,
   FileArchive,
+  Scale,
+  BookOpen,
+  FilePen,
+  FileCheck2,
+  FileSignature,
+  ShieldAlert,
 } from "lucide-react";
 import type { Action } from "@/lib/auth/rbac";
 
@@ -62,22 +68,69 @@ export function buildNavItems(locale: string): NavItem[] {
       requiredAction: "view:live-view-sessions",
     },
     {
-      key: "dsr",
-      icon: FileText,
-      href: `/${locale}/dsr`,
-      requiredAction: "manage:dsr",
-    },
-    {
-      key: "legalHold",
-      icon: Lock,
-      href: `/${locale}/legal-hold`,
-      requiredAction: "place:legal-hold",
-    },
-    {
-      key: "destructionReports",
-      icon: Trash2,
-      href: `/${locale}/destruction-reports`,
-      requiredAction: "view:destruction-reports",
+      key: "kvkk",
+      icon: Scale,
+      href: `/${locale}/kvkk/guide`,
+      children: [
+        {
+          key: "kvkkMenu.guide",
+          icon: BookOpen,
+          href: `/${locale}/kvkk/guide`,
+        },
+        {
+          key: "kvkkMenu.dsr",
+          icon: FileText,
+          href: `/${locale}/kvkk/dsr`,
+          requiredAction: "manage:dsr",
+        },
+        {
+          key: "kvkkMenu.legalHold",
+          icon: Lock,
+          href: `/${locale}/kvkk/legal-hold`,
+          requiredAction: "place:legal-hold",
+        },
+        {
+          key: "kvkkMenu.destructionReports",
+          icon: Trash2,
+          href: `/${locale}/kvkk/destruction-reports`,
+          requiredAction: "view:destruction-reports",
+        },
+        {
+          key: "kvkkMenu.dlp",
+          icon: ShieldAlert,
+          href: `/${locale}/kvkk/dlp`,
+        },
+        {
+          key: "kvkkMenu.verbis",
+          icon: FileCheck2,
+          href: `/${locale}/kvkk/verbis`,
+          requiredAction: "manage:kvkk",
+        },
+        {
+          key: "kvkkMenu.aydinlatma",
+          icon: FilePen,
+          href: `/${locale}/kvkk/aydinlatma`,
+          requiredAction: "manage:kvkk",
+        },
+        {
+          key: "kvkkMenu.dpa",
+          icon: FileSignature,
+          href: `/${locale}/kvkk/dpa`,
+          requiredAction: "manage:kvkk",
+        },
+        {
+          key: "kvkkMenu.dpia",
+          icon: FileSignature,
+          href: `/${locale}/kvkk/dpia`,
+          requiredAction: "manage:kvkk",
+        },
+        {
+          key: "kvkkMenu.acikRiza",
+          icon: FileSignature,
+          href: `/${locale}/kvkk/acik-riza`,
+          requiredAction: "manage:kvkk",
+        },
+      ],
     },
     {
       key: "evidence",
@@ -121,11 +174,6 @@ export function buildNavItems(locale: string): NavItem[] {
       icon: Settings,
       href: `/${locale}/settings`,
       children: [
-        {
-          key: "settingsMenu.dlp",
-          icon: Shield,
-          href: `/${locale}/settings/dlp`,
-        },
         {
           key: "settingsMenu.tenants",
           icon: Settings,

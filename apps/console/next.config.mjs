@@ -25,6 +25,31 @@ const nextConfig = {
     minimumCacheTTL: 60,
   },
 
+  // Wave 9: KVKK menü yeniden yapılandırması sonrası eski URL'leri koru.
+  // Bookmark kırılmasın, audit log referansları çalışmaya devam etsin.
+  redirects: async () => [
+    {
+      source: "/:locale(tr|en)/dsr/:path*",
+      destination: "/:locale/kvkk/dsr/:path*",
+      permanent: true,
+    },
+    {
+      source: "/:locale(tr|en)/legal-hold/:path*",
+      destination: "/:locale/kvkk/legal-hold/:path*",
+      permanent: true,
+    },
+    {
+      source: "/:locale(tr|en)/destruction-reports/:path*",
+      destination: "/:locale/kvkk/destruction-reports/:path*",
+      permanent: true,
+    },
+    {
+      source: "/:locale(tr|en)/settings/dlp",
+      destination: "/:locale/kvkk/dlp",
+      permanent: true,
+    },
+  ],
+
   headers: async () => [
     {
       source: "/(.*)",

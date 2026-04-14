@@ -33,7 +33,7 @@ export default async function DSRNewPage({
   return (
     <div className="space-y-6 max-w-2xl animate-fade-in">
       <Button variant="ghost" size="sm" className="-ml-2" asChild>
-        <Link href="/dsr">
+        <Link href="/kvkk/dsr">
           <ChevronLeft className="mr-1 h-4 w-4" aria-hidden="true" />
           {t("backToList")}
         </Link>

@@ -249,7 +249,7 @@ export function LiveMetrics({
           value={current?.openDsrs ?? 0}
           icon={FileText}
           history={dsrHist}
-          href="/dsr"
+          href="/kvkk/dsr"
           variant={(current?.openDsrs ?? 0) > 0 ? "warning" : "default"}
         />
         <MetricCard

@@ -410,7 +410,7 @@ export function PolicyEditorClient({
             <Button onClick={() => setDlpWarnOpen(false)}>
               {t("understood")}
             </Button>
-            <Link href={`/${locale}/settings/dlp`}>
+            <Link href={`/${locale}/kvkk/dlp`}>
               <Button variant="outline">{t("goToDlpSettings")}</Button>
             </Link>
           </DialogFooter>

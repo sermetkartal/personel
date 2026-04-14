@@ -57,7 +57,7 @@ function DSRRow({ request }: { request: DSRRequest }): JSX.Element {
     <tr className="border-b hover:bg-muted/30 transition-colors">
       <td className="px-4 py-3">
         <Link
-          href={`/${locale}/dsr/${request.id}`}
+          href={`/${locale}/kvkk/dsr/${request.id}`}
           className="font-mono text-xs text-muted-foreground hover:text-foreground hover:underline"
         >
           {request.id.slice(0, 8)}...
@@ -107,7 +107,7 @@ function DSRRow({ request }: { request: DSRRequest }): JSX.Element {
       </td>
       <td className="px-4 py-3 text-right">
         <Button variant="ghost" size="sm" asChild>
-          <Link href={`/${locale}/dsr/${request.id}`} aria-label={`Talep ${request.id.slice(0, 8)} detaylarını görüntüle`}>
+          <Link href={`/${locale}/kvkk/dsr/${request.id}`} aria-label={`Talep ${request.id.slice(0, 8)} detaylarını görüntüle`}>
             Görüntüle
           </Link>
         </Button>
@@ -243,7 +243,7 @@ export function DSRDashboardClient({
         </Select>
 
         <Button variant="outline" size="sm" asChild>
-          <Link href={`/${locale}/dsr/new`}>
+          <Link href={`/${locale}/kvkk/dsr/new`}>
             <FileText className="h-4 w-4" aria-hidden="true" />
             Yeni DSR Oluştur
           </Link>

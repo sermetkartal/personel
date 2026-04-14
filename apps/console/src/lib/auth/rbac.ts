@@ -213,6 +213,19 @@ export function canViewDLPSettings(role: Role): boolean {
   return role === "admin" || role === "dpo";
 }
 
+/**
+ * KVKK compliance area — VERBIS kayıt, aydınlatma metni, DPA, DPIA,
+ * açık rıza formu. DPO is primary owner, admin has full access,
+ * auditor can read-only.
+ */
+export function canManageKVKK(role: Role): boolean {
+  return role === "admin" || role === "dpo";
+}
+
+export function canViewKVKK(role: Role): boolean {
+  return role === "admin" || role === "dpo" || role === "auditor";
+}
+
 export function canViewSilence(role: Role): boolean {
   return role === "admin" || role === "manager" || role === "dpo";
 }
@@ -275,7 +288,9 @@ export type Action =
   | "view:silence"
   | "view:silence-gaps"
   | "view:reports"
-  | "view:settings";
+  | "view:settings"
+  | "manage:kvkk"
+  | "view:kvkk";
 
 const ACTION_CHECKS: Record<Action, (role: Role) => boolean> = {
   "view:endpoints": canViewEndpoints,
@@ -313,6 +328,8 @@ const ACTION_CHECKS: Record<Action, (role: Role) => boolean> = {
   "view:silence-gaps": canViewSilenceGaps,
   "view:reports": canViewReports,
   "view:settings": canViewSettings,
+  "manage:kvkk": canManageKVKK,
+  "view:kvkk": canViewKVKK,
 };
 
 /**

@@ -92,7 +92,7 @@ export default async function TenantDetailPage({
             </div>
           </CardHeader>
           <CardContent>
-            <Link href={`/${locale}/settings/dlp`}>
+            <Link href={`/${locale}/kvkk/dlp`}>
               <Button variant="outline" size="sm" className="w-full">
                 <KeySquare className="mr-2 h-4 w-4" aria-hidden="true" />
                 {t("openDlp")}
