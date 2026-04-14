@@ -52,11 +52,11 @@ import {
 } from "@/lib/api/kvkk";
 import { listUsers, userKeys, type ListUsersParams } from "@/lib/api/users";
 import type { User, UserList } from "@/lib/api/types";
+import { toUserFacingError } from "@/lib/errors";
+import { formatDateTR } from "@/lib/utils";
 
 // Stable reference so TanStack Query key does not churn per render.
 const USERS_PARAMS: ListUsersParams = { page_size: 100 };
-import { toUserFacingError } from "@/lib/errors";
-import { formatDateTR } from "@/lib/utils";
 
 interface AcikRizaClientProps {
   initialConsents: ConsentList;

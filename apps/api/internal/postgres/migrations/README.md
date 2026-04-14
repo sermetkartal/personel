@@ -83,9 +83,12 @@ entry.
 | 20 | `0031_endpoint_refresh_fields.up.sql` | Faz 6 | `last_refresh_at` + `refresh_count` for endpoint token refresh (#63) |
 | 21 | `0032_endpoint_commands.up.sql` | Faz 6 | Remote command audit + state (deactivate/wipe/revoke, #64/#65) |
 | 22 | `0033_dsr_fulfillment_and_apikeys.up.sql` | Faz 6 | DSR fulfillment workflow (#69) + service API key auth (#72) |
+| 29 | `0040_liveview_admin_bypass.up.sql` | Wave 9 | ADR 0026 — admin bypass column + partial index on `live_view_sessions` |
 
-**Count**: 22 migrations. `init.sql` (Layer 1) is the baseline and is not
-counted here. Any new migration in Faz 7+ starts at `0034_*`.
+**Count**: 22 migrations listed; migrations 0034-0039 added during Faz 7-17
+sprint waves (feature flags, tickets, status page, screenshot preset,
+KVKK fields, user consent) are tracked in their respective wave commits.
+`init.sql` (Layer 1) is the baseline and is not counted here.
 
 ## Testing
 

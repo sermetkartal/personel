@@ -69,12 +69,13 @@ export function canRevokeEndpointCert(role: Role): boolean {
 }
 
 /**
- * Erasure requests (KVKK m.11/f) can only be finally executed by a DPO.
- * Non-DPO roles (including admin) can inspect dry-run projections but not
- * commit destruction.
+ * Erasure requests (KVKK m.11/f). DPO is the primary owner; ADR 0026
+ * grants admin the same authority — admin is the ultimate system
+ * operator and should not need to flag down a DPO to execute destruction
+ * on an already-approved DSR.
  */
 export function canExecuteDSRErasure(role: Role): boolean {
-  return role === "dpo";
+  return role === "dpo" || role === "admin";
 }
 
 export function canViewEmployees(role: Role): boolean {
@@ -154,34 +155,34 @@ export function canCreateDSR(role: Role): boolean {
 }
 
 export function canManageDSR(role: Role): boolean {
-  return role === "dpo";
+  return role === "dpo" || role === "admin";
 }
 
 export function canPlaceLegalHold(role: Role): boolean {
-  return role === "dpo";
+  return role === "dpo" || role === "admin";
 }
 
 export function canViewDestructionReports(role: Role): boolean {
   return role === "dpo" || role === "admin";
 }
 
-// SOC 2 evidence locker — DPO and auditor roles only. Coverage and pack
-// export are sensitive compliance posture indicators; ordinary admins
-// should not see gap state or pull the signed ZIP.
+// SOC 2 evidence locker — DPO, auditor, and admin (ADR 0026). Admin holds
+// the ultimate authority over the platform and can always see coverage
+// state and pull the signed ZIP for compliance reporting.
 export function canViewEvidence(role: Role): boolean {
-  return role === "dpo" || role === "auditor";
+  return role === "dpo" || role === "auditor" || role === "admin";
 }
 
 export function canDownloadEvidencePack(role: Role): boolean {
-  return role === "dpo";
+  return role === "dpo" || role === "admin";
 }
 
 export function canDownloadDestructionReports(role: Role): boolean {
-  return role === "dpo";
+  return role === "dpo" || role === "admin";
 }
 
 export function canViewScreenshots(role: Role): boolean {
-  return role === "investigator" || role === "dpo";
+  return role === "investigator" || role === "dpo" || role === "admin";
 }
 
 export function canViewAuditTrail(role: Role): boolean {

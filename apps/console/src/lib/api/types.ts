@@ -352,6 +352,12 @@ export interface LiveViewRequest {
   approved_at?: ISODateString | null;
   denied_at?: ISODateString | null;
   deny_reason?: string | null;
+  /**
+   * ADR 0026 — true when the session was created by an admin and
+   * auto-approved, bypassing the HR/IT dual-control gate. Present in
+   * every audit log entry under details.admin_bypass as well.
+   */
+  admin_bypass?: boolean;
 }
 
 export interface LiveViewSession {

@@ -64,8 +64,9 @@ func seedEndpoint(t *testing.T, pool *pgxpool.Pool, tenantID, hostname string) s
 	return id
 }
 
-// TestLiveView_RequestApproveEnd tests the full happy path:
-// request (Admin) → approve (HR, different user) → end.
+// TestLiveView_RequestApproveEnd tests the full happy path for a non-admin
+// requester: request (IT Operator) → approve (IT Manager, different user)
+// → end. The admin bypass path is exercised in TestLiveView_AdminBypass.
 func TestLiveView_RequestApproveEnd(t *testing.T) {
 	pool := testDB(t)
 	log := testLogger(t)
@@ -73,8 +74,9 @@ func TestLiveView_RequestApproveEnd(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := seedTenant(t, pool, "liveview-happy")
+	itOpID := seedUser(t, pool, tenantID, "it_operator", "itop@lv.test")
+	itMgrID := seedUser(t, pool, tenantID, "it_manager", "itmgr@lv.test")
 	adminID := seedUser(t, pool, tenantID, "admin", "admin@lv.test")
-	hrID := seedUser(t, pool, tenantID, "hr", "hr@lv.test")
 	endpointID := seedEndpoint(t, pool, tenantID, "TEST-WS-1")
 
 	lk := &stubLiveKitMinter{}
@@ -87,22 +89,24 @@ func TestLiveView_RequestApproveEnd(t *testing.T) {
 		NATSLiveViewSubject: "liveview.v1",
 	}, log)
 
+	itOpP := &auth.Principal{UserID: itOpID, TenantID: tenantID, Roles: []auth.Role{auth.RoleITOperator}}
+	itMgrP := &auth.Principal{UserID: itMgrID, TenantID: tenantID, Roles: []auth.Role{auth.RoleITManager}}
 	adminP := &auth.Principal{UserID: adminID, TenantID: tenantID, Roles: []auth.Role{auth.RoleAdmin}}
-	hrP := &auth.Principal{UserID: hrID, TenantID: tenantID, Roles: []auth.Role{auth.RoleHR}}
 
-	// ── Request ─────────────────────────────────────────────────────────────
-	sess, err := svc.RequestLiveView(ctx, adminP, endpointID,
+	// ── Request (non-admin — dual-control required) ─────────────────────────
+	sess, err := svc.RequestLiveView(ctx, itOpP, endpointID,
 		"security-review", "Investigating unusual login pattern", 1800)
 	require.NoError(t, err, "request live view")
 	assert.Equal(t, liveview.StateRequested, sess.State)
-	assert.Equal(t, adminID, sess.RequesterID)
+	assert.Equal(t, itOpID, sess.RequesterID)
+	assert.False(t, sess.AdminBypass, "non-admin requester must not trigger bypass")
 
-	// ── Approve (HR, different user from requester) ──────────────────────────
-	approved, err := svc.Approve(ctx, hrP, sess.ID, "approved for security review")
+	// ── Approve (IT Manager, different user from requester) ─────────────────
+	approved, err := svc.Approve(ctx, itMgrP, sess.ID, "approved for security review")
 	require.NoError(t, err, "approve live view")
 	assert.Equal(t, liveview.StateApproved, approved.State)
 	require.NotNil(t, approved.ApproverID)
-	assert.Equal(t, hrID, *approved.ApproverID)
+	assert.Equal(t, itMgrID, *approved.ApproverID)
 
 	// LiveKit room should have been created.
 	assert.Len(t, lk.rooms, 1, "LiveKit room should be created on approval")
@@ -118,7 +122,7 @@ func TestLiveView_RequestApproveEnd(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, liveview.StateActive, active.State)
 
-	// ── End session ─────────────────────────────────────────────────────────
+	// ── End session (admin is allowed to end) ──────────────────────────────
 	require.NoError(t, svc.EndSession(ctx, adminP, sess.ID))
 
 	ended, err := store.Get(ctx, sess.ID, tenantID)
@@ -127,7 +131,59 @@ func TestLiveView_RequestApproveEnd(t *testing.T) {
 	require.NotNil(t, ended.EndedAt)
 }
 
+// TestLiveView_AdminBypass verifies ADR 0026: an admin requester skips the
+// HR/IT dual-control approval gate. The session lands directly in APPROVED
+// state, LiveKit is provisioned in-line, and the row carries admin_bypass=true.
+func TestLiveView_AdminBypass(t *testing.T) {
+	pool := testDB(t)
+	log := testLogger(t)
+	rec := testRecorder(pool, log)
+	ctx := context.Background()
+
+	tenantID := seedTenant(t, pool, "liveview-bypass")
+	adminID := seedUser(t, pool, tenantID, "admin", "admin@bypass.test")
+	endpointID := seedEndpoint(t, pool, tenantID, "TEST-WS-BYPASS")
+
+	lk := &stubLiveKitMinter{}
+	natsPub := &stubNATSPublisher{}
+	store := liveview.NewStore(pool)
+	svc := liveview.NewService(store, rec, natsPub, vaultpkg.NewStubClient(), lk, liveview.ServiceConfig{
+		LiveKitHost:         "http://localhost:7880",
+		MaxDuration:         15 * time.Minute,
+		ApprovalTimeout:     10 * time.Minute,
+		NATSLiveViewSubject: "liveview.v1",
+	}, log)
+
+	adminP := &auth.Principal{UserID: adminID, TenantID: tenantID, Roles: []auth.Role{auth.RoleAdmin}}
+
+	// Admin requests — must auto-approve without any second actor.
+	sess, err := svc.RequestLiveView(ctx, adminP, endpointID,
+		"security_incident", "Ransomware indicator observed, immediate containment", 1800)
+	require.NoError(t, err, "admin request must succeed without approval step")
+
+	// State must be APPROVED already, not REQUESTED.
+	assert.Equal(t, liveview.StateApproved, sess.State, "admin bypass should skip REQUESTED state")
+	assert.True(t, sess.AdminBypass, "AdminBypass flag must be true")
+	require.NotNil(t, sess.ApproverID, "approver_id must be set even on bypass")
+	assert.Equal(t, adminID, *sess.ApproverID, "approver_id should equal the admin requester")
+
+	// Persisted row should carry the same flags.
+	reloaded, err := store.Get(ctx, sess.ID, tenantID)
+	require.NoError(t, err)
+	assert.Equal(t, liveview.StateApproved, reloaded.State)
+	assert.True(t, reloaded.AdminBypass, "persisted admin_bypass column must be true")
+	require.NotNil(t, reloaded.ApproverID)
+	assert.Equal(t, adminID, *reloaded.ApproverID)
+
+	// LiveKit provisioning must have happened in-line with the request.
+	assert.Len(t, lk.rooms, 1, "LiveKit room must be provisioned on admin bypass request")
+	assert.Len(t, natsPub.starts, 1, "NATS start command must be published on admin bypass")
+	assert.Equal(t, sess.ID, natsPub.starts[0].SessionID)
+}
+
 // TestLiveView_DualControlEnforced verifies the same user cannot approve their own request.
+// Uses a dual-role it_operator+it_manager principal (admin is excluded since it
+// would trigger the ADR 0026 bypass path and never land in REQUESTED state).
 func TestLiveView_DualControlEnforced(t *testing.T) {
 	pool := testDB(t)
 	log := testLogger(t)
@@ -135,29 +191,33 @@ func TestLiveView_DualControlEnforced(t *testing.T) {
 	ctx := context.Background()
 
 	tenantID := seedTenant(t, pool, "liveview-dualctrl")
-	hrAdminID := seedUser(t, pool, tenantID, "admin", "hradmin@lv.test")
+	itMgrID := seedUser(t, pool, tenantID, "it_manager", "itmgr@lv.test")
 	endpointID := seedEndpoint(t, pool, tenantID, "TEST-WS-2")
 
 	svc := liveview.NewService(
 		liveview.NewStore(pool), rec, &stubNATSPublisher{},
 		vaultpkg.NewStubClient(), &stubLiveKitMinter{},
 		liveview.ServiceConfig{
-			LiveKitHost:  "http://localhost:7880",
-			MaxDuration:  15 * time.Minute,
+			LiveKitHost:     "http://localhost:7880",
+			MaxDuration:     15 * time.Minute,
 			ApprovalTimeout: 10 * time.Minute,
 		}, log,
 	)
 
-	// A user who holds both Admin and HR roles.
+	// A user who holds both IT Operator (request) and IT Manager (approve)
+	// roles. Cannot self-approve even though they technically have both
+	// authorities.
 	dualRoleP := &auth.Principal{
-		UserID:   hrAdminID,
+		UserID:   itMgrID,
 		TenantID: tenantID,
-		Roles:    []auth.Role{auth.RoleAdmin, auth.RoleHR},
+		Roles:    []auth.Role{auth.RoleITOperator, auth.RoleITManager},
 	}
 
 	sess, err := svc.RequestLiveView(ctx, dualRoleP, endpointID,
 		"test-reason", "test justification", 900)
 	require.NoError(t, err)
+	require.Equal(t, liveview.StateRequested, sess.State,
+		"non-admin dual role must still go through REQUESTED state")
 
 	// Same user tries to approve their own request — must fail.
 	_, err = svc.Approve(ctx, dualRoleP, sess.ID, "self-approval attempt")
@@ -196,6 +256,8 @@ func TestLiveView_HardCapEnforced(t *testing.T) {
 }
 
 // TestLiveView_NonHRCannotApprove verifies that a Manager role cannot approve.
+// Uses an it_operator as requester so the session actually sits in REQUESTED
+// (admin as requester would trigger the ADR 0026 bypass and auto-approve).
 func TestLiveView_NonHRCannotApprove(t *testing.T) {
 	pool := testDB(t)
 	log := testLogger(t)
@@ -204,23 +266,24 @@ func TestLiveView_NonHRCannotApprove(t *testing.T) {
 
 	tenantID := seedTenant(t, pool, "liveview-nonhr")
 	managerID := seedUser(t, pool, tenantID, "manager", "mgr@lv.test")
-	adminID := seedUser(t, pool, tenantID, "admin", "adm@nonhr.test")
+	itOpID := seedUser(t, pool, tenantID, "it_operator", "itop@nonhr.test")
 	endpointID := seedEndpoint(t, pool, tenantID, "TEST-WS-4")
 
 	svc := liveview.NewService(
 		liveview.NewStore(pool), rec, &stubNATSPublisher{},
 		vaultpkg.NewStubClient(), &stubLiveKitMinter{},
 		liveview.ServiceConfig{
-			LiveKitHost:  "http://localhost:7880",
-			MaxDuration:  15 * time.Minute,
+			LiveKitHost:     "http://localhost:7880",
+			MaxDuration:     15 * time.Minute,
 			ApprovalTimeout: 10 * time.Minute,
 		}, log,
 	)
 
 	sess, err := svc.RequestLiveView(ctx,
-		&auth.Principal{UserID: adminID, TenantID: tenantID, Roles: []auth.Role{auth.RoleAdmin}},
+		&auth.Principal{UserID: itOpID, TenantID: tenantID, Roles: []auth.Role{auth.RoleITOperator}},
 		endpointID, "test", "test justification", 900)
 	require.NoError(t, err)
+	require.Equal(t, liveview.StateRequested, sess.State)
 
 	_, err = svc.Approve(ctx,
 		&auth.Principal{UserID: managerID, TenantID: tenantID, Roles: []auth.Role{auth.RoleManager}},

@@ -7,7 +7,8 @@
  * - Reason code is required and logged to the audit trail
  * - Duration is capped at 60 minutes (configurable server-side)
  * - The requester cannot approve their own request (dual-control)
- * - All submitted requests enter REQUESTED state awaiting HR approval
+ * - Non-admin submissions enter REQUESTED state awaiting IT Manager approval
+ * - Admin submissions bypass the approval gate (ADR 0026) and auto-start
  */
 
 import { useForm } from "react-hook-form";
@@ -52,7 +53,15 @@ const requestSchema = z.object({
 
 type RequestFormValues = z.infer<typeof requestSchema>;
 
-export function LiveViewRequestForm(): JSX.Element {
+interface LiveViewRequestFormProps {
+  /**
+   * When true, the dual-control notice is hidden and the submit button is
+   * relabeled because admin bypasses the approval gate (ADR 0026).
+   */
+  isAdmin?: boolean;
+}
+
+export function LiveViewRequestForm({ isAdmin = false }: LiveViewRequestFormProps = {}): JSX.Element {
   const t = useTranslations("liveView.request");
   const router = useRouter();
   const requestMutation = useRequestLiveView();
@@ -83,10 +92,19 @@ export function LiveViewRequestForm(): JSX.Element {
 
   const onSubmit = async (values: RequestFormValues) => {
     try {
-      await requestMutation.mutateAsync(values);
-      toast.success(t("successToast"));
-      // Navigate to the approvals page so user can track status
-      router.push("../approvals");
+      const result = await requestMutation.mutateAsync(values);
+      toast.success(
+        isAdmin
+          ? "Oturum otomatik onaylandı ve başlatılıyor."
+          : t("successToast"),
+      );
+      if (isAdmin && result?.id) {
+        // Admin bypass — jump straight into the live session view.
+        router.push(`../${result.id}`);
+      } else {
+        // Navigate to the approvals page so user can track status
+        router.push("../approvals");
+      }
     } catch (err) {
       const ue = toUserFacingError(err);
       toast.error(ue.title, { description: ue.description });
@@ -99,13 +117,15 @@ export function LiveViewRequestForm(): JSX.Element {
       className="space-y-6"
       noValidate
     >
-      {/* Dual-control notice */}
-      <Alert variant="default" role="note">
-        <Info className="h-4 w-4" aria-hidden="true" />
-        <AlertDescription className="text-sm">
-          {t("dualControlNote")}
-        </AlertDescription>
-      </Alert>
+      {/* Dual-control notice — hidden for admin (ADR 0026 bypass). */}
+      {!isAdmin && (
+        <Alert variant="default" role="note">
+          <Info className="h-4 w-4" aria-hidden="true" />
+          <AlertDescription className="text-sm">
+            {t("dualControlNote")}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Endpoint */}
       <div className="space-y-2">
@@ -213,7 +233,9 @@ export function LiveViewRequestForm(): JSX.Element {
         >
           {isSubmitting || requestMutation.isPending
             ? t("submitting")
-            : t("submit")}
+            : isAdmin
+              ? "Başlat"
+              : t("submit")}
         </Button>
         <Button
           type="button"

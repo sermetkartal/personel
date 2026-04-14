@@ -84,6 +84,20 @@ func NewService(
 }
 
 // RequestLiveView creates a new live view request.
+//
+// ADR 0026: Admin bypass. If the requester holds RoleAdmin, the dual-control
+// HR/IT approval gate is skipped. The session is created directly in the
+// APPROVED state, the LiveKit room + tokens are provisioned in-line, and
+// the NATS start command is published to the gateway. Every audit entry
+// for such a session carries `admin_bypass=true` in its details so
+// compliance reviewers can filter them out of dual-control drill reports.
+//
+// Rationale: admin already holds ultimate authority over every privileged
+// operation (policy signing, endpoint wipe, cert revoke, DSR oversight).
+// Forcing an admin to flag down an it_manager for a live view approval is
+// procedural friction with no security gain — the admin could impersonate
+// that path in any number of other ways. The audit trail remains fully
+// intact; the only thing the bypass changes is the state machine hop.
 func (s *Service) RequestLiveView(ctx context.Context, p *auth.Principal, endpointID, reasonCode, justification string, durationSecs uint32) (*Session, error) {
 	if !auth.Can(p, auth.OpRequest, auth.ResourceLiveView) {
 		return nil, auth.ErrForbidden
@@ -98,6 +112,14 @@ func (s *Service) RequestLiveView(ctx context.Context, p *auth.Principal, endpoi
 		return nil, fmt.Errorf("liveview: duration exceeds hard cap of %d seconds", hardCapSeconds)
 	}
 
+	adminBypass := auth.HasRole(p, auth.RoleAdmin)
+
+	now := time.Now().UTC()
+	initialState := StateRequested
+	if adminBypass {
+		initialState = StateApproved
+	}
+
 	sess := &Session{
 		TenantID:          p.TenantID,
 		EndpointID:        endpointID,
@@ -105,21 +127,32 @@ func (s *Service) RequestLiveView(ctx context.Context, p *auth.Principal, endpoi
 		ReasonCode:        reasonCode,
 		Justification:     justification,
 		RequestedDuration: time.Duration(durationSecs) * time.Second,
-		State:             StateRequested,
-		CreatedAt:         time.Now().UTC(),
+		State:             initialState,
+		CreatedAt:         now,
+		AdminBypass:       adminBypass,
+	}
+	if adminBypass {
+		requesterID := p.UserID
+		sess.ApproverID = &requesterID
+		sess.ApprovedAt = &now
 	}
 
-	// Audit BEFORE the DB write.
+	// Audit BEFORE the DB write. Include admin_bypass signal only when true
+	// to keep ordinary requests' details JSON lean.
+	requestDetails := map[string]any{
+		"reason_code":   reasonCode,
+		"justification": justification,
+		"duration_secs": durationSecs,
+	}
+	if adminBypass {
+		requestDetails["admin_bypass"] = true
+	}
 	_, err := s.recorder.Append(ctx, audit.Entry{
 		Actor:    p.UserID,
 		TenantID: p.TenantID,
 		Action:   audit.ActionLiveViewRequested,
 		Target:   fmt.Sprintf("endpoint:%s", endpointID),
-		Details: map[string]any{
-			"reason_code":   reasonCode,
-			"justification": justification,
-			"duration_secs": durationSecs,
-		},
+		Details:  requestDetails,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("liveview: audit request: %w", err)
@@ -130,7 +163,90 @@ func (s *Service) RequestLiveView(ctx context.Context, p *auth.Principal, endpoi
 		return nil, err
 	}
 	sess.ID = id
+
+	if !adminBypass {
+		return sess, nil
+	}
+
+	// Admin bypass path — emit a synthetic "approved" audit entry so the
+	// audit chain still tells a clean story (requested → approved →
+	// started), and then run the same LiveKit provisioning the normal
+	// Approve() helper would have run.
+	_, err = s.recorder.Append(ctx, audit.Entry{
+		Actor:    p.UserID,
+		TenantID: p.TenantID,
+		Action:   audit.ActionLiveViewApproved,
+		Target:   fmt.Sprintf("session:%s", id),
+		Details: map[string]any{
+			"admin_bypass": true,
+			"requester_id": p.UserID,
+			"notes":        "auto-approved (admin bypass)",
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("liveview: audit auto-approve: %w", err)
+	}
+
+	if err := s.provisionLiveKit(ctx, p, sess); err != nil {
+		return nil, err
+	}
 	return sess, nil
+}
+
+// provisionLiveKit creates the LiveKit room, mints the admin/agent tokens,
+// signs the control message with the control-plane key, persists the
+// approval details, and publishes the NATS start command. It is called
+// by both Approve() (normal dual-control path) and RequestLiveView()
+// (admin bypass path). The session must already be in StateApproved and
+// already persisted with ApproverID set.
+func (s *Service) provisionLiveKit(ctx context.Context, p *auth.Principal, sess *Session) error {
+	room := fmt.Sprintf("lv-%s-%s", p.TenantID[:8], sess.ID)
+	if err := s.livekit.CreateRoom(ctx, room); err != nil {
+		s.log.Error("liveview: create room failed", slog.String("session_id", sess.ID), slog.Any("error", err))
+		_ = s.store.MarkFailed(ctx, sess.ID, p.TenantID, "livekit_room_create_failed")
+		return fmt.Errorf("liveview: create room: %w", err)
+	}
+
+	agentTTL := sess.RequestedDuration
+	adminToken, err := s.livekit.MintAdminToken(room, agentTTL)
+	if err != nil {
+		return fmt.Errorf("liveview: mint admin token: %w", err)
+	}
+	agentToken, err := s.livekit.MintAgentToken(room, sess.ID, agentTTL)
+	if err != nil {
+		return fmt.Errorf("liveview: mint agent token: %w", err)
+	}
+
+	payload := []byte(fmt.Sprintf("liveview.start:%s:%s", sess.ID, room))
+	sig, keyID, err := s.vaultClient.SignWithControlKey(ctx, payload)
+	if err != nil {
+		return fmt.Errorf("liveview: sign control message: %w", err)
+	}
+
+	if err := s.store.SetApprovalDetails(ctx, sess.ID, p.TenantID, room, adminToken, agentToken, keyID); err != nil {
+		return err
+	}
+
+	cmd := nats.LiveViewStartCommand{
+		SessionID:        sess.ID,
+		LiveKitURL:       s.cfg.LiveKitHost,
+		LiveKitRoom:      room,
+		AgentToken:       agentToken,
+		NotAfter:         time.Now().UTC().Add(agentTTL),
+		ControlSignature: sig,
+		SigningKeyID:     keyID,
+		ReasonCode:       sess.ReasonCode,
+	}
+	if err := s.nats.PublishLiveViewStart(ctx, p.TenantID, sess.EndpointID, cmd); err != nil {
+		return fmt.Errorf("liveview: publish start command: %w", err)
+	}
+
+	sess.LiveKitRoom = &room
+	sess.LiveKitRoomStr = room
+	sess.AdminToken = adminToken
+	sess.AgentToken = agentToken
+	sess.SigningKeyID = keyID
+	return nil
 }
 
 // Approve approves a live view request. The approver MUST be in the IT
@@ -178,52 +294,6 @@ func (s *Service) Approve(ctx context.Context, p *auth.Principal, sessionID, not
 		return nil, err
 	}
 
-	// Create LiveKit room and mint tokens.
-	room := fmt.Sprintf("lv-%s-%s", p.TenantID[:8], sessionID)
-	if err := s.livekit.CreateRoom(ctx, room); err != nil {
-		s.log.Error("liveview: create room failed", slog.String("session_id", sessionID), slog.Any("error", err))
-		// Roll back to REQUESTED-with-error.
-		_ = s.store.MarkFailed(ctx, sessionID, p.TenantID, "livekit_room_create_failed")
-		return nil, fmt.Errorf("liveview: create room: %w", err)
-	}
-
-	agentTTL := sess.RequestedDuration
-	adminToken, err := s.livekit.MintAdminToken(room, agentTTL)
-	if err != nil {
-		return nil, fmt.Errorf("liveview: mint admin token: %w", err)
-	}
-	agentToken, err := s.livekit.MintAgentToken(room, sessionID, agentTTL)
-	if err != nil {
-		return nil, fmt.Errorf("liveview: mint agent token: %w", err)
-	}
-
-	// Sign the control message with control-plane key.
-	payload := []byte(fmt.Sprintf("liveview.start:%s:%s", sessionID, room))
-	sig, keyID, err := s.vaultClient.SignWithControlKey(ctx, payload)
-	if err != nil {
-		return nil, fmt.Errorf("liveview: sign control message: %w", err)
-	}
-
-	// Store tokens and room in session.
-	if err := s.store.SetApprovalDetails(ctx, sessionID, p.TenantID, room, adminToken, agentToken, keyID); err != nil {
-		return nil, err
-	}
-
-	// Publish NATS command to gateway → agent.
-	cmd := nats.LiveViewStartCommand{
-		SessionID:        sessionID,
-		LiveKitURL:       s.cfg.LiveKitHost,
-		LiveKitRoom:      room,
-		AgentToken:       agentToken,
-		NotAfter:         time.Now().UTC().Add(agentTTL),
-		ControlSignature: sig,
-		SigningKeyID:      keyID,
-		ReasonCode:       sess.ReasonCode,
-	}
-	if err := s.nats.PublishLiveViewStart(ctx, p.TenantID, sess.EndpointID, cmd); err != nil {
-		return nil, fmt.Errorf("liveview: publish start command: %w", err)
-	}
-
 	// Populate the in-memory session so the returned object matches
 	// what was just written to the DB. Previously ApproverID and
 	// ApprovalNotes were written to the DB by SetState but NOT mirrored
@@ -236,9 +306,10 @@ func (s *Service) Approve(ctx context.Context, p *auth.Principal, sessionID, not
 	sess.ApproverID = &approverID
 	sess.ApprovalNotes = &approvalNotes
 	sess.ApprovedAt = &now
-	sess.LiveKitRoom = &room
-	sess.LiveKitRoomStr = room
-	sess.AdminToken = adminToken
+
+	if err := s.provisionLiveKit(ctx, p, sess); err != nil {
+		return nil, err
+	}
 	return sess, nil
 }
 

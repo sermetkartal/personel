@@ -32,6 +32,12 @@ type Session struct {
 	StartedAt         *time.Time     `json:"started_at"`
 	EndedAt           *time.Time     `json:"ended_at"`
 	FailureReason     *string        `json:"failure_reason"`
+
+	// AdminBypass is true when the session was created by an admin role
+	// and auto-approved, bypassing the HR/IT dual-control gate per ADR 0026.
+	// Audit log entries for this session will carry an "admin_bypass":true
+	// detail so compliance reviewers can filter on it.
+	AdminBypass bool `json:"admin_bypass,omitempty"`
 }
 
 // Store handles all live view session persistence.
@@ -50,12 +56,12 @@ func (s *Store) Create(ctx context.Context, sess *Session) (string, error) {
 	_, err := s.pool.Exec(ctx,
 		`INSERT INTO live_view_sessions
 		 (id, tenant_id, endpoint_id, requester_id, reason_code, justification,
-		  requested_duration_seconds, state, created_at)
-		 VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9)`,
+		  requested_duration_seconds, state, created_at, admin_bypass)
+		 VALUES ($1, $2::uuid, $3::uuid, $4::uuid, $5, $6, $7, $8, $9, $10)`,
 		id, sess.TenantID, sess.EndpointID, sess.RequesterID,
 		sess.ReasonCode, sess.Justification,
 		int64(sess.RequestedDuration.Seconds()),
-		string(sess.State), sess.CreatedAt,
+		string(sess.State), sess.CreatedAt, sess.AdminBypass,
 	)
 	if err != nil {
 		return "", fmt.Errorf("liveview: create: %w", err)
@@ -69,7 +75,8 @@ func (s *Store) Get(ctx context.Context, id, tenantID string) (*Session, error) 
 		`SELECT id, tenant_id::text, endpoint_id::text, requester_id::text,
 		        approver_id::text, approval_notes, reason_code, justification,
 		        requested_duration_seconds, state, livekit_room,
-		        created_at, approved_at, started_at, ended_at, failure_reason
+		        created_at, approved_at, started_at, ended_at, failure_reason,
+		        admin_bypass
 		 FROM live_view_sessions
 		 WHERE id = $1 AND tenant_id = $2::uuid`,
 		id, tenantID,
@@ -87,7 +94,8 @@ func (s *Store) List(ctx context.Context, tenantID string, state *State) ([]*Ses
 			`SELECT id, tenant_id::text, endpoint_id::text, requester_id::text,
 			        approver_id::text, approval_notes, reason_code, justification,
 			        requested_duration_seconds, state, livekit_room,
-			        created_at, approved_at, started_at, ended_at, failure_reason
+			        created_at, approved_at, started_at, ended_at, failure_reason,
+			        admin_bypass
 			 FROM live_view_sessions
 			 WHERE tenant_id = $1::uuid AND state = $2
 			 ORDER BY created_at DESC`,
@@ -98,7 +106,8 @@ func (s *Store) List(ctx context.Context, tenantID string, state *State) ([]*Ses
 			`SELECT id, tenant_id::text, endpoint_id::text, requester_id::text,
 			        approver_id::text, approval_notes, reason_code, justification,
 			        requested_duration_seconds, state, livekit_room,
-			        created_at, approved_at, started_at, ended_at, failure_reason
+			        created_at, approved_at, started_at, ended_at, failure_reason,
+			        admin_bypass
 			 FROM live_view_sessions
 			 WHERE tenant_id = $1::uuid
 			 ORDER BY created_at DESC
@@ -128,7 +137,8 @@ func (s *Store) ListByEmployee(ctx context.Context, tenantID, employeeUserID str
 		`SELECT lv.id, lv.tenant_id::text, lv.endpoint_id::text, lv.requester_id::text,
 		        lv.approver_id::text, lv.approval_notes, lv.reason_code, lv.justification,
 		        lv.requested_duration_seconds, lv.state, lv.livekit_room,
-		        lv.created_at, lv.approved_at, lv.started_at, lv.ended_at, lv.failure_reason
+		        lv.created_at, lv.approved_at, lv.started_at, lv.ended_at, lv.failure_reason,
+		        lv.admin_bypass
 		 FROM live_view_sessions lv
 		 JOIN endpoints e ON e.id = lv.endpoint_id AND e.tenant_id = lv.tenant_id
 		 WHERE lv.tenant_id = $1::uuid AND e.assigned_user_id = $2::uuid
@@ -203,6 +213,7 @@ func scanSession(row rowScanner) (*Session, error) {
 		&s.ApproverID, &s.ApprovalNotes, &s.ReasonCode, &s.Justification,
 		&durationSecs, &s.State, &room,
 		&s.CreatedAt, &s.ApprovedAt, &s.StartedAt, &s.EndedAt, &s.FailureReason,
+		&s.AdminBypass,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("liveview: scan: %w", err)
