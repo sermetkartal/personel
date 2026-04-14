@@ -12,8 +12,17 @@
 
 import type { ProblemDetail } from "./types";
 
+/**
+ * Client-side requests are routed through a Next.js API proxy at
+ * `/api/proxy/*`. The proxy reads the httpOnly session cookie server-side
+ * and injects the Bearer token, so the token never enters the browser
+ * bundle. Server components still talk to the real API directly via
+ * the `token` option + NEXT_PUBLIC_API_BASE_URL fallback.
+ */
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080";
+  typeof window === "undefined"
+    ? process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
+    : "/api/proxy";
 
 // ── Typed API error ───────────────────────────────────────────────────────────
 
