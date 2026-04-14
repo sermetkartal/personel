@@ -23,7 +23,23 @@ const OS: &str = "other";
 /// Stub input module for non-Windows builds.
 pub mod input {
     use super::*;
+    use std::sync::atomic::AtomicU64;
     use std::sync::mpsc;
+
+    /// Hook callback diagnostic counters (stub — always zero).
+    pub static HOOK_CB_FIRED: AtomicU64 = AtomicU64::new(0);
+    /// Hook callback diagnostic counters (stub — always zero).
+    pub static HOOK_CB_SEND_OK: AtomicU64 = AtomicU64::new(0);
+    /// Hook callback diagnostic counters (stub — always zero).
+    pub static HOOK_CB_SEND_ERR: AtomicU64 = AtomicU64::new(0);
+    /// Hook callback diagnostic counters (stub — always zero).
+    pub static HOOK_CB_LOCK_MISS: AtomicU64 = AtomicU64::new(0);
+    /// Hook callback diagnostic counters (stub — always zero).
+    pub static HOOK_CB_NO_CELL: AtomicU64 = AtomicU64::new(0);
+
+    /// Stub: always returns 0 on non-Windows targets.
+    #[must_use]
+    pub fn hook_thread_id() -> u32 { 0 }
 
     /// Information about the foreground window (stub).
     #[derive(Debug, Clone)]

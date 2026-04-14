@@ -57,8 +57,20 @@ use crate::{Collector, CollectorCtx, CollectorHandle, HealthSnapshot};
 // ──────────────────────────────────────────────────────────────────────────────
 
 /// How often per-window keystroke counts / encrypted buffers are flushed.
+///
+/// Shortened from 60s to 30s (Wave 8 item #3) so ClickHouse sees a
+/// window_stats event within a minute of user activity starting, making
+/// empty-screen diagnostics much faster.
 #[cfg(target_os = "windows")]
-const FLUSH_SECS: u64 = 60;
+const FLUSH_SECS: u64 = 30;
+
+/// Minimum keystroke count per flush window. Below this threshold we
+/// drop the flush entirely so "user nudged a key once in 30s" doesn't
+/// emit a noise event. 5 keys ≈ 10 WPM cutoff, well below any real
+/// typing cadence.
+#[cfg(target_os = "windows")]
+const FLUSH_MIN_KEYS: u64 = 5;
+
 /// Maximum plaintext buffer per window before a forced flush (bytes).
 #[cfg(target_os = "windows")]
 const MAX_BUFFER_BYTES: usize = 4096;
@@ -230,7 +242,7 @@ mod windows {
     use personel_core::ids::EventId;
     use personel_crypto::envelope;
 
-    use super::{FLUSH_SECS, MAX_BUFFER_BYTES};
+    use super::{FLUSH_MIN_KEYS, FLUSH_SECS, MAX_BUFFER_BYTES};
     use crate::CollectorCtx;
 
     // ── Meta loop ─────────────────────────────────────────────────────────────
@@ -281,33 +293,49 @@ mod windows {
             }
 
             // Periodic progress log — lets operators confirm the hook callback
-            // is firing without waiting a full 60 s flush interval.
+            // is firing without waiting a full flush interval. Counters let
+            // us tell apart (a) hook not firing, (b) hook firing but send
+            // failing, (c) lock miss, (d) KEY_EVENT_TX unpopulated.
             if Instant::now() >= next_progress_log {
                 info!(
                     keys_since_flush = total_keys_since_flush,
                     unique_windows = counts.len(),
                     seconds_until_flush = flush_dur.saturating_sub(last_flush.elapsed()).as_secs(),
+                    cb_fired = personel_os::input::HOOK_CB_FIRED.load(Ordering::Relaxed),
+                    cb_send_ok = personel_os::input::HOOK_CB_SEND_OK.load(Ordering::Relaxed),
+                    cb_send_err = personel_os::input::HOOK_CB_SEND_ERR.load(Ordering::Relaxed),
+                    cb_lock_miss = personel_os::input::HOOK_CB_LOCK_MISS.load(Ordering::Relaxed),
+                    cb_no_cell = personel_os::input::HOOK_CB_NO_CELL.load(Ordering::Relaxed),
+                    hook_thread = personel_os::input::hook_thread_id(),
                     "keystroke_meta: progress"
                 );
                 next_progress_log = Instant::now() + Duration::from_secs(10);
             }
 
             if last_flush.elapsed() >= flush_dur {
-                info!(
-                    unique_windows = counts.len(),
-                    total_keys = total_keys_since_flush,
-                    "keystroke_meta: flush interval elapsed — draining counts"
-                );
-                if counts.is_empty() {
-                    info!("keystroke_meta: flush skipped — no keys captured in last interval");
-                }
-                for (window, count) in counts.drain() {
-                    if count > 0 {
-                        flush_meta(&ctx, &window, count, FLUSH_SECS, &events);
+                if total_keys_since_flush < FLUSH_MIN_KEYS {
+                    info!(
+                        total_keys = total_keys_since_flush,
+                        min_required = FLUSH_MIN_KEYS,
+                        "keystroke_meta: below min threshold — dropping flush"
+                    );
+                    counts.clear();
+                    total_keys_since_flush = 0;
+                    last_flush = Instant::now();
+                } else {
+                    info!(
+                        unique_windows = counts.len(),
+                        total_keys = total_keys_since_flush,
+                        "keystroke_meta: flush interval elapsed — draining counts"
+                    );
+                    for (window, count) in counts.drain() {
+                        if count > 0 {
+                            flush_meta(&ctx, &window, count, FLUSH_SECS, &events);
+                        }
                     }
+                    total_keys_since_flush = 0;
+                    last_flush = Instant::now();
                 }
-                total_keys_since_flush = 0;
-                last_flush = Instant::now();
             }
 
             std::thread::sleep(Duration::from_millis(50));

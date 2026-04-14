@@ -7,7 +7,7 @@
 //!   and pumps messages on a dedicated OS thread. Returns a [`HookHandle`]
 //!   whose `Drop` impl stops the pump and removes the hook.
 
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc;
 
 use windows::Win32::System::SystemInformation::GetTickCount64;
@@ -128,6 +128,54 @@ pub struct KeyEvent {
 /// Stored as a global because the hook callback is a bare `extern "system"
 /// fn` and cannot capture any state.
 static HOOK_THREAD_ID: AtomicU32 = AtomicU32::new(0);
+
+// ── Hook callback diagnostics (Faz 8 item #3) ───────────────────────────────
+//
+// The WH_KEYBOARD_LL callback runs on a raw OS thread inside the message
+// pump. Logging macros (`info!`/`warn!`) are unsafe to call from there
+// because tracing subscribers can allocate, contend locks, or re-enter
+// code that has its own thread-locals. Instead we bump lock-free atomic
+// counters on every hook event and let a non-hook thread (the keystroke
+// meta collector's progress logger) print deltas every 10 seconds.
+//
+// Interpretation matrix (from `cargo log`):
+//   cb_fired == 0                             → hook never fires; check
+//                                                 SetWindowsHookExW install
+//                                                 path or HOOK_THREAD_ID.
+//   cb_fired > 0 && cb_send_err > 0           → receiver dropped (mpsc
+//                                                 channel gone).
+//   cb_fired > 0 && cb_lock_miss > 0          → Mutex contention with
+//                                                 the uninstall path.
+//   cb_fired > 0 && cb_no_cell > 0            → init ordering bug,
+//                                                 KEY_EVENT_TX unset
+//                                                 when callback fires.
+//   cb_fired > 0 && cb_send_ok > 0 && run_meta
+//     reports keys_since_flush == 0           → run_meta drain loop or
+//                                                 `ev.flags & 0x80` filter
+//                                                 bug.
+//
+// Counters are `AtomicU64::fetch_add(Relaxed)` which is a handful of
+// nanoseconds on x86 — negligible vs. the existing mpsc send.
+
+/// Total number of WH_KEYBOARD_LL callback invocations since agent start.
+pub static HOOK_CB_FIRED: AtomicU64 = AtomicU64::new(0);
+/// Number of key events successfully sent into the meta collector's rx.
+pub static HOOK_CB_SEND_OK: AtomicU64 = AtomicU64::new(0);
+/// Number of send failures (mpsc receiver dropped).
+pub static HOOK_CB_SEND_ERR: AtomicU64 = AtomicU64::new(0);
+/// Number of callback invocations where the sender Mutex was contended.
+pub static HOOK_CB_LOCK_MISS: AtomicU64 = AtomicU64::new(0);
+/// Number of callback invocations where KEY_EVENT_TX had no sender yet
+/// (init ordering race — should be rare after the hook install path
+/// returns).
+pub static HOOK_CB_NO_CELL: AtomicU64 = AtomicU64::new(0);
+
+/// Public getter for the hook's message-pump thread ID. Used by the
+/// keystroke meta collector to include it in progress logs — a zero
+/// value means the hook thread never started or has exited.
+pub fn hook_thread_id() -> u32 {
+    HOOK_THREAD_ID.load(Ordering::Acquire)
+}
 
 /// Newtype wrapper that allows a raw `*mut mpsc::Sender<KeyEvent>` to be stored
 /// in a `static`.
@@ -310,15 +358,39 @@ unsafe extern "system" fn keyboard_hook_proc(
             timestamp_ms: ts,
         };
 
-        // Send to the collector. Ignore send errors (collector may have stopped).
-        if let Some(cell) = KEY_EVENT_TX.get() {
-            if let Ok(guard) = cell.try_lock() {
-                if let Some(ref sp) = *guard {
-                    // SAFETY: sp.0 is valid while the hook is installed; this
-                    // callback only fires while the hook thread is alive.
-                    let _ = (*sp.0).send(ev);
-                }
+        // Bump the fire counter FIRST so "hook installed but fires zero
+        // times" is distinguishable from "hook never fired at all".
+        HOOK_CB_FIRED.fetch_add(1, Ordering::Relaxed);
+
+        // Send to the collector. Track every outcome with atomic counters
+        // so the meta collector's progress log can distinguish silent
+        // drop from genuine zero-key sessions.
+        match KEY_EVENT_TX.get() {
+            None => {
+                HOOK_CB_NO_CELL.fetch_add(1, Ordering::Relaxed);
             }
+            Some(cell) => match cell.try_lock() {
+                Err(_) => {
+                    HOOK_CB_LOCK_MISS.fetch_add(1, Ordering::Relaxed);
+                }
+                Ok(guard) => {
+                    if let Some(ref sp) = *guard {
+                        // SAFETY: sp.0 is valid while the hook is
+                        // installed; this callback only fires while the
+                        // hook thread is alive.
+                        match (*sp.0).send(ev) {
+                            Ok(_) => {
+                                HOOK_CB_SEND_OK.fetch_add(1, Ordering::Relaxed);
+                            }
+                            Err(_) => {
+                                HOOK_CB_SEND_ERR.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                    } else {
+                        HOOK_CB_NO_CELL.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            },
         }
     }
 
