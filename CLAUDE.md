@@ -111,13 +111,39 @@ Kullanıcı "kalan maddeleri kapat + deploy" dedi, otonom mod.
 - **Commercial CA CSR** — SKIP (müşteri internal veya LE kullanacak, stub yeterli)
 - **Pilot walkthrough screenshot** — SKIP (deploy sonrası)
 
-### Deploy Planı
+### Deploy Sonucu (2026-04-14 ~21:00)
 
-1. vm3 (plink SSH): git pull → migrations 0037-0045 apply → API rebuild → console rebuild → restart
-2. Windows VM (lokal): git pull → cargo build → service restart
-3. Doğrulama: smoke test §8 komutları
+**vm3 ✅ CANLI** (commit `ebdce51` üzerinde):
+- 9 migration (0037-0045) uygulandı — schema_migrations version 45
+- user_consent, tenants_integrations, backup_targets, backup_runs tabloları app_admin_api sahipliği
+- API rebuilt + running, /healthz ok, /v1/kvkk/* ve /v1/settings/* endpoint'leri 401 (RBAC doğru)
+- Gateway + enricher rebuilt + running (enricher log: "geoip lookup disabled (no mmdb_path configured)")
+- Console rebuilt + running, /tr/kvkk/guide render OK, /dsr → /kvkk/dsr 308 redirect çalışıyor
+- Portal rebuilt + running
+- NATS cluster config 3-node quorum ile kilitlenmiş state'ten tek-node'a geçirildi (tmp/nats-dev-cluster-node1.conf üzerine tek node conf kopyalandı, /data/jetstream reset)
+- Docker stack: 13/13 container Up, API+postgres+nats+minio+opensearch+vault+keycloak healthy; ClickHouse+Keeper unhealthy (pre-existing cluster config, Wave 9 öncesi)
+- Dev shortcut config'leri (api.yaml, proto.pb.go) Wave 8+9 ile çakışmadan korundu
 
-Bu oturum Windows VM'de (192.168.5.30) çalışıyor — lokal komutlar + vm3 için plink.exe kullanılıyor.
+**Windows VM (192.168.5.30) ⚠️ MANUEL ADIM:**
+- `cargo build --release` başarılı — `apps/agent/target/release/personel-agent.exe` (7802368 bytes)
+- Mevcut `C:\Program Files (x86)\Personel\Agent\personel-agent.exe` (Apr 14 15:41, 8220672 bytes) Wave 8 dönemi binary
+- **Wave 9 Rust agent'a dokunmadı** — enricher geo_ip server-side, keystroke/screenshot/HKU Wave 8 commit'leri zaten installed
+- PersonelAgent servisi STOPPED — start için admin elevation gerekli
+- Otonom session UAC prompt'unu onaylayamıyor; operator manuel olarak:
+  ```powershell
+  # Elevated PowerShell
+  Copy-Item C:\personel\apps\agent\target\release\personel-agent.exe "C:\Program Files (x86)\Personel\Agent\personel-agent.exe" -Force
+  Start-Service PersonelAgent
+  ```
+
+### Kalan Doğrulama (operator)
+
+- [ ] Windows agent binary swap + service start (admin elevation)
+- [ ] ClickHouse cluster config single-node reduction (opsiyonel)
+- [ ] Admin JWT ile /v1/kvkk/verbis + /v1/settings/retention canlı testi
+- [ ] ClickHouse `user_sid` query → real SID (agent start sonrası)
+- [ ] Screenshot boyut preset doğrulama (agent start sonrası)
+- [ ] Keystroke 30s window_stats event doğrulama (agent start sonrası)
 
 ### Yeni DB Migrations (Sprint 2+3)
 
