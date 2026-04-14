@@ -33,11 +33,27 @@ Müşteri onayıyla 27 maddelik plan. 6 sprint halinde otonom çalışılıyor. 
 - [x] `manage:kvkk` + `view:kvkk` RBAC aksiyonları (admin + dpo + auditor)
 - [x] Full i18n (tr + en) kvkk.* namespace
 
-**Sprint 2 — KVKK sayfa içerikleri (Task #52): 🔄 IN PROGRESS**
-- [x] Backend (Sprint 2A, commit `b7089b7`): migrations 0038+0039, internal/kvkk paketi (service+handler+types+test), 6 audit action, server mount, MinIO entegrasyonu, 19 unit test yeşil
-- [x] Console API client (Sprint 2B): `apps/console/src/lib/api/kvkk.ts` — type'lar + fetcher'lar + kvkkKeys + AllowedConsentType (284 satır)
-- [ ] Sprint 2C: 6 sayfanın UI fonksiyonel hale getirilmesi (background agent aad4b7af çalışıyor)
-- [x] 9. `/kvkk/guide` — Sprint 1'de statik olarak tamamlandı
+**Sprint 2 — KVKK sayfa içerikleri (Task #52): ✅ TAMAM**
+- [x] Backend (Sprint 2A, commit `b7089b7`): migrations 0038+0039, internal/kvkk paketi, 19 unit test
+- [x] Console API client (Sprint 2B): `apps/console/src/lib/api/kvkk.ts`
+- [x] Sprint 2C (commit `0eacdb1`): 5 sayfa (verbis, aydinlatma, dpa, dpia, acik-riza) fonksiyonel form, 5 useQuery + 7 useMutation
+- [x] guide sayfası Sprint 1'de hazır
+
+**Sprint 4 — Admin dual-control bypass (Task #54): ✅ TAMAM — commit `bec1926`**
+- [x] API liveview admin bypass + migration 0040 + provisionLiveKit helper refactor
+- [x] Console request-form + live-view page banner + types.ts admin_bypass
+- [x] RBAC 7 fn update (canExecuteDSRErasure + 6 diğer → admin dahil)
+- [x] ADR 0026 yazıldı (0020-0025 zaten kullanılmış)
+- [x] Integration test TestLiveView_AdminBypass yeşil
+
+**Sprint 5 — Operator handoff docs (Task #55): ✅ TAMAM — commit `26ec8e3`**
+- [x] `infra/runbooks/wave8-deploy.md` — 5 adım + rollback matrisi
+- [x] `docs/operations/faz5-wave2-cluster-bringup.md` — 6 adım cluster orchestrator
+- [x] `docs/operations/faz5-wave3-disaster-recovery.md` — restore drill + off-site + PITR
+- [x] 7 mevcut runbook 2026-04-14 stamp + Wave 9 checkpoint
+- [x] `infra/compose/keycloak/realm-personel.json` — mapper fix kalıcı
+
+**⚠️ Migration numarası conflict notu:** Sprint 4 agent 0040_liveview_admin_bypass kullandı. Sprint 3A'ya 0040-0044 demiştim — Sprint 3A rapor edince migration numaralarını 0041-0045'e rename edeceğim (git mv + dosya içinde `idx_liveview_admin_bypass` yoksa çakışma yok, sadece rename yeter).
 
 **Sprint 3 — Settings genişletme (Task #53):**
 - [ ] 10. `/settings/integrations/external-services` — MaxMind + CF + PD + Sentry input kartları
