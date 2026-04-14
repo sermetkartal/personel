@@ -73,7 +73,6 @@
     "comingSoon": "This module is being prepared",
     "comingSoonHint": "UI scaffold is ready; data-flow wiring is in progress."
   },
-
   "auth": {
     "login": {
       "title": "Admin Console",
@@ -113,7 +112,6 @@
       "forbidden": "You do not have permission to perform this action."
     }
   },
-
   "nav": {
     "dashboard": "Dashboard",
     "endpoints": "Endpoints",
@@ -146,14 +144,17 @@
       "tenants": "Tenants",
       "users": "Users",
       "integrations": "Integrations",
-      "profile": "Profile"
+      "profile": "Profile",
+      "externalServices": "External Services",
+      "tls": "TLS / Certificate",
+      "retention": "Retention",
+      "backup": "Backup"
     },
     "auditMenu": {
       "list": "Record List",
       "search": "Full-Text Search"
     }
   },
-
   "dashboard": {
     "title": "Dashboard",
     "subtitle": "System status and key metrics",
@@ -231,7 +232,6 @@
       "policyViolations": "Policy Violations"
     }
   },
-
   "endpoints": {
     "title": "Endpoints",
     "subtitle": "Manage enrolled agent endpoints",
@@ -329,7 +329,6 @@
       "expiresAt": "Expires At"
     }
   },
-
   "employees": {
     "title": "Employee Monitoring",
     "subtitle": "Today's activity rollup for every employee",
@@ -384,7 +383,6 @@
       }
     }
   },
-
   "reports": {
     "title": "Reports",
     "subtitle": "Employee activity analytics",
@@ -455,7 +453,6 @@
       "timestamp": "Error time"
     }
   },
-
   "liveView": {
     "title": "Live View",
     "subtitle": "Real-time screen monitoring sessions",
@@ -575,7 +572,6 @@
       "TERMINATED_BY_DPO": "Terminated by DPO"
     }
   },
-
   "dsr": {
     "title": "Data Subject Requests (KVKK m.11)",
     "subtitle": "Manage personal data subject access requests",
@@ -721,7 +717,6 @@
       "adminInitiatedHint": "This form is rarely used. Employees typically apply via the Transparency Portal."
     }
   },
-
   "legalHold": {
     "title": "Legal Hold",
     "subtitle": "Available to Data Protection Officer only",
@@ -757,7 +752,6 @@
       "warning": "After release, record TTLs will be recalculated and overdue records will be deleted."
     }
   },
-
   "evidence": {
     "title": "SOC 2 Evidence Locker",
     "subtitle": "Control-level evidence coverage matrix and auditor pack export",
@@ -780,7 +774,6 @@
     "historyHint": "Amber cells indicate no evidence was produced for that month (gap). Green shades intensify with evidence density.",
     "historyLoading": "Loading history..."
   },
-
   "destructionReports": {
     "title": "Destruction Reports",
     "subtitle": "6-month periodic data destruction reports (required by KVKK Regulation)",
@@ -804,7 +797,6 @@
       "outstandingHolds": "Outstanding Holds"
     }
   },
-
   "audit": {
     "title": "Audit Trail",
     "subtitle": "Immutable hash-chained audit log",
@@ -943,7 +935,6 @@
       }
     }
   },
-
   "policies": {
     "title": "Policies",
     "subtitle": "Manage agent monitoring policies",
@@ -1037,7 +1028,6 @@
       }
     }
   },
-
   "dlp": {
     "title": "DLP Settings",
     "subtitle": "Data Loss Prevention service status and opt-in ceremony",
@@ -1091,7 +1081,6 @@
       "disableBody": "To disable DLP: infra/scripts/dlp-disable.sh — This revokes the Secret ID, stops the service, and creates an audit record."
     }
   },
-
   "settings": {
     "title": "Settings",
     "subtitle": "System, tenant, and integration configuration",
@@ -1102,7 +1091,10 @@
       "users": "Users",
       "integrations": "Integrations",
       "evidence": "SOC 2 Evidence",
-      "profile": "Profile"
+      "profile": "Profile",
+      "tls": "TLS / Certificate",
+      "retention": "Retention",
+      "backup": "Backup"
     },
     "general": {
       "title": "General Settings",
@@ -1239,8 +1231,8 @@
       "saving": "Saving..."
     },
     "integrations": {
-      "title": "Integrations",
-      "subtitle": "HRIS, SIEM, and observability integrations",
+      "title": "External Service Integrations",
+      "subtitle": "Credentials for MaxMind, Cloudflare, PagerDuty, Slack and Sentry. Sensitive fields are sealed in Vault transit; GET responses are masked.",
       "scaffoldBadge": "Coming soon — integration in preparation",
       "keycloak": "Keycloak OIDC",
       "livekit": "LiveKit SFU",
@@ -1271,7 +1263,24 @@
       "dcrImmutableId": "DCR Immutable ID",
       "streamName": "Stream Name",
       "observabilityTitle": "Observability",
-      "observabilityHint": "These endpoints are provisioned and managed by the Docker Compose stack."
+      "observabilityHint": "These endpoints are provisioned and managed by the Docker Compose stack.",
+      "loading": "Loading…",
+      "statusEnabled": "Enabled",
+      "statusDisabled": "Disabled",
+      "enabledLabel": "Enable",
+      "save": "Save",
+      "saveSuccess": "{service} saved",
+      "saveError": "Save failed",
+      "testConnectionSoon": "Coming soon: test connection ships in Sprint 3C",
+      "delete": "Delete",
+      "deleteSuccess": "{service} integration deleted",
+      "deleteError": "Delete failed",
+      "deleteConfirmTitle": "Delete {service}?",
+      "deleteConfirmBody": "The integration record will be wiped from Vault. This cannot be undone.",
+      "deleteConfirm": "Delete",
+      "cancel": "Cancel",
+      "passwordMasked": "Current value is masked. Leave blank to keep unchanged.",
+      "maxmindHint": "Account 891169 is the pilot default. License key is loaded into the geo_ip collector."
     },
     "profile": {
       "title": "My Profile",
@@ -1284,9 +1293,171 @@
       "keycloakNote": "To change your account information, contact your Keycloak portal.",
       "changePassword": "Change Password"
     },
-    "newHold": "New Hold"
+    "newHold": "New Hold",
+    "tls": {
+      "title": "TLS / Certificate Authority",
+      "subtitle": "CA source for all 18 service TLS certificates. A change triggers rotation across the stack.",
+      "save": "Save",
+      "saveSuccess": "CA mode updated. Certificate rotation started.",
+      "saveError": "CA mode update failed",
+      "mode": {
+        "letsencrypt": {
+          "title": "Let's Encrypt",
+          "description": "Free 90-day certificates via ACME DNS-01, auto-renewed."
+        },
+        "internal": {
+          "title": "Internal (Vault PKI)",
+          "description": "Internal root CA, no external dependency. Pilot default.",
+          "badge": "Default"
+        },
+        "commercial": {
+          "title": "Commercial CA",
+          "description": "Sectigo / DigiCert / GlobalSign via CSR, lifetime ≥1 year."
+        }
+      },
+      "letsencrypt": {
+        "dnsProvider": "DNS Provider",
+        "email": "Email (ACME registration)",
+        "hint": "DNS-01 challenge requires API access on the selected provider. Manual mode requires hand-entry.",
+        "provider": {
+          "route53": "AWS Route 53",
+          "cloudflare": "Cloudflare",
+          "digitalocean": "DigitalOcean",
+          "manual": "Manual"
+        }
+      },
+      "internal": {
+        "headline": "Using Vault PKI",
+        "body": "The internal CA is managed by Vault's pki engine. No additional configuration required; rotation runs automatically on the cert-rotation timer."
+      },
+      "commercial": {
+        "issuer": "Certificate Authority",
+        "downloadCsr": "Download CSR",
+        "uploadChain": "Upload Certificate Chain",
+        "soon": "CSR download and chain upload will go live in Sprint 3C."
+      },
+      "rotationWarning": {
+        "title": "Warning: 18 services affected",
+        "body": "Changing the CA re-signs the certificates of every Personel service (API, Gateway, Vault, ClickHouse, NATS, MinIO, OpenSearch, Keycloak, Console, Portal plus 8 support services). Expect 5-10 minutes of interruption."
+      },
+      "confirm": {
+        "title": "Confirm CA mode change?",
+        "body": "This will rotate 18 service certificates. Notify users ahead of time if possible.",
+        "ok": "Yes, start rotation",
+        "cancel": "Cancel"
+      }
+    },
+    "retention": {
+      "title": "Retention Policy",
+      "subtitle": "How long each data category is kept. KVKK floors cannot be bypassed.",
+      "save": "Save",
+      "saveSuccess": "Retention policy updated",
+      "saveError": "Retention update failed",
+      "resetToMinimum": "Reset to KVKK Minimum",
+      "resetDone": "KVKK minimum values applied (not yet saved)",
+      "belowMinimum": "Below KVKK minimum: at least {min}",
+      "kvkkMinimum": "KVKK minimum: {min} {unit}",
+      "kvkkFloorTitle": "KVKK minimum retention applies",
+      "kvkkFloorBody": "Audit log is fixed at ≥5 years (KVKK art.26 and SOC 2); DSR artifacts at ≥10 years. The backend enforces these floors; this form validates ahead of time.",
+      "ttlWarning": {
+        "title": "ClickHouse TTL will be updated",
+        "body": "On save, the TTL policies for events, screenshots and keystroke tables are rewritten. This is a heavy operation and may take several minutes during the next compaction cycle."
+      },
+      "field": {
+        "auditYears": {
+          "label": "Audit Log"
+        },
+        "eventDays": {
+          "label": "Event Data"
+        },
+        "screenshotDays": {
+          "label": "Screenshots"
+        },
+        "keystrokeDays": {
+          "label": "Encrypted Keystroke"
+        },
+        "liveViewDays": {
+          "label": "Live View Session"
+        },
+        "dsrDays": {
+          "label": "DSR Artifacts"
+        }
+      },
+      "unit": {
+        "year": "years",
+        "day": "days"
+      }
+    },
+    "backup": {
+      "title": "Backup",
+      "subtitle": "Local and remote backup targets. Each target has its own retention and schedule.",
+      "loading": "Loading…",
+      "cancel": "Cancel",
+      "deleteConfirm": "Delete",
+      "runNow": "Run now",
+      "history": "History",
+      "retentionDays": "Retention (days)",
+      "lastRun": "Last run",
+      "lastStatus": "Last status",
+      "neverRun": "Never run",
+      "loadingRuns": "Loading history…",
+      "noRuns": "No runs yet.",
+      "startedAt": "Started",
+      "finishedAt": "Finished",
+      "status": "Status",
+      "size": "Size",
+      "sha": "SHA-256",
+      "inSite": {
+        "title": "In-site backup",
+        "hint": "Stored on the same host. Useful for fast restore after a crash, but not sufficient for DR.",
+        "enabled": "Enabled",
+        "notConfigured": "No in-site target configured.",
+        "addNow": "Add now",
+        "toggleSuccess": "State updated",
+        "toggleError": "Toggle failed"
+      },
+      "offsite": {
+        "title": "Off-site Storage",
+        "hint": "Backup to S3, Azure, GCS, SFTP, NFS or a MinIO peer. Required for DR scenarios.",
+        "add": "Add storage",
+        "empty": "No off-site storage configured."
+      },
+      "target": {
+        "toggleSuccess": "State updated",
+        "toggleError": "Toggle failed",
+        "deleteSuccess": "Target deleted",
+        "deleteError": "Delete failed",
+        "deleteConfirmTitle": "Delete {name}?",
+        "deleteConfirmBody": "The target will be removed but existing backup files on the remote side are left intact."
+      },
+      "run": {
+        "success": "Backup started",
+        "error": "Backup failed to start"
+      },
+      "add": {
+        "title": "New backup storage",
+        "description": "Pick a backend and enter credentials. Sensitive fields are sealed in Vault transit.",
+        "name": "Display name",
+        "namePlaceholder": "e.g. AWS S3 Frankfurt",
+        "kind": "Backend",
+        "configHeader": "Backend configuration",
+        "retention": "Retention (days)",
+        "enabled": "Enabled at creation",
+        "submit": "Create",
+        "success": "Backup target created",
+        "error": "Backup target creation failed"
+      },
+      "kind": {
+        "in_site_local": "Local disk",
+        "offsite_s3": "AWS S3 / S3-compatible",
+        "offsite_azure": "Azure Blob Storage",
+        "offsite_gcs": "Google Cloud Storage",
+        "offsite_sftp": "SFTP",
+        "offsite_nfs": "NFS mount",
+        "offsite_minio_peer": "MinIO peer cluster"
+      }
+    }
   },
-
   "silence": {
     "title": "Silence Management",
     "subtitle": "Monitor and acknowledge agent signal gaps",
@@ -1306,7 +1477,6 @@
       "confirm": "Acknowledge"
     }
   },
-
   "screenshots": {
     "title": "Screenshots",
     "restrictedRole": "Only Investigator and DPO roles can access.",
@@ -1319,7 +1489,6 @@
     "endpoint": "Endpoint",
     "sessionId": "Session"
   },
-
   "unauthorized": {
     "title": "Access Denied",
     "heading": "Access Denied",
@@ -1331,7 +1500,6 @@
     "backToDashboard": "Back to Dashboard",
     "backHome": "Return to Home"
   },
-
   "kvkk": {
     "sectionTitle": "KVKK Management",
     "sectionSubtitle": "Turkish Personal Data Protection Law compliance center",
@@ -1431,7 +1599,6 @@
       "searchPlaceholder": "Search employee..."
     }
   },
-
   "notifications": {
     "title": "Notifications",
     "ariaLabel": "Notifications ({count} unread)",
@@ -1467,7 +1634,6 @@
       }
     }
   },
-
   "errors": {
     "generic": "An unexpected error occurred. Please try again.",
     "network": "Cannot connect to the server. Please check your network connection.",
@@ -1487,7 +1653,6 @@
       "reset": "Reload Page"
     }
   },
-
   "notFound": {
     "title": "Page Not Found",
     "description": "The page you are looking for does not exist or may have been moved.",

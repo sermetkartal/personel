@@ -26,6 +26,9 @@ import {
   FileCheck2,
   FileSignature,
   ShieldAlert,
+  Plug,
+  Clock,
+  HardDrive,
 } from "lucide-react";
 import type { Action } from "@/lib/auth/rbac";
 
@@ -185,6 +188,30 @@ export function buildNavItems(locale: string): NavItem[] {
           icon: Users,
           href: `/${locale}/settings/users`,
           requiredAction: "manage:users",
+        },
+        {
+          key: "settingsMenu.externalServices",
+          icon: Plug,
+          href: `/${locale}/settings/integrations`,
+          requiredAction: "view:settings",
+        },
+        {
+          key: "settingsMenu.tls",
+          icon: Lock,
+          href: `/${locale}/settings/security/tls`,
+          requiredAction: "view:settings",
+        },
+        {
+          key: "settingsMenu.retention",
+          icon: Clock,
+          href: `/${locale}/settings/retention`,
+          requiredAction: "view:settings",
+        },
+        {
+          key: "settingsMenu.backup",
+          icon: HardDrive,
+          href: `/${locale}/settings/backup`,
+          requiredAction: "view:settings",
         },
       ],
     },

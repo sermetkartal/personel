@@ -73,7 +73,6 @@
     "comingSoon": "Bu modül hazırlanıyor",
     "comingSoonHint": "Arayüz iskeleti hazır, veri akışı entegrasyonu devam ediyor."
   },
-
   "auth": {
     "login": {
       "title": "Yönetici Konsolu",
@@ -113,7 +112,6 @@
       "forbidden": "Bu işlemi gerçekleştirme yetkiniz yok."
     }
   },
-
   "nav": {
     "dashboard": "Gösterge Paneli",
     "endpoints": "Uç Noktalar",
@@ -146,14 +144,17 @@
       "tenants": "Kiracılar",
       "users": "Kullanıcılar",
       "integrations": "Entegrasyonlar",
-      "profile": "Profil"
+      "profile": "Profil",
+      "externalServices": "Dış Servisler",
+      "tls": "TLS / Sertifika",
+      "retention": "Saklama Süreleri",
+      "backup": "Yedekleme"
     },
     "auditMenu": {
       "list": "Kayıt Listesi",
       "search": "Tam Metin Arama"
     }
   },
-
   "dashboard": {
     "title": "Gösterge Paneli",
     "subtitle": "Sistem durumu ve önemli metrikler",
@@ -231,7 +232,6 @@
       "policyViolations": "Politika İhlalleri"
     }
   },
-
   "endpoints": {
     "title": "Uç Noktalar",
     "subtitle": "Kayıtlı ajan uç noktalarını yönetin",
@@ -329,7 +329,6 @@
       "expiresAt": "Son Kullanma"
     }
   },
-
   "employees": {
     "title": "Çalışan İzleme",
     "subtitle": "Tüm çalışanların bugünkü aktivite özeti",
@@ -384,7 +383,6 @@
       }
     }
   },
-
   "reports": {
     "title": "Raporlar",
     "subtitle": "Çalışan aktivite analitiği",
@@ -455,7 +453,6 @@
       "timestamp": "Hata zamanı"
     }
   },
-
   "liveView": {
     "title": "Canlı İzleme",
     "subtitle": "Gerçek zamanlı ekran izleme oturumları",
@@ -575,7 +572,6 @@
       "TERMINATED_BY_DPO": "VKG Tarafından Kapatıldı"
     }
   },
-
   "dsr": {
     "title": "Veri Talepleri (KVKK m.11)",
     "subtitle": "Kişisel veri başvurularını yönetin",
@@ -721,7 +717,6 @@
       "adminInitiatedHint": "Bu form nadiren kullanılır. Genellikle çalışanlar Şeffaflık Portalı üzerinden başvurur."
     }
   },
-
   "legalHold": {
     "title": "Hukuki Saklama",
     "subtitle": "Yalnızca VKG tarafından kullanılabilir",
@@ -757,7 +752,6 @@
       "warning": "Saklama kaldırıldıktan sonra kayıtların TTL'i yeniden hesaplanacak ve zamanı geçmiş olanlar silinecektir."
     }
   },
-
   "evidence": {
     "title": "SOC 2 Kanıt Kasası",
     "subtitle": "TSC kontrol bazında kanıt kapsama matrisi ve denetçi paket dışa aktarımı",
@@ -780,7 +774,6 @@
     "historyHint": "Sarı hücreler o ay için kanıt üretilmediğini gösterir (gap). Yeşil tonlar kanıt yoğunluğuna göre koyulaşır.",
     "historyLoading": "Geçmiş yükleniyor..."
   },
-
   "destructionReports": {
     "title": "İmha Raporları",
     "subtitle": "6 aylık periyodik veri imha raporları (KVKK Yönetmelik gereği)",
@@ -804,7 +797,6 @@
       "outstandingHolds": "Devam Eden Saklama"
     }
   },
-
   "audit": {
     "title": "Denetim İzi",
     "subtitle": "Hash-zincirli değiştirilemez denetim kaydı",
@@ -943,7 +935,6 @@
       }
     }
   },
-
   "policies": {
     "title": "Politikalar",
     "subtitle": "Ajan izleme politikalarını yönetin",
@@ -1037,7 +1028,6 @@
       }
     }
   },
-
   "dlp": {
     "title": "DLP Ayarları",
     "subtitle": "Veri Kaybı Önleme hizmet durumu ve tören prosedürü",
@@ -1091,7 +1081,6 @@
       "disableBody": "DLP'yi devre dışı bırakmak için: infra/scripts/dlp-disable.sh — Bu işlem Secret ID'yi iptal eder, hizmeti durdurur ve denetim kaydı oluşturur."
     }
   },
-
   "settings": {
     "title": "Ayarlar",
     "subtitle": "Sistem, kiracı ve entegrasyon yapılandırmaları",
@@ -1102,7 +1091,10 @@
       "users": "Kullanıcılar",
       "integrations": "Entegrasyonlar",
       "evidence": "SOC 2 Kanıt Kasası",
-      "profile": "Profil"
+      "profile": "Profil",
+      "tls": "TLS / Sertifika",
+      "retention": "Saklama Süreleri",
+      "backup": "Yedekleme"
     },
     "general": {
       "title": "Genel Ayarlar",
@@ -1239,8 +1231,8 @@
       "saving": "Kaydediliyor..."
     },
     "integrations": {
-      "title": "Entegrasyonlar",
-      "subtitle": "HRIS, SIEM ve gözlemlenebilirlik entegrasyonları",
+      "title": "Dış Servis Entegrasyonları",
+      "subtitle": "MaxMind, Cloudflare, PagerDuty, Slack ve Sentry için kimlik bilgileri. Hassas alanlar Vault transit ile şifrelenir; GET yanıtlarında maskelenir.",
       "scaffoldBadge": "Yakında — entegrasyon hazırlanıyor",
       "keycloak": "Keycloak OIDC",
       "livekit": "LiveKit SFU",
@@ -1271,7 +1263,24 @@
       "dcrImmutableId": "DCR Immutable ID",
       "streamName": "Stream Adı",
       "observabilityTitle": "Gözlemlenebilirlik",
-      "observabilityHint": "Bu uçlar Docker Compose yığını tarafından sağlanır ve yönetilir."
+      "observabilityHint": "Bu uçlar Docker Compose yığını tarafından sağlanır ve yönetilir.",
+      "loading": "Yükleniyor...",
+      "statusEnabled": "Etkin",
+      "statusDisabled": "Devre Dışı",
+      "enabledLabel": "Etkinleştir",
+      "save": "Kaydet",
+      "saveSuccess": "{service} kaydedildi",
+      "saveError": "Kaydetme başarısız",
+      "testConnectionSoon": "Yakında: Test bağlantısı Sprint 3C ile gelecek",
+      "delete": "Sil",
+      "deleteSuccess": "{service} entegrasyonu silindi",
+      "deleteError": "Silme başarısız",
+      "deleteConfirmTitle": "{service} silinsin mi?",
+      "deleteConfirmBody": "Entegrasyon kaydı Vault'tan temizlenecek. Bu işlem geri alınamaz.",
+      "deleteConfirm": "Sil",
+      "cancel": "Vazgeç",
+      "passwordMasked": "Mevcut değer maskelenmiştir. Boş bırakırsanız değişmez.",
+      "maxmindHint": "Hesap 891169 pilot varsayılanıdır. License key geo_ip collector'ına yüklenir."
     },
     "profile": {
       "title": "Profilim",
@@ -1284,9 +1293,171 @@
       "keycloakNote": "Hesap bilgilerinizi değiştirmek için Keycloak portalına başvurunuz.",
       "changePassword": "Parola Değiştir"
     },
-    "newHold": "Yeni Saklama"
+    "newHold": "Yeni Saklama",
+    "tls": {
+      "title": "TLS / Sertifika Otoritesi",
+      "subtitle": "18 servisin TLS sertifikası için CA kaynağı. Değişim tüm servislerin rotasyonunu tetikler.",
+      "save": "Kaydet",
+      "saveSuccess": "CA modu güncellendi. Sertifika rotasyonu başlatıldı.",
+      "saveError": "CA modu güncellenemedi",
+      "mode": {
+        "letsencrypt": {
+          "title": "Let's Encrypt",
+          "description": "ACME DNS-01 ile ücretsiz 90 günlük sertifikalar, otomatik yenileme."
+        },
+        "internal": {
+          "title": "Dahili (Vault PKI)",
+          "description": "Dahili root CA, dış bağımlılık yok. Pilotta varsayılan.",
+          "badge": "Varsayılan"
+        },
+        "commercial": {
+          "title": "Ticari CA",
+          "description": "Sectigo / DigiCert / GlobalSign gibi ticari CA, CSR bazlı ömür ≥1 yıl."
+        }
+      },
+      "letsencrypt": {
+        "dnsProvider": "DNS Sağlayıcı",
+        "email": "E-posta (ACME kayıt)",
+        "hint": "DNS-01 challenge için, seçilen sağlayıcıda API erişimi gerekir. Manuel modda çağrılar elle girilir.",
+        "provider": {
+          "route53": "AWS Route 53",
+          "cloudflare": "Cloudflare",
+          "digitalocean": "DigitalOcean",
+          "manual": "Manuel"
+        }
+      },
+      "internal": {
+        "headline": "Vault PKI kullanılıyor",
+        "body": "Dahili CA, Vault'un pki engine'inden yönetilir. Ek yapılandırma gerekmez; rotasyon cert-rotation zamanlayıcısı tarafından otomatik yapılır."
+      },
+      "commercial": {
+        "issuer": "Sertifika Otoritesi",
+        "downloadCsr": "CSR İndir",
+        "uploadChain": "Sertifika Zinciri Yükle",
+        "soon": "CSR indirme ve zincir yükleme Sprint 3C ile aktifleşecek."
+      },
+      "rotationWarning": {
+        "title": "Dikkat: 18 servis etkilenir",
+        "body": "CA değişimi tüm Personel servislerinin (API, Gateway, Vault, ClickHouse, NATS, MinIO, OpenSearch, Keycloak, Console, Portal ve 8 destek servisi) sertifikalarını yeniden imzalar. Yaklaşık 5-10 dakikalık kesinti olabilir."
+      },
+      "confirm": {
+        "title": "CA modunu değiştirmeyi onaylıyor musunuz?",
+        "body": "Bu işlem 18 servisin sertifikasını rotasyona alacaktır. Onaylıyorsanız sistem kullanıcılarını önceden bilgilendirmeniz önerilir.",
+        "ok": "Evet, Rotasyonu Başlat",
+        "cancel": "Vazgeç"
+      }
+    },
+    "retention": {
+      "title": "Saklama Politikası",
+      "subtitle": "Her veri kategorisi için tutulma süresi. KVKK zeminleri altına inilemez.",
+      "save": "Kaydet",
+      "saveSuccess": "Saklama politikası güncellendi",
+      "saveError": "Saklama politikası güncellenemedi",
+      "resetToMinimum": "KVKK Minimuma Dön",
+      "resetDone": "KVKK minimum değerleri uygulandı (henüz kaydedilmedi)",
+      "belowMinimum": "KVKK minimumun altında: en az {min}",
+      "kvkkMinimum": "KVKK minimum: {min} {unit}",
+      "kvkkFloorTitle": "KVKK minimum saklama süreleri uygulanır",
+      "kvkkFloorBody": "Denetim kaydı KVKK m.26 ve SOC 2 gereği 5 yıl, DSR artifactları 10 yıl altına inilemez. Backend bu kuralı zorlar; form da yardımcı doğrulama yapar.",
+      "ttlWarning": {
+        "title": "ClickHouse TTL güncellenir",
+        "body": "Kaydet tuşuna basıldığında olay (event), ekran görüntüsü (screenshot) ve keystroke tablolarındaki TTL politikaları otomatik güncellenir. Bu ağır bir işlem olabilir ve sıkıştırma döngüsü sırasında birkaç dakika sürebilir."
+      },
+      "field": {
+        "auditYears": {
+          "label": "Denetim Kaydı (audit log)"
+        },
+        "eventDays": {
+          "label": "Olay Verisi (events)"
+        },
+        "screenshotDays": {
+          "label": "Ekran Görüntüsü"
+        },
+        "keystrokeDays": {
+          "label": "Şifreli Keystroke"
+        },
+        "liveViewDays": {
+          "label": "Canlı İzleme Oturumu"
+        },
+        "dsrDays": {
+          "label": "DSR Artifact"
+        }
+      },
+      "unit": {
+        "year": "yıl",
+        "day": "gün"
+      }
+    },
+    "backup": {
+      "title": "Yedekleme",
+      "subtitle": "Yerel ve uzak yedek hedefleri. Her hedef kendi saklama politikası ve zamanlamasına sahiptir.",
+      "loading": "Yükleniyor...",
+      "cancel": "Vazgeç",
+      "deleteConfirm": "Sil",
+      "runNow": "Şimdi Yedekle",
+      "history": "Geçmiş",
+      "retentionDays": "Saklama (gün)",
+      "lastRun": "Son çalıştırma",
+      "lastStatus": "Son durum",
+      "neverRun": "Hiç çalıştırılmadı",
+      "loadingRuns": "Geçmiş yükleniyor...",
+      "noRuns": "Henüz yedekleme çalıştırılmadı.",
+      "startedAt": "Başlangıç",
+      "finishedAt": "Bitiş",
+      "status": "Durum",
+      "size": "Boyut",
+      "sha": "SHA-256",
+      "inSite": {
+        "title": "Yerel Yedek (in-site)",
+        "hint": "Aynı sunucuda saklanır. Sistem çökmesi durumunda hızlı kurtarma için kullanılır; uzak ofis/DR için yeterli değildir.",
+        "enabled": "Etkin",
+        "notConfigured": "Henüz yerel yedek hedefi tanımlanmamış.",
+        "addNow": "Şimdi ekle",
+        "toggleSuccess": "Durum güncellendi",
+        "toggleError": "Durum güncellenemedi"
+      },
+      "offsite": {
+        "title": "Uzak Depolama",
+        "hint": "S3, Azure, GCS, SFTP, NFS veya başka bir MinIO peer'ına yedekleme. DR senaryoları için gerekli.",
+        "add": "Yeni Depolama Ekle",
+        "empty": "Henüz uzak depolama tanımlanmamış."
+      },
+      "target": {
+        "toggleSuccess": "Durum güncellendi",
+        "toggleError": "Durum güncellenemedi",
+        "deleteSuccess": "Depolama silindi",
+        "deleteError": "Silme başarısız",
+        "deleteConfirmTitle": "{name} silinsin mi?",
+        "deleteConfirmBody": "Yedek hedefi kaldırılacak, ancak uzak taraftaki mevcut yedek dosyaları silinmeyecek."
+      },
+      "run": {
+        "success": "Yedekleme başlatıldı",
+        "error": "Yedekleme başlatılamadı"
+      },
+      "add": {
+        "title": "Yeni Yedek Depolama",
+        "description": "Hedef türünü seçin ve kimlik bilgilerini girin. Hassas alanlar Vault transit ile şifrelenir.",
+        "name": "Görünen Ad",
+        "namePlaceholder": "Örn: AWS S3 Frankfurt",
+        "kind": "Depolama Türü",
+        "configHeader": "Backend Yapılandırması",
+        "retention": "Saklama (gün)",
+        "enabled": "Başlangıçta etkin",
+        "submit": "Oluştur",
+        "success": "Yedek hedefi oluşturuldu",
+        "error": "Yedek hedefi oluşturulamadı"
+      },
+      "kind": {
+        "in_site_local": "Yerel Disk",
+        "offsite_s3": "AWS S3 / S3-uyumlu",
+        "offsite_azure": "Azure Blob Storage",
+        "offsite_gcs": "Google Cloud Storage",
+        "offsite_sftp": "SFTP",
+        "offsite_nfs": "NFS Mount",
+        "offsite_minio_peer": "MinIO Peer Kümesi"
+      }
+    }
   },
-
   "silence": {
     "title": "Sessizlik Yönetimi",
     "subtitle": "Ajan sinyal boşluklarını izleyin ve onaylayın",
@@ -1306,7 +1477,6 @@
       "confirm": "Onayla"
     }
   },
-
   "screenshots": {
     "title": "Ekran Görüntüleri",
     "restrictedRole": "Yalnızca Araştırmacı ve VKG rolleri erişebilir.",
@@ -1319,7 +1489,6 @@
     "endpoint": "Uç Nokta",
     "sessionId": "Oturum"
   },
-
   "unauthorized": {
     "title": "Erişim Reddedildi",
     "heading": "Erişim Reddedildi",
@@ -1331,7 +1500,6 @@
     "backToDashboard": "Panele Dön",
     "backHome": "Ana Sayfaya Dön"
   },
-
   "kvkk": {
     "sectionTitle": "KVKK Yönetimi",
     "sectionSubtitle": "6698 Sayılı Kişisel Verilerin Korunması Kanunu uyumluluk merkezi",
@@ -1431,7 +1599,6 @@
       "searchPlaceholder": "Çalışan ara..."
     }
   },
-
   "notifications": {
     "title": "Bildirimler",
     "ariaLabel": "Bildirimler ({count} okunmamış)",
@@ -1467,7 +1634,6 @@
       }
     }
   },
-
   "errors": {
     "generic": "Beklenmeyen bir hata oluştu. Lütfen tekrar deneyin.",
     "network": "Sunucuya bağlanılamıyor. Ağ bağlantınızı kontrol edin.",
@@ -1487,7 +1653,6 @@
       "reset": "Sayfayı Yenile"
     }
   },
-
   "notFound": {
     "title": "Sayfa Bulunamadı",
     "description": "Aradığınız sayfa mevcut değil veya taşınmış olabilir.",

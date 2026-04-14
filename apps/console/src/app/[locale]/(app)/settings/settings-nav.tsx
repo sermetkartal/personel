@@ -11,6 +11,9 @@ import {
   Plug,
   FileArchive,
   UserCircle,
+  Lock,
+  Clock,
+  HardDrive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { can } from "@/lib/auth/rbac";
@@ -60,6 +63,25 @@ export function SettingsNav({ locale, role }: SettingsNavProps): JSX.Element {
       href: `/${locale}/settings/integrations`,
       labelKey: "integrations",
       icon: Plug,
+      requiredAction: "view:settings",
+    },
+    {
+      href: `/${locale}/settings/security/tls`,
+      labelKey: "tls",
+      icon: Lock,
+      requiredAction: "view:settings",
+    },
+    {
+      href: `/${locale}/settings/retention`,
+      labelKey: "retention",
+      icon: Clock,
+      requiredAction: "view:settings",
+    },
+    {
+      href: `/${locale}/settings/backup`,
+      labelKey: "backup",
+      icon: HardDrive,
+      requiredAction: "view:settings",
     },
     {
       href: `/${locale}/evidence`,
