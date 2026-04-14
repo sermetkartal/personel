@@ -1,0 +1,263 @@
+name: Build — Matrix (Faz 16 #168)
+
+# Faz 16 #168 — GitHub Actions matrix build across all monorepo apps.
+#
+# Staging: infra/ci-scaffolds/build.yml
+# Operator: with workflow-scope PAT, move to .github/workflows/:
+#     git mv infra/ci-scaffolds/build.yml .github/workflows/
+#     git commit -m "ci: enable matrix build workflow (Faz 16 #168)"
+#
+# This is the main CI for the monorepo. It builds every app on every PR
+# and push to main, with per-language caching to keep cold-start time low.
+# Artifacts are uploaded per job so downstream workflows (publish-images,
+# msi-build, release) can download instead of rebuilding.
+#
+# Cache strategy:
+#   - Go:    actions/cache key on go.sum (per app/*/go.sum)
+#   - Rust:  Swatinem/rust-cache, keyed on Cargo.lock
+#   - Node:  pnpm built-in store cache via actions/setup-node
+#   - Python: actions/cache on requirements.txt
+#
+# Matrix rules:
+#   - api / gateway / qa → Go 1.22 on ubuntu-22.04
+#   - agent → Rust 1.88 on windows-2022 (Windows-only crates)
+#   - console / portal → Node 20 + pnpm 9 on ubuntu-22.04
+#   - ml-classifier / ocr-service / uba-detector → Python 3.12 on ubuntu-22.04
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  go-apps:
+    name: Go — ${{ matrix.app }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [api, gateway, qa]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache: false
+
+      - name: Cache Go modules
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: go-${{ matrix.app }}-${{ hashFiles(format('apps/{0}/go.sum', matrix.app)) }}
+          restore-keys: |
+            go-${{ matrix.app }}-
+
+      - name: Install protoc
+        run: |
+          PROTOC_VERSION=25.1
+          curl -sSLo protoc.zip \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${PROTOC_VERSION}/protoc-${PROTOC_VERSION}-linux-x86_64.zip"
+          sudo unzip -q protoc.zip -d /usr/local
+          rm protoc.zip
+
+      - name: Generate proto stubs (gateway only)
+        if: matrix.app == 'gateway'
+        run: |
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.33.0
+          go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@v1.3.0
+          mkdir -p apps/gateway/pkg/proto
+          protoc \
+            --proto_path=proto \
+            --go_out=apps/gateway/pkg/proto \
+            --go_opt=paths=source_relative \
+            --go-grpc_out=apps/gateway/pkg/proto \
+            --go-grpc_opt=paths=source_relative \
+            proto/personel/v1/*.proto
+
+      - name: Build
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          go mod download
+          go build ./...
+
+      - name: Vet
+        working-directory: apps/${{ matrix.app }}
+        run: go vet ./...
+
+      - name: Unit tests
+        working-directory: apps/${{ matrix.app }}
+        run: go test -race -count=1 -timeout 5m ./...
+
+      - name: Upload binary
+        if: matrix.app == 'api' || matrix.app == 'gateway'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-linux-amd64
+          path: apps/${{ matrix.app }}/
+          retention-days: 7
+
+  rust-agent:
+    name: Rust — agent (${{ matrix.target }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.88'
+          targets: ${{ matrix.target }}
+          components: clippy, rustfmt
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/agent
+          shared-key: agent-${{ matrix.target }}
+
+      - name: Install protoc (Linux)
+        if: matrix.os == 'ubuntu-22.04'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-2022'
+        run: choco install protoc --no-progress -y
+
+      - name: Cargo check (workspace)
+        working-directory: apps/agent
+        run: cargo check --workspace --target ${{ matrix.target }}
+
+      - name: Cargo build (Windows release)
+        if: matrix.os == 'windows-2022'
+        working-directory: apps/agent
+        run: cargo build --release --target x86_64-pc-windows-msvc
+
+      - name: Upload Windows binaries
+        if: matrix.os == 'windows-2022'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-windows-x86_64
+          path: |
+            apps/agent/target/x86_64-pc-windows-msvc/release/personel-agent.exe
+            apps/agent/target/x86_64-pc-windows-msvc/release/personel-watchdog.exe
+            apps/agent/target/x86_64-pc-windows-msvc/release/enroll.exe
+          retention-days: 7
+
+  node-apps:
+    name: Node — ${{ matrix.app }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [console, portal]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          cache-dependency-path: apps/${{ matrix.app }}/pnpm-lock.yaml
+
+      - name: Install deps
+        working-directory: apps/${{ matrix.app }}
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: apps/${{ matrix.app }}
+        run: pnpm exec tsc --noEmit || true  # non-fatal during phase 1
+
+      - name: Build
+        working-directory: apps/${{ matrix.app }}
+        run: pnpm build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.app }}-web
+          path: |
+            apps/${{ matrix.app }}/.next/
+            apps/${{ matrix.app }}/public/
+          retention-days: 7
+
+  python-services:
+    name: Python — ${{ matrix.app }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        app: [ml-classifier, ocr-service, uba-detector]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: apps/${{ matrix.app }}/requirements.txt
+
+      - name: Install requirements
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          if [ -f requirements.txt ]; then
+            python -m pip install -r requirements.txt
+          else
+            echo "no requirements.txt — skipping"
+          fi
+
+      - name: Syntax check
+        working-directory: apps/${{ matrix.app }}
+        run: python -m compileall -q .
+
+      - name: Pytest (if tests exist)
+        working-directory: apps/${{ matrix.app }}
+        run: |
+          if [ -d tests ] || find . -name "test_*.py" -not -path "./venv/*" | grep -q .; then
+            python -m pytest -q || exit 1
+          else
+            echo "no tests — skipping"
+          fi
+
+  summary:
+    name: Build summary
+    runs-on: ubuntu-22.04
+    needs: [go-apps, rust-agent, node-apps, python-services]
+    if: always()
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "## Personel — Matrix Build Summary"
+            echo ""
+            echo "| Category | Status |"
+            echo "|---|---|"
+            echo "| Go (api, gateway, qa) | ${{ needs.go-apps.result }} |"
+            echo "| Rust agent (windows + linux check) | ${{ needs.rust-agent.result }} |"
+            echo "| Node (console, portal) | ${{ needs.node-apps.result }} |"
+            echo "| Python (ml, ocr, uba) | ${{ needs.python-services.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"

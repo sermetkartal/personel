@@ -1,0 +1,173 @@
+name: Release — Automated (Faz 16 #172)
+
+# Faz 16 #172 — Release automation with semver tag, conventional-commit
+# changelog generation, signed artifact attachment, and GitHub release
+# creation with Discord/Slack notification.
+#
+# Staging: infra/ci-scaffolds/release.yml
+# Operator: mv to .github/workflows/ with workflow-scope PAT.
+#
+# Trigger: push of a semver tag matching v*.*.*
+#
+# Flow:
+#   1. Validate tag format (vMAJOR.MINOR.PATCH or prerelease)
+#   2. Generate changelog from git-cliff (conventional commits since last tag)
+#   3. Download MSI artifact from msi-build workflow (waits if not ready)
+#   4. Download SBOM artifacts from publish-images workflow
+#   5. Create source tarball (signed with cosign blob-signing)
+#   6. Create GitHub release with changelog body
+#   7. Attach: MSI, source tarball, SBOMs, images-manifest.json
+#   8. Post Discord + Slack webhook notification
+#
+# Semver policy: docs/development/semver-policy.md (Turkish)
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'v*.*.*-*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to release (vX.Y.Z)'
+        required: true
+
+permissions:
+  contents: write
+  packages: read
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    name: Create release
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "::error::Tag '$TAG' does not match semver"
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
+          if [[ "$TAG" == *-* ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install git-cliff
+        uses: kenji-miyake/setup-git-cliff@v2
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          git-cliff --latest --strip header > RELEASE_NOTES.md
+          {
+            echo 'body<<EOF_BODY'
+            cat RELEASE_NOTES.md
+            echo EOF_BODY
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Download MSI artifact
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: msi-build.yml
+          name_is_regexp: true
+          name: 'personel-agent-msi.*'
+          path: ./release-assets/
+          if_no_artifact_found: warn
+
+      - name: Download SBOM artifacts
+        uses: dawidd6/action-download-artifact@v3
+        continue-on-error: true
+        with:
+          workflow: publish-images.yml
+          name_is_regexp: true
+          name: '^sbom-.*'
+          path: ./release-assets/sboms/
+          if_no_artifact_found: warn
+
+      - name: Create source tarball
+        run: |
+          set -e
+          mkdir -p release-assets
+          git archive --format tar.gz \
+            --prefix "personel-${{ steps.tag.outputs.version }}/" \
+            -o release-assets/personel-${{ steps.tag.outputs.version }}-source.tar.gz \
+            "${{ steps.tag.outputs.tag }}"
+
+      - name: Sign source tarball (cosign keyless blob)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          curl -sSLo cosign https://github.com/sigstore/cosign/releases/latest/download/cosign-linux-amd64
+          chmod +x cosign
+          ./cosign sign-blob --yes \
+            --output-signature release-assets/personel-${{ steps.tag.outputs.version }}-source.tar.gz.sig \
+            --output-certificate release-assets/personel-${{ steps.tag.outputs.version }}-source.tar.gz.crt \
+            release-assets/personel-${{ steps.tag.outputs.version }}-source.tar.gz
+
+      - name: Write images manifest
+        run: |
+          {
+            echo '{'
+            echo '  "version": "${{ steps.tag.outputs.version }}",'
+            echo '  "tag": "${{ steps.tag.outputs.tag }}",'
+            echo '  "images": ['
+            first=1
+            for svc in api gateway enricher console portal ml-classifier ocr-service uba-detector; do
+              [ $first -eq 1 ] && first=0 || echo ','
+              printf '    "ghcr.io/%s/personel-%s:%s"' "${{ github.repository_owner }}" "$svc" "${{ steps.tag.outputs.version }}"
+            done
+            echo
+            echo '  ]'
+            echo '}'
+          } > release-assets/images-manifest.json
+
+      - name: Create GitHub release
+        id: gh_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: Personel ${{ steps.tag.outputs.tag }}
+          body: ${{ steps.changelog.outputs.body }}
+          prerelease: ${{ steps.tag.outputs.prerelease }}
+          files: |
+            release-assets/*.msi
+            release-assets/*.tar.gz
+            release-assets/*.sig
+            release-assets/*.crt
+            release-assets/sboms/**/*
+            release-assets/images-manifest.json
+          generate_release_notes: false
+
+      - name: Notify Slack
+        if: ${{ vars.SLACK_RELEASE_WEBHOOK_URL != '' }}
+        env:
+          SLACK_URL: ${{ vars.SLACK_RELEASE_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"text\":\"*Personel ${{ steps.tag.outputs.tag }}* yayınlandı — ${{ steps.gh_release.outputs.url }}\"}" \
+            "$SLACK_URL"
+
+      - name: Notify Discord
+        if: ${{ vars.DISCORD_RELEASE_WEBHOOK_URL != '' }}
+        env:
+          DISCORD_URL: ${{ vars.DISCORD_RELEASE_WEBHOOK_URL }}
+        run: |
+          curl -sS -X POST -H 'Content-Type: application/json' \
+            -d "{\"content\":\"**Personel ${{ steps.tag.outputs.tag }}** released → ${{ steps.gh_release.outputs.url }}\"}" \
+            "$DISCORD_URL"

@@ -61,6 +61,76 @@
 | [compliance/iltica-silme-politikasi.md](compliance/iltica-silme-politikasi.md) | TR | İmha/silme politikası |
 | [compliance/verbis-kayit-rehberi.md](compliance/verbis-kayit-rehberi.md) | TR | VERBİS kayıt rehberi |
 
+## Operations / İşletim (Faz 5-13)
+
+| File | Lang | Description |
+|---|---|---|
+| [operations/installation-guide.md](operations/installation-guide.md) | TR | Pilot kurulum rehberi |
+| [operations/ops-runbook.md](operations/ops-runbook.md) | TR | Başlat/durdur/yeniden başlat + sorun giderme |
+| [operations/troubleshooting.md](operations/troubleshooting.md) | TR | Sorun giderme kılavuzu |
+| [operations/backup-restore.md](operations/backup-restore.md) | TR | Backup + restore prosedürleri |
+| [operations/admin-onboarding.md](operations/admin-onboarding.md) | TR | Yeni admin onboarding |
+| [operations/pilot-walkthrough.md](operations/pilot-walkthrough.md) | TR | **6 senaryo demo akışı** (Faz 17 #188) |
+| [operations/postgres-replication.md](operations/postgres-replication.md) | TR | Postgres replica bring-up |
+| [operations/postgres-tls-migration.md](operations/postgres-tls-migration.md) | TR | Postgres TLS migration |
+| [operations/clickhouse-cluster.md](operations/clickhouse-cluster.md) | TR | ClickHouse 2-node + keeper |
+| [operations/nats-minio-cluster.md](operations/nats-minio-cluster.md) | TR | NATS cluster + MinIO distributed |
+| [operations/nats-prod-auth-migration.md](operations/nats-prod-auth-migration.md) | TR | NATS operator JWT migration |
+| [operations/minio-worm-migration.md](operations/minio-worm-migration.md) | TR | MinIO Object Lock (Compliance) migration |
+| [operations/opensearch-keycloak-cluster.md](operations/opensearch-keycloak-cluster.md) | TR | OpenSearch + Keycloak HA |
+| [operations/vault-prod-migration.md](operations/vault-prod-migration.md) | TR | Vault prod ceremony |
+| [operations/all-services-tls-migration.md](operations/all-services-tls-migration.md) | TR | 18 servis TLS rotasyonu |
+| [operations/secret-rotation.md](operations/secret-rotation.md) | TR | Secret rotation automation |
+| [operations/healthcheck-restoration.md](operations/healthcheck-restoration.md) | TR | `service_started` → `service_healthy` |
+| [operations/registry-policies.md](operations/registry-policies.md) | TR | Container image registry policies |
+| [operations/code-signing.md](operations/code-signing.md) | TR | EV code signing setup |
+| [operations/gpo-deployment.md](operations/gpo-deployment.md) | TR | GPO / Intune deployment |
+| [operations/network-segmentation.md](operations/network-segmentation.md) | TR | Ağ segmentasyonu |
+| [operations/bastion.md](operations/bastion.md) | TR | Bastion host config |
+| [operations/vpn-setup.md](operations/vpn-setup.md) | TR | VPN setup rehberi |
+| [operations/grafana-tenant-isolation.md](operations/grafana-tenant-isolation.md) | TR | Grafana tenant isolation |
+| [operations/cost-monitoring.md](operations/cost-monitoring.md) | TR | Maliyet izleme scaffold'u |
+| [operations/chaos-scenarios/](operations/chaos-scenarios/) | TR | Chaos engineering scenarios |
+
+## Policies / ISO 27001 + SOC 2 Type II
+
+| File | Lang | Description |
+|---|---|---|
+| [policies/access-review.md](policies/access-review.md) | TR+EN | Çeyrek dönem access review policy |
+| [policies/change-management.md](policies/change-management.md) | TR+EN | Change management policy |
+| [policies/incident-response.md](policies/incident-response.md) | TR+EN | Incident response policy |
+| [policies/vendor-management.md](policies/vendor-management.md) | TR+EN | Vendor management policy |
+| [policies/business-continuity-disaster-recovery.md](policies/business-continuity-disaster-recovery.md) | TR+EN | BCP/DR policy |
+
+## Development
+
+| File | Lang | Description |
+|---|---|---|
+| [development/semver-policy.md](development/semver-policy.md) | EN | Semver + release tagging policy |
+
+## Product / Strateji
+
+| File | Description |
+|---|---|
+| [product/competitive-analysis.md](product/competitive-analysis.md) | Teramind / ActivTrak / Veriato / Insightful / Safetica teardown |
+
+## Sales / Demo / POC
+
+| File | Description |
+|---|---|
+| [sales/one-pager-tr.md](sales/one-pager-tr.md) | Tek sayfalık ürün özeti |
+| [sales/demo-deck-outline.md](sales/demo-deck-outline.md) | Demo sunumu iskeleti |
+| [sales/poc-guide.md](sales/poc-guide.md) | POC kurulum rehberi |
+| [sales/roi-calculator-tr.md](sales/roi-calculator-tr.md) | ROI hesaplama dokümanı |
+| [sales/sales-faq-tr.md](sales/sales-faq-tr.md) | Satış SSS |
+
+## User Manuals / Kullanıcı Kılavuzları
+
+| File | Description |
+|---|---|
+| [user-manuals/admin-manual-tr.md](user-manuals/admin-manual-tr.md) | Admin kullanıcı kılavuzu |
+| [user-manuals/employee-manual-tr.md](user-manuals/employee-manual-tr.md) | Çalışan kullanıcı kılavuzu |
+
 ## Proto (Source of Truth)
 
 - `proto/personel/v1/common.proto`

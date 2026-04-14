@@ -5,10 +5,10 @@
 //! dependencies and compiles on Linux/macOS for developer ergonomics.
 
 #![deny(unsafe_code)]
-// Reality check 2026-04-11: temporarily relaxed from `deny` to `warn` because
-// several error enum fields and event struct fields lack docs. Tech debt:
-// restore to `deny(missing_docs)` in a dedicated polish sprint.
-#![warn(missing_docs)]
+// 2026-04-14 polish pass (#190): all error enum fields and event struct
+// fields now documented. Formal lint stance restored to
+// `deny(missing_docs)`; any new undocumented public item is a compile error.
+#![deny(missing_docs)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::module_name_repetitions)]
 

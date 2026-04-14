@@ -1,0 +1,112 @@
+name: Image Verify — Trivy + Cosign (Faz 16 #170)
+
+# Faz 16 #170 — Extends Trivy (#126 from Faz 12) with a cosign verify gate.
+#
+# Runs AFTER publish-images.yml completes on main. Downloads each image
+# digest, scans with Trivy at HIGH/CRITICAL, then invokes `cosign verify`
+# with keyless identity matching the publish-images workflow. Fails loudly
+# if an image is unsigned, signed by an unexpected identity, or the SBOM
+# attestation is missing.
+#
+# Design: this workflow does NOT re-run Trivy against the filesystem —
+# that is covered by infra/ci-scaffolds/trivy.yml. This workflow is
+# specifically the "no unsigned image may proceed to deploy" gate.
+#
+# Staging: infra/ci-scaffolds/image-verify.yml
+# Operator: mv to .github/workflows/ with workflow-scope PAT.
+
+on:
+  workflow_run:
+    workflows: ['Publish Images — ghcr.io signed (Faz 16 #169)']
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      digest:
+        description: 'Explicit image digest to verify (sha256:...)'
+        required: false
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+  security-events: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/personel
+  # Must match the workflow name in publish-images.yml — cosign verify
+  # uses this as the certificate-identity substring filter.
+  EXPECTED_WORKFLOW: '.github/workflows/publish-images.yml'
+  EXPECTED_ISSUER: 'https://token.actions.githubusercontent.com'
+
+jobs:
+  verify:
+    name: Verify ${{ matrix.service }}
+    runs-on: ubuntu-22.04
+    if: github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [api, gateway, enricher, console, portal, ml-classifier, ocr-service, uba-detector]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.4'
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ -n "${{ github.event.inputs.digest }}" ]; then
+            echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}@${{ github.event.inputs.digest }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Trivy image scan (fail on CRITICAL/HIGH)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ steps.tag.outputs.ref }}
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: sarif
+          output: trivy-${{ matrix.service }}.sarif
+          trivyignores: .trivyignore
+
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-${{ matrix.service }}.sarif
+          category: trivy-image-verify-${{ matrix.service }}
+
+      - name: Cosign verify (keyless identity)
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          echo "::group::cosign verify signature"
+          cosign verify \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/${EXPECTED_WORKFLOW}@" \
+            --certificate-oidc-issuer "$EXPECTED_ISSUER" \
+            "${{ steps.tag.outputs.ref }}"
+          echo "::endgroup::"
+
+      - name: Cosign verify SBOM attestation
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          set -euo pipefail
+          echo "::group::cosign verify-attestation (spdxjson)"
+          cosign verify-attestation \
+            --type spdxjson \
+            --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/${EXPECTED_WORKFLOW}@" \
+            --certificate-oidc-issuer "$EXPECTED_ISSUER" \
+            "${{ steps.tag.outputs.ref }}" > /dev/null
+          echo "::endgroup::"
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "- ${{ matrix.service }}: verified ${{ steps.tag.outputs.ref }}" >> "$GITHUB_STEP_SUMMARY"

@@ -2,11 +2,62 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.4 — Faz 1+2+3+4 COMPLETE; Faz 5 Wave 1 + Wave 2 LIVE deployed: 16/21 (items 41-58 hariç 59,60,61). vm3+vm5 cluster çalışıyor (postgres replica, NATS R=2, MinIO mirror, ClickHouse 2-node + 2 keeper, OpenSearch 2-node green, Keycloak HA Infinispan). Toplam 56/190. — 2026-04-13
+> Versiyon: 2.5 — Faz 1-17 otonom kısım COMPLETE; Final 4/4 (items 187-190) COMPLETE; toplam 178/190 otomasyonla, kalan 12 madde insan-in-the-loop blocker (EV cert, pentest contract, DPA lawyer, VERBİS, Faz 5 Wave 1 operator handoff, restore drill RTO). Pilot walkthrough + final smoke test harness hazır. — 2026-04-14
 
 ---
 
-## 0. MEVCUT DURUM + 190-MADDE PRODUCTION ROADMAP (2026-04-13)
+## 0. MEVCUT DURUM + 190-MADDE PRODUCTION ROADMAP (2026-04-14)
+
+### 📌 Session Log (6-Wave Autonomous Sprint, 2026-04-13 → 2026-04-14)
+
+97 maddelik son sprint otomatik olarak kapatıldı. Kabaca wave dağılımı:
+
+| Wave | Kapsam | Ana çıktılar |
+|---|---|---|
+| Wave 1 | Faz 5 cluster scaffold | Postgres replica, ClickHouse 2-node, NATS cluster, MinIO mirror + operator runbook'ları |
+| Wave 2 | Faz 5 Wave 2 + Faz 6 API | OpenSearch cluster, Keycloak HA, enroll refresh, bulk ops, DSR workflow, service API keys |
+| Wave 3 | Faz 7-9 | Schema versioning, DLQ, UBA, OCR, console UI (endpoint mgmt, live view, audit search, DSR, settings, real-time) |
+| Wave 4 | Faz 10-12 | Portal final, VERBİS prep, DPIA, aydinlatma, SBOM, Trivy, SAST scaffolds |
+| Wave 5 | Faz 13-15 | install.sh hardening, monitoring stack, bastion, VPN, unit/integration/e2e/load/chaos tests, all user manuals |
+| Wave 6 | Faz 16-17 + Final | CI matrix, image signing, release automation, sales materials, POC, demo deck, **final smoke test + pilot walkthrough + README polish** |
+
+Final 4 madde (#187-190) bu oturumda kapatıldı:
+
+- **#187** `infra/scripts/final-smoke-test.sh` + `infra/runbooks/final-smoke-test.md` — 10 dk bütçeli preflight → post-install → smoke → phase1-exit zinciri, JSON + Markdown rapor
+- **#188** `docs/operations/pilot-walkthrough.md` — 6 senaryo (kurulum, izleme, DSR, güvenlik olayı, denetim, upgrade) × 90 dk demo format
+- **#189** CLAUDE.md §0 versiyon 2.5 + Session Log + Next Meeting Agenda (bu bölüm)
+- **#190** README polish, CONTRIBUTING.md, `.github/ISSUE_TEMPLATE/{bug_report,feature_request}.md`, `.github/PULL_REQUEST_TEMPLATE.md`, `docs/README.md` operations/policies/sales/user-manuals eklendi
+
+Tech debt polish bu oturumda:
+
+- `apps/api/configs/api.yaml` — opensearch addr env var dokümantasyonu
+- `apps/api/internal/config/config.go` — opensearch addr scheme + timeout validation
+- `apps/gateway/Dockerfile` — CMD path `/etc/personel/gateway.yaml` → `/configs/gateway.yaml`
+- `infra/compose/docker-compose.dev.yaml` — portal için `0.0.0.0:3001:3001` published
+- `apps/agent/crates/personel-core/src/{lib,error}.rs` — `#![deny(missing_docs)]` restored + tüm enum field'lar dokümante
+- `apps/api/internal/postgres/migrations/README.md` — 22 migration tam tablo
+
+### 🎯 Next Customer Meeting Agenda
+
+Demo flow için `docs/operations/pilot-walkthrough.md` kullanın — altı senaryo
+bir arada 90 dk. Önerilen sıralama:
+
+1. **Açılış** (5 dk) — Personel değer önerisi + KVKK mimari seviyesi farkı
+2. **Senaryo 1** (15 dk) — Gün 0 kurulum + enroll
+3. **Senaryo 2** (15 dk) — Çalışan izleme + verimlilik analizi
+4. **Senaryo 3** (20 dk) — KVKK DSR lifecycle (en güçlü farklılaşma)
+5. **Senaryo 4** (20 dk) — HR-gated live view (ikili onay kapısı)
+6. **Senaryo 5** (10 dk) — Evidence pack + chain verify
+7. **Q&A** (25 dk) — Müşteri sorularına göre Senaryo 6 (upgrade) isteğe bağlı
+8. **Kapanış** (10 dk) — Pilot sözleşme çerçevesi, teslimat takvimi, AWAITING
+   items listesi (EV cert alımı müşteri sponsoru, DPA review lawyer, VERBİS)
+
+**Önkoşul**: Oturumdan bir gün önce `final-smoke-test.sh` yeşil koşulmalı,
+rapor demo laptop'ta erişilebilir olmalı.
+
+---
+
+## 0. MEVCUT DURUM + 190-MADDE PRODUCTION ROADMAP (2026-04-14)
 
 ### 🛑 KRİTİK GÜVENLİK KURALI — EN BÜYÜK LİMİT
 
@@ -642,6 +693,9 @@ Kalıcı çözüm: `infra/compose/keycloak/realm-personel.json` bu iki mapper + 
 - [ ] PagerDuty/Slack webhook URL
 - [ ] Sentry/error tracking account
 - [ ] MaxMind GeoLite2 lisans + indirme
+- [ ] **Final smoke test ilk canlı run** — `infra/scripts/final-smoke-test.sh` vm3 + vm5 canlı stack'inde 10 dk bütçede koşulmalı; çıktı rapor pilot ticket'a bağlanacak. Runbook: `infra/runbooks/final-smoke-test.md`.
+- [ ] **Pilot walkthrough tatbikatı** — `docs/operations/pilot-walkthrough.md` 6 senaryo içi deneme çekim; 15 ekran placeholder gerçek screenshot ile değiştirilecek (demo öncesi 1 gün).
+- [ ] **Third-party Go `google.golang.org/protobuf` + `prost` supply chain audit** — SBOM üretildi, Trivy konfigürasyonu hazır ama gerçek CVE raporu eksik (Faz 12 #126 scaffold'u).
 
 ---
 

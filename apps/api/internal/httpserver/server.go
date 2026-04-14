@@ -27,6 +27,7 @@ import (
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/evidence"
+	"github.com/personel/api/internal/featureflags"
 	"github.com/personel/api/internal/incident"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
@@ -82,6 +83,10 @@ type Services struct {
 	Incident      *incident.Service
 	BCP           *bcp.Service
 	Pipeline      *pipeline.Service
+	// FeatureFlags is the Faz 16 #173 feature flag evaluator + admin
+	// surface. Nil-safe: when nil the /v1/system/feature-flags routes
+	// are not mounted.
+	FeatureFlags  *featureflags.Service
 	DBPool        *pgxpool.Pool
 	// AuditBroker fans audit entries to live WebSocket subscribers of
 	// /v1/audit/stream (Faz 6 #66). Nil-safe: when nil the route is
@@ -595,6 +600,21 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 			if svc.Evidence != nil {
 				r.With(auth.RequireRole(auth.RoleDPO, auth.RoleAuditor)).
 					Get("/evidence-coverage", evidence.GetCoverageHandler(svc.Evidence))
+			}
+
+			// Feature flags (Faz 16 #173). Admin + DPO only. Every flip
+			// writes an audit entry; unknown keys evaluate to the
+			// caller-supplied default. Gated on non-nil service so
+			// environments without Postgres still mount cleanly.
+			if svc.FeatureFlags != nil {
+				r.With(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO)).
+					Get("/feature-flags", featureflags.ListHandler(svc.FeatureFlags))
+				r.With(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO)).
+					Get("/feature-flags/{key}", featureflags.GetHandler(svc.FeatureFlags))
+				r.With(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO)).
+					Put("/feature-flags/{key}", featureflags.SetHandler(svc.FeatureFlags))
+				r.With(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO)).
+					Delete("/feature-flags/{key}", featureflags.DeleteHandler(svc.FeatureFlags))
 			}
 		})
 

@@ -1,0 +1,223 @@
+name: MSI Build & Sign — Windows agent (Faz 16 #171)
+
+# Faz 16 #171 — Auto-build + code-sign the Windows agent MSI in CI.
+#
+# Staging: infra/ci-scaffolds/msi-build.yml
+# Operator: mv to .github/workflows/ with workflow-scope PAT.
+#
+# Inputs:
+#   - On push to main: builds an unsigned "dev MSI" with a loud audit
+#     warning in the release notes.
+#   - On tag v*: builds + signs with the EV certificate (if secrets
+#     present) or AzureSignTool (if AZURE_KEY_VAULT_URL set).
+#
+# Signing modes (resolved at runtime):
+#
+#   1. AzureSignTool (preferred, keyless pattern):
+#      - Secret: AZURE_KEY_VAULT_URL
+#      - Secret: AZURE_KEY_VAULT_CERT_NAME
+#      - Federated identity via OIDC (id-token: write permission)
+#
+#   2. signtool + PFX fallback:
+#      - Secret: WINDOWS_CERT_PFX (base64-encoded .pfx)
+#      - Secret: WINDOWS_CERT_PASSWORD
+#
+#   3. Unsigned dev fallback:
+#      - No secrets → emits MSI with "DEV UNSIGNED — DO NOT DISTRIBUTE"
+#        watermark in the release notes body.
+#
+# AWAITING CUSTOMER ACTION: EV Code Signing Certificate purchase
+# (~$700/year, Sectigo). Until then, only the unsigned dev path runs.
+
+on:
+  push:
+    branches: [main]
+  push_tags:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write      # AzureSignTool federated OIDC
+  packages: read
+
+jobs:
+  build-msi:
+    name: Build MSI
+    runs-on: windows-2022
+    outputs:
+      msi-path: ${{ steps.locate.outputs.msi }}
+      signed: ${{ steps.sign.outputs.signed }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust 1.88
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: '1.88'
+          targets: x86_64-pc-windows-msvc
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/agent
+          shared-key: agent-msi-x86_64-pc-windows-msvc
+
+      - name: Install protoc
+        run: choco install protoc --no-progress -y
+
+      - name: Install WiX Toolset v4
+        run: |
+          dotnet tool install --global wix --version 4.0.5
+          wix --version
+
+      - name: Install WiX firewall extension
+        run: |
+          wix extension add -g WixToolset.Firewall.wixext/4.0.5
+
+      - name: Install FireDaemon OpenSSL 3 (for openssl-sys crate)
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $url = 'https://download.firedaemon.com/FireDaemon-OpenSSL/firedaemon-openssl-3.3.2.exe'
+          # Prefer prebuilt chocolatey package if the OpenSSL binary isn't
+          # already installed by the runner image; failures here fall back
+          # to vendored-openssl feature.
+          choco install openssl --no-progress -y || true
+        shell: pwsh
+
+      - name: Set build env
+        run: |
+          echo "OPENSSL_DIR=C:\Program Files\FireDaemon OpenSSL 3" >> $env:GITHUB_ENV
+          echo "OPENSSL_LIB_DIR=C:\Program Files\FireDaemon OpenSSL 3\lib" >> $env:GITHUB_ENV
+          echo "OPENSSL_INCLUDE_DIR=C:\Program Files\FireDaemon OpenSSL 3\include" >> $env:GITHUB_ENV
+          echo "PROTOC_INCLUDE=${{ github.workspace }}\proto" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Cargo build release
+        working-directory: apps/agent
+        run: cargo build --release --target x86_64-pc-windows-msvc
+        shell: pwsh
+
+      - name: Build MSI
+        working-directory: apps/agent/installer
+        run: |
+          if (Test-Path build.ps1) {
+            .\build.ps1
+          } else {
+            wix build wix\main.wxs -ext WixToolset.Firewall.wixext -out dist\personel-agent.msi
+          }
+        shell: pwsh
+
+      - name: Locate MSI
+        id: locate
+        run: |
+          $msi = Get-ChildItem -Path apps/agent/installer/dist/*.msi | Select-Object -First 1
+          if (-not $msi) { throw "MSI not produced" }
+          echo "msi=$($msi.FullName)" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      # --- Signing resolver ---
+
+      - name: Detect signing mode
+        id: mode
+        run: |
+          if ($env:AZURE_KEY_VAULT_URL) {
+            echo "mode=azure" >> $env:GITHUB_OUTPUT
+          } elseif ($env:WINDOWS_CERT_PFX) {
+            echo "mode=pfx" >> $env:GITHUB_OUTPUT
+          } else {
+            echo "mode=unsigned" >> $env:GITHUB_OUTPUT
+          }
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+        shell: pwsh
+
+      - name: Install AzureSignTool
+        if: steps.mode.outputs.mode == 'azure'
+        run: dotnet tool install --global AzureSignTool
+        shell: pwsh
+
+      - name: Sign MSI (AzureSignTool)
+        id: sign-azure
+        if: steps.mode.outputs.mode == 'azure'
+        env:
+          AZURE_KEY_VAULT_URL: ${{ secrets.AZURE_KEY_VAULT_URL }}
+          AZURE_KEY_VAULT_CERT_NAME: ${{ secrets.AZURE_KEY_VAULT_CERT_NAME }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        run: |
+          AzureSignTool sign `
+            -kvu "$env:AZURE_KEY_VAULT_URL" `
+            -kvc "$env:AZURE_KEY_VAULT_CERT_NAME" `
+            -kvi "$env:AZURE_CLIENT_ID" `
+            -kvt "$env:AZURE_TENANT_ID" `
+            -kvm `
+            -tr http://timestamp.digicert.com `
+            -td sha256 `
+            -fd sha256 `
+            "${{ steps.locate.outputs.msi }}"
+        shell: pwsh
+
+      - name: Sign MSI (signtool + PFX)
+        id: sign-pfx
+        if: steps.mode.outputs.mode == 'pfx'
+        env:
+          WINDOWS_CERT_PFX: ${{ secrets.WINDOWS_CERT_PFX }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $pfx = [System.Convert]::FromBase64String($env:WINDOWS_CERT_PFX)
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'signing.pfx'
+          [IO.File]::WriteAllBytes($pfxPath, $pfx)
+
+          $signtool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+                      Where-Object { $_.FullName -like '*\x64\signtool.exe' } |
+                      Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe not found" }
+
+          & $signtool.FullName sign `
+            /f $pfxPath `
+            /p $env:WINDOWS_CERT_PASSWORD `
+            /tr http://timestamp.digicert.com `
+            /td sha256 `
+            /fd sha256 `
+            "${{ steps.locate.outputs.msi }}"
+
+          Remove-Item $pfxPath -Force
+        shell: pwsh
+
+      - name: Record signing status
+        id: sign
+        run: |
+          if ('${{ steps.mode.outputs.mode }}' -eq 'unsigned') {
+            echo "signed=false" >> $env:GITHUB_OUTPUT
+            Write-Warning "MSI is UNSIGNED — dev build only, do NOT distribute."
+          } else {
+            echo "signed=true" >> $env:GITHUB_OUTPUT
+          }
+        shell: pwsh
+
+      - name: Upload MSI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: personel-agent-msi${{ steps.sign.outputs.signed == 'true' && '-signed' || '-unsigned' }}
+          path: ${{ steps.locate.outputs.msi }}
+          retention-days: 30
+
+  notify:
+    name: Post-build notification
+    runs-on: ubuntu-22.04
+    needs: build-msi
+    if: always()
+    steps:
+      - name: Write summary
+        run: |
+          {
+            echo "## MSI build"
+            echo ""
+            echo "- Signed: **${{ needs.build-msi.outputs.signed }}**"
+            if [ "${{ needs.build-msi.outputs.signed }}" != "true" ]; then
+              echo "- ⚠️  UNSIGNED DEV BUILD — DO NOT DISTRIBUTE"
+              echo "- AWAITING: EV Code Signing Certificate purchase (~\$700/year)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,177 @@
+name: Publish Images — ghcr.io signed (Faz 16 #169)
+
+# Faz 16 #169 — Container image registry + cosign signing + SBOM attach.
+#
+# Staging: infra/ci-scaffolds/publish-images.yml
+# Operator: mv to .github/workflows/ with workflow-scope PAT.
+#
+# Tag strategy (per image):
+#   - sha-<short>     on every push to main
+#   - latest          on push to main (moving)
+#   - v<semver>       on a matching git tag (v1.2.3 → 1.2.3 + 1.2 + 1 + latest)
+#
+# Registry: ghcr.io/${{ github.repository_owner }}/personel-<service>
+#
+# Multi-arch: linux/amd64 + linux/arm64 via docker buildx.
+#
+# Signing: cosign keyless (sigstore fulcio + rekor transparency log).
+# No private key management — CI identity from OIDC token is the root of trust.
+#
+# SBOM: generated with syft, attached as cosign attestation (predicate
+# type spdx-json). Downstream scanners (#170) can fetch + verify the
+# SBOM with the same cosign verify chain.
+#
+# Provenance: slsa-github-generator writes a SLSA Level 2 provenance
+# statement on every build; wired to #131 (Faz 12) delivery flow.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write        # keyless cosign / fulcio
+  attestations: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository_owner }}/personel
+
+jobs:
+  build-and-push:
+    name: Build & sign ${{ matrix.service }}
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: api
+            context: apps/api
+            dockerfile: apps/api/Dockerfile
+          - service: gateway
+            context: apps/gateway
+            dockerfile: apps/gateway/Dockerfile
+          - service: enricher
+            context: apps/gateway
+            dockerfile: apps/gateway/cmd/enricher/Dockerfile
+          - service: console
+            context: apps/console
+            dockerfile: apps/console/Dockerfile
+          - service: portal
+            context: apps/portal
+            dockerfile: apps/portal/Dockerfile
+          - service: ml-classifier
+            context: apps/ml-classifier
+            dockerfile: apps/ml-classifier/Dockerfile
+          - service: ocr-service
+            context: apps/ocr-service
+            dockerfile: apps/ocr-service/Dockerfile
+          - service: uba-detector
+            context: apps/uba-detector
+            dockerfile: apps/uba-detector/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build & push (multi-arch)
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max
+          provenance: true
+          sbom: true
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.4'
+
+      - name: Install syft (SBOM)
+        uses: anchore/sbom-action/download-syft@v0
+
+      - name: Cosign keyless sign
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}@${{ steps.build.outputs.digest }}"
+          cosign sign --yes "$IMAGE"
+
+      - name: Generate SBOM (syft)
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}@${{ steps.build.outputs.digest }}"
+          syft "$IMAGE" -o spdx-json > sbom-${{ matrix.service }}.spdx.json
+
+      - name: Cosign attest SBOM
+        env:
+          COSIGN_EXPERIMENTAL: '1'
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}@${{ steps.build.outputs.digest }}"
+          cosign attest --yes --type spdxjson \
+            --predicate sbom-${{ matrix.service }}.spdx.json \
+            "$IMAGE"
+
+      - name: GitHub artifact attestation
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.service }}
+          path: sbom-${{ matrix.service }}.spdx.json
+          retention-days: 30
+
+  images-manifest:
+    name: Write images manifest
+    runs-on: ubuntu-22.04
+    needs: build-and-push
+    steps:
+      - uses: actions/checkout@v4
+      - name: Emit manifest
+        run: |
+          {
+            echo "## Published images"
+            echo ""
+            for svc in api gateway enricher console portal ml-classifier ocr-service uba-detector; do
+              echo "- \`${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-${svc}:sha-$(git rev-parse --short HEAD)\`"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"

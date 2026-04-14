@@ -24,7 +24,11 @@ pub enum AgentError {
     // ── ID / config ──────────────────────────────────────────────────────
     /// A UUID or ULID could not be parsed from its byte representation.
     #[error("invalid id bytes: {reason}")]
-    InvalidId { reason: &'static str },
+    InvalidId {
+        /// Short static description of why parsing failed (e.g. "length",
+        /// "version", "base32 charset").
+        reason: &'static str,
+    },
 
     /// An agent configuration value is missing or out of range.
     #[error("configuration error: {0}")]
@@ -37,7 +41,10 @@ pub enum AgentError {
 
     /// The local queue has reached its capacity limit.
     #[error("queue capacity exceeded (cap={cap_bytes} bytes)")]
-    QueueFull { cap_bytes: u64 },
+    QueueFull {
+        /// Hard capacity of the queue in bytes at the time of overflow.
+        cap_bytes: u64,
+    },
 
     /// The queue is over its hard limit and the new (non-Critical) event
     /// cannot be admitted. Backpressure should be applied upstream.
@@ -99,11 +106,21 @@ pub enum AgentError {
     // ── Collectors ────────────────────────────────────────────────────────
     /// A collector could not start because a required OS API was unavailable.
     #[error("collector '{name}' failed to start: {reason}")]
-    CollectorStart { name: &'static str, reason: String },
+    CollectorStart {
+        /// Short static identifier of the collector, e.g. "process", "screen".
+        name: &'static str,
+        /// Human-readable reason suitable for logging (never PII).
+        reason: String,
+    },
 
     /// A collector emitted an error during its run loop.
     #[error("collector '{name}' runtime error: {reason}")]
-    CollectorRuntime { name: &'static str, reason: String },
+    CollectorRuntime {
+        /// Short static identifier of the collector, e.g. "process", "screen".
+        name: &'static str,
+        /// Human-readable reason suitable for logging (never PII).
+        reason: String,
+    },
 
     // ── Policy ────────────────────────────────────────────────────────────
     /// A received policy bundle failed signature verification.
@@ -140,7 +157,11 @@ pub enum AgentError {
     // ── Anti-tamper ───────────────────────────────────────────────────────
     /// A tamper detection check triggered.
     #[error("tamper detected: {check}")]
-    TamperDetected { check: &'static str },
+    TamperDetected {
+        /// Short static identifier of the tamper check, e.g. "self_hash",
+        /// "registry_acl", "watchdog_heartbeat".
+        check: &'static str,
+    },
 
     // ── Catch-all ─────────────────────────────────────────────────────────
     /// Unrecoverable internal invariant violated. Should never reach production.

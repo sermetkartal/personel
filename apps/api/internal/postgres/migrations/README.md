@@ -53,21 +53,39 @@ Two layers, not one:
    - `docs/compliance/kvkk-framework.md` §5 matrix
    - Appropriate `ON DELETE CASCADE` rules for tenant/user lifecycle
 
-## Current Migration List (as of Phase 1 Polish)
+## Current Migration List (as of 2026-04-14)
 
-| File | Purpose |
-|---|---|
-| `001_tenants.sql` | Tenants table + row-level security |
-| `002_users.sql` | Users + roles + auth |
-| `003_endpoints.sql` | Endpoint enrollment + metadata |
-| `004_policies.sql` | Policy storage + signing key refs |
-| `005_dsr.sql` | DSR workflow + SLA timer |
-| `006_legal_hold.sql` | Legal hold flags + scope |
-| `007_live_view.sql` | Live view session state machine |
-| `008_audit_destruction_reports.sql` | Audit log grants + destruction_reports table |
-| `0020_dlp_state.sql` | ADR 0013 DLP state singleton |
-| `0021_first_login_acknowledgement.sql` | KVKK m.10 first-login audit |
-| `0022_keystroke_keys.sql` | Per-endpoint DEK store for ADR 0013 A2 bootstrap |
+Ordered by `golang-migrate` numeric parse (`008 < 0020`). Columns: file,
+phase, and the substantive schema change. `down.sql` pairs exist for every
+entry.
+
+| # | File | Phase | Change |
+|---|---|---|---|
+| 1 | `001_tenants_users.up.sql` | Faz 1 | `tenants`, `users`, `tenant_settings`; enables `pgcrypto`; RLS baseline |
+| 2 | `002_endpoints.up.sql` | Faz 1 | `endpoints` (enrolled agents) + `enrollment_tokens` |
+| 3 | `003_policies.up.sql` | Faz 1 | `policies` + `endpoint_policies` with signing key refs |
+| 4 | `004_audit_log.up.sql` | Faz 1 | `audit` schema + hash-chained append-only `audit_log` |
+| 5 | `005_dsr.up.sql` | Faz 1 | KVKK m.11 `dsr_requests` + SLA timer |
+| 6 | `006_legal_holds.up.sql` | Faz 1 | `legal_holds` (DPO-only, 2-year max) |
+| 7 | `007_live_view.up.sql` | Faz 1 | `live_view_sessions` state machine persistence |
+| 8 | `008_destruction_reports.up.sql` | Faz 1 | 6-month periodic `destruction_reports` + audit grants |
+| 9 | `0020_dlp_state.up.sql` | Polish | ADR 0013 single-row `dlp_state` read-by-API only |
+| 10 | `0021_first_login_acknowledgement.up.sql` | Polish | KVKK m.10 first-login ack (Aşama 5) |
+| 11 | `0022_keystroke_keys.up.sql` | Polish | Per-endpoint wrapped PE-DEK store (ADR 0013 A2) |
+| 12 | `0023_users_hris_fields.up.sql` | Faz 2 | Nullable HRIS columns on `users` (ADR 0018) |
+| 13 | `0024_mobile_push_tokens.up.sql` | Faz 2 | `mobile_push_tokens` for mobile admin app (ADR 0019) |
+| 14 | `0025_evidence_items.up.sql` | Faz 3.0 | SOC 2 evidence locker table (append-only, RLS) |
+| 15 | `0026_employee_daily_stats.up.sql` | Faz 2 | Daily rolled-up activity per user per day |
+| 16 | `0027_employee_hourly_stats.up.sql` | Faz 2 | Per-hour active/idle bar chart signals |
+| 17 | `0028_users_role_it_hierarchy.up.sql` | Polish | Add `it_operator` + `it_manager` to `users.role` check |
+| 18 | `0029_audit_append_event_legacy_overload.up.sql` | Polish | Postgres overload bridging init.sql ↔ Go recorder signatures |
+| 19 | `0030_employee_daily_stats_rich_signals.up.sql` | Faz 2 | `rich_signals` JSONB pass-through for non-core collector signals |
+| 20 | `0031_endpoint_refresh_fields.up.sql` | Faz 6 | `last_refresh_at` + `refresh_count` for endpoint token refresh (#63) |
+| 21 | `0032_endpoint_commands.up.sql` | Faz 6 | Remote command audit + state (deactivate/wipe/revoke, #64/#65) |
+| 22 | `0033_dsr_fulfillment_and_apikeys.up.sql` | Faz 6 | DSR fulfillment workflow (#69) + service API key auth (#72) |
+
+**Count**: 22 migrations. `init.sql` (Layer 1) is the baseline and is not
+counted here. Any new migration in Faz 7+ starts at `0034_*`.
 
 ## Testing
 

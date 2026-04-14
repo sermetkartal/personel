@@ -1,0 +1,125 @@
+# docker-compose.blue-green.yaml
+#
+# Faz 16 #174 — Blue-green deployment overlay.
+#
+# This file is an OVERLAY — never load it alone. It is merged on top of
+# docker-compose.yaml (the pilot baseline) via `docker compose -f ...`.
+# The base file still defines volumes, networks, storage services; this
+# overlay only adds the second-color (green) copies of api, gateway,
+# enricher, console, portal and the nginx router that switches between
+# them.
+#
+# Stateful services (postgres, clickhouse, minio, nats, vault, keycloak,
+# opensearch) are NEVER blue-green — they are a single, shared copy.
+# See infra/runbooks/blue-green.md for the rationale.
+#
+# Usage:
+#   docker compose \
+#     -f infra/compose/docker-compose.yaml \
+#     -f infra/compose/docker-compose.blue-green.yaml \
+#     up -d
+#
+#   # Switch live traffic:
+#   infra/scripts/blue-green-switch.sh green
+#
+#   # Rollback:
+#   infra/scripts/blue-green-switch.sh blue
+
+services:
+
+  # --- API green copy ---
+  api-green:
+    extends:
+      file: docker-compose.yaml
+      service: api
+    container_name: personel-api-green
+    hostname: personel-api-green
+    # Distinct host port so the operator can smoke-test before switching.
+    ports:
+      - "18001:8000"
+    environment:
+      - PERSONEL_COLOR=green
+    profiles: [blue-green]
+
+  # --- Gateway green copy ---
+  gateway-green:
+    extends:
+      file: docker-compose.yaml
+      service: gateway
+    container_name: personel-gateway-green
+    hostname: personel-gateway-green
+    ports:
+      - "19443:9443"
+    environment:
+      - PERSONEL_COLOR=green
+    profiles: [blue-green]
+
+  # --- Enricher green copy ---
+  #
+  # Enricher is a NATS consumer. Running two copies simultaneously with
+  # the same durable name DUPLICATES messages. Green enricher uses a
+  # distinct durable (`enricher-green`) so both copies process the same
+  # stream independently — but only one's output is "live" per policy.
+  # The switch script changes which durable is active in the router's
+  # configuration, not by stopping containers.
+  enricher-green:
+    extends:
+      file: docker-compose.yaml
+      service: enricher
+    container_name: personel-enricher-green
+    hostname: personel-enricher-green
+    environment:
+      - PERSONEL_COLOR=green
+      - ENRICHER_DURABLE=enricher-green
+    profiles: [blue-green]
+
+  # --- Console green copy ---
+  console-green:
+    extends:
+      file: docker-compose.yaml
+      service: console
+    container_name: personel-console-green
+    hostname: personel-console-green
+    ports:
+      - "13000:3000"
+    environment:
+      - PERSONEL_COLOR=green
+    profiles: [blue-green]
+
+  # --- Portal green copy ---
+  portal-green:
+    extends:
+      file: docker-compose.yaml
+      service: portal
+    container_name: personel-portal-green
+    hostname: personel-portal-green
+    ports:
+      - "13001:3001"
+    environment:
+      - PERSONEL_COLOR=green
+    profiles: [blue-green]
+
+  # --- Router (nginx) ---
+  #
+  # Reads /etc/nginx/conf.d/active-color.conf — a single-line include
+  # that points at either the blue or green upstream. The switch script
+  # rewrites this file and sends SIGHUP, not a container restart. TLS
+  # terminates here so the certificate doesn't have to move between
+  # colors.
+  bluegreen-router:
+    image: nginx:1.27-alpine
+    container_name: personel-bluegreen-router
+    restart: unless-stopped
+    volumes:
+      - ./bluegreen/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./bluegreen/active-color.conf:/etc/nginx/conf.d/active-color.conf:ro
+      - ./bluegreen/tls:/etc/nginx/tls:ro
+    ports:
+      - "443:443"
+      - "9443:9443"
+    depends_on:
+      - api
+      - gateway
+      - console
+      - portal
+    profiles: [blue-green]

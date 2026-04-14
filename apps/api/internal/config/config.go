@@ -287,8 +287,16 @@ func validate(c *Config) error {
 	// OpenSearch is optional: if the operator enables it they must
 	// also supply an address. If disabled we skip the check entirely
 	// and the API will mount /v1/search handlers in degraded mode.
-	if c.OpenSearch.Enabled && c.OpenSearch.Addr == "" {
-		return fmt.Errorf("config: opensearch.addr is required when opensearch.enabled=true")
+	if c.OpenSearch.Enabled {
+		if c.OpenSearch.Addr == "" {
+			return fmt.Errorf("config: opensearch.addr is required when opensearch.enabled=true")
+		}
+		if !strings.HasPrefix(c.OpenSearch.Addr, "http://") && !strings.HasPrefix(c.OpenSearch.Addr, "https://") {
+			return fmt.Errorf("config: opensearch.addr must start with http:// or https:// (got %q) — set via PERSONEL_OPENSEARCH_ADDR", c.OpenSearch.Addr)
+		}
+		if c.OpenSearch.Timeout <= 0 {
+			return fmt.Errorf("config: opensearch.timeout must be > 0 when opensearch.enabled=true")
+		}
 	}
 	// Per-tenant rate limit (Faz 6 #71). A non-zero tenant limit must be
 	// >= 10× the per-IP limit because a tenant aggregates many users /

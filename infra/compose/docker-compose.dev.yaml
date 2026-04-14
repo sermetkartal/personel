@@ -223,6 +223,29 @@ services:
       NODE_ENV: production
 
   # ---------------------------------------------------------------------------
+  # Portal — publish 3001 directly so the employee transparency portal is
+  # reachable during dev smoke tests without needing the Envoy reverse
+  # proxy. The production compose relies on Envoy fronting both console
+  # and portal; dev skips Envoy for simplicity.
+  # ---------------------------------------------------------------------------
+  portal:
+    ports:
+      - "0.0.0.0:3001:3001"
+    depends_on: !reset
+      - api
+      - keycloak
+    healthcheck:
+      disable: true
+    environment:
+      NEXTAUTH_SECRET: dev-nextauth-secret-not-for-prod
+      NEXTAUTH_URL: http://localhost:3001
+      NEXT_PUBLIC_API_URL: http://host.docker.internal:8001
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: personel
+      KEYCLOAK_CLIENT_ID: portal
+      NODE_ENV: production
+
+  # ---------------------------------------------------------------------------
   # ClickHouse — use stock image config (no custom mount). The production
   # clickhouse/config.xml references TLS certs and a user_directories
   # structure that stock 24.3 expects but our custom XML doesn't define

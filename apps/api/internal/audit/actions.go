@@ -76,6 +76,29 @@ const (
 	ActionBCPDrillCompleted Action = "bcp_drill.completed"
 )
 
+// --- Tickets (Faz 17 item #184) ---
+const (
+	ActionTicketCreated     Action = "ticket.created"
+	ActionTicketUpdated     Action = "ticket.updated"
+	ActionTicketStateChange Action = "ticket.state_changed"
+)
+
+// --- Status page (Faz 17 item #185) ---
+const (
+	ActionStatusIncidentCreated     Action = "status_incident.created"
+	ActionStatusIncidentUpdated     Action = "status_incident.updated"
+	ActionStatusIncidentResolved    Action = "status_incident.resolved"
+	ActionMaintenanceWindowCreated  Action = "maintenance_window.created"
+	ActionMaintenanceWindowStarted  Action = "maintenance_window.started"
+	ActionMaintenanceWindowFinished Action = "maintenance_window.finished"
+)
+
+// --- License (Faz 17 item #179/180) ---
+const (
+	ActionLicenseRefreshed      Action = "license.refreshed"
+	ActionLicenseTamperDetected Action = "license.tamper_detected"
+)
+
 // --- Endpoint fleet ---
 const (
 	ActionEndpointEnrolled       Action = "endpoint.enrolled"
@@ -191,6 +214,12 @@ const (
 	ActionReleaseRolledBack        Action = "release.rolled_back"
 )
 
+// --- Feature flags (Faz 16 #173) ---
+const (
+	ActionFeatureFlagSet     Action = "feature_flag.set"
+	ActionFeatureFlagDeleted Action = "feature_flag.deleted"
+)
+
 // --- Audit chain ---
 const (
 	ActionAuditChainVerified Action = "audit.chain_verified"
@@ -277,6 +306,17 @@ var AllActions = []Action{
 	ActionAccessReviewCompleted,
 	ActionIncidentClosed,
 	ActionBCPDrillCompleted,
+	ActionTicketCreated,
+	ActionTicketUpdated,
+	ActionTicketStateChange,
+	ActionStatusIncidentCreated,
+	ActionStatusIncidentUpdated,
+	ActionStatusIncidentResolved,
+	ActionMaintenanceWindowCreated,
+	ActionMaintenanceWindowStarted,
+	ActionMaintenanceWindowFinished,
+	ActionLicenseRefreshed,
+	ActionLicenseTamperDetected,
 	ActionEndpointEnrolled,
 	ActionEndpointRevoked,
 	ActionEndpointDeleted,
@@ -334,6 +374,8 @@ var AllActions = []Action{
 	ActionReleasePublished,
 	ActionReleaseCanaryAdvanced,
 	ActionReleaseRolledBack,
+	ActionFeatureFlagSet,
+	ActionFeatureFlagDeleted,
 	ActionAuditChainVerified,
 	ActionAuditChainBroken,
 	ActionTransparencyHistoryVisibilityChanged,

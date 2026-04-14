@@ -39,6 +39,7 @@ import (
 	"github.com/personel/api/internal/dsr"
 	"github.com/personel/api/internal/endpoint"
 	"github.com/personel/api/internal/evidence"
+	"github.com/personel/api/internal/featureflags"
 	"github.com/personel/api/internal/httpserver"
 	"github.com/personel/api/internal/incident"
 	"github.com/personel/api/internal/legalhold"
@@ -359,6 +360,14 @@ func main() {
 	}
 	pipelineSvc := pipeline.NewService(pipelineReader, pipelinePub, pipelineCH, recorder, log)
 
+	// --- 10c. Feature flags service (Faz 16 #173) ---
+	// Pure-Go evaluator + admin surface. Safe to construct even if the
+	// feature_flags table is missing — List returns empty and every
+	// IsEnabled call falls through to the caller's default. Admin
+	// console mounts /v1/system/feature-flags when the Services field is
+	// non-nil.
+	featureFlagsSvc := featureflags.NewService(pool, recorder, log)
+
 	// --- 11. Prometheus metrics ---
 	reg := observability.NewRegistry()
 	reg.MustRegister(prometheus.NewGoCollector())
@@ -403,6 +412,7 @@ func main() {
 		EvidencePack: evidencePackBuilder,
 		Backup:       backupSvc,
 		Pipeline:     pipelineSvc,
+		FeatureFlags: featureFlagsSvc,
 		AccessReview: accessReviewSvc,
 		Incident:     incidentSvc,
 		BCP:          bcpSvc,

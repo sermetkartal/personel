@@ -8,13 +8,16 @@
 KVKK-native · On-prem-first · Kriptografik Çalışan Gizliliği · Türkçe-first
 
 ![CI](https://github.com/sermetkartal/personel/actions/workflows/ci.yml/badge.svg)
-![Phase](https://img.shields.io/badge/phase-1%20%E2%80%94%20implementation-green)
+![Phase](https://img.shields.io/badge/phase-17%20%E2%80%94%20polish-brightgreen)
+![Roadmap](https://img.shields.io/badge/roadmap-155%2F190-brightgreen)
 ![License](https://img.shields.io/badge/license-proprietary-red)
 ![Language](https://img.shields.io/badge/rust-1.88-orange)
 ![Language](https://img.shields.io/badge/go-1.22%2B-blue)
 ![Language](https://img.shields.io/badge/typescript-5-blue)
 ![Language](https://img.shields.io/badge/next.js-15-black)
 ![KVKK](https://img.shields.io/badge/KVKK-6698-brightgreen)
+![Stars](https://img.shields.io/github/stars/sermetkartal/personel?style=social)
+![Issues](https://img.shields.io/github/issues/sermetkartal/personel)
 
 </div>
 
@@ -202,7 +205,26 @@ Docker Compose + systemd. ClickHouse (rakiplerin SQL Server'ının 10-30 katı s
 
 ---
 
-## 🚀 Quickstart (English)
+## 🚀 3-Command Quick Start (pilot host)
+
+```bash
+git clone https://github.com/sermetkartal/personel.git && cd personel
+sudo infra/install.sh                                       # ~2h idempotent bring-up
+# Then on a Windows endpoint:
+msiexec /i personel-agent.msi ENROLL_TOKEN="$(curl -s -X POST $API/v1/endpoints/enroll -H "Authorization: Bearer $JWT" | jq -r .token)"
+```
+
+Validation after install:
+
+```bash
+infra/scripts/final-smoke-test.sh --api-url=http://$HOST:8000 \
+  --admin-token="$ADMIN_JWT"
+```
+
+Hit `overall: pass`? You are ready to run Senaryo 1 of
+[`docs/operations/pilot-walkthrough.md`](docs/operations/pilot-walkthrough.md).
+
+## 🚀 Quickstart (English, component-by-component)
 
 ### Prerequisites
 
@@ -307,17 +329,37 @@ personel/
 
 ## 🗺️ Roadmap / Phase Status
 
+**190-item production roadmap — 155 items complete as of 2026-04-14**
+(see CLAUDE.md §0 for per-item tracking).
+
 | Faz | Durum | Kapsam |
 |---|---|---|
-| **Phase 0** — Mimari omurga | ✅ Complete | 11 arch docs, 13 ADRs, 5 protos, 2 security docs |
+| **Phase 0** — Mimari omurga | ✅ Complete | 11 arch docs, 13 ADRs, 5 protos |
 | **Phase 0.5** — KVKK + Security + Competitive | ✅ Complete | 8 compliance + 7 runbook + competitive teardown |
 | **Phase 0.6** — ADR 0013 DLP-off-default | ✅ Complete | Propagation across 11 docs + proto |
-| **Phase 1** — Implementation | ✅ Build clean | 6 parallel agents; 593 files; all Go/Next.js/Rust builds pass |
-| **Phase 1 Reality Check** | ✅ Complete | 36 real build errors fixed |
-| **Phase 1 Polish** | 🚧 In progress | DLP scripts, missing API endpoints, WORM audit sink |
-| **Phase 1 Pilot** | 📅 Planned | 500 endpoint customer pilot, exit criteria validation |
-| **Phase 2** — Expansion | 📅 Planned | macOS/Linux agent, OCR, ML UBA, HRIS integrations, mobile admin |
-| **Phase 3** — SaaS + Certifications | 📅 Planned | K8s deploy, SOC 2 Type II, ISO 27001, GDPR expansion |
+| **Phase 1** — Setup + critical bring-up (#1-6) | ✅ Complete | PKI, enroll ceremony, mTLS + event flow |
+| **Phase 2** — Agent collectors (#7-20) | ✅ Complete | 14 Windows collectors, 131 new unit tests |
+| **Phase 3** — Screen capture hardening (#21-28) | ✅ Complete | Multi-monitor, adaptive freq, WebP, delta |
+| **Phase 4** — Agent stability (#29-40) | ✅ Complete | Anti-tamper, OTA, throttle, GPO, signing scaffold |
+| **Phase 5** — Backend hardening (#41-58) | ✅ Deployed | vm3+vm5 cluster: postgres replica, NATS R=2, MinIO mirror, ClickHouse 2-node + 2 keeper, OpenSearch 2-node, Keycloak HA |
+| **Phase 6** — API completeness (#62-72) | ✅ Complete | Enroll refresh, wipe, bulk, audit stream, search, DSR workflow, rate limit |
+| **Phase 7** — Data pipeline (#73-80) | ✅ Complete | Schema versioning, DLQ, replay, tiering, compression, dedup, DQM |
+| **Phase 8** — ML / Analytics (#81-89) | ✅ Complete | Fallback classifier, OCR pipeline, UBA, reports |
+| **Phase 9** — Console UI (#90-102) | ✅ Complete | Endpoint mgmt, live view, audit search, DSR, settings, real-time, i18n |
+| **Phase 10** — Employee Portal (#103-108) | ✅ Complete | Şeffaflık portalı final |
+| **Phase 11** — KVKK / Compliance (#109-120) | ✅ Complete | VERBİS, DPIA, retention enforcement, DSR e2e |
+| **Phase 12** — Security (#121-132) | ✅ Scaffolded | SBOM, Trivy, SAST, branch protection (pentest + audit AWAITING 3rd party) |
+| **Phase 13** — Infrastructure (#133-145) | ✅ Complete | install.sh hardening, monitoring stack, firewall, bastion, VPN |
+| **Phase 14** — Testing (#146-156) | ✅ Complete | Unit + integration + E2E + load + chaos + smoke + regression |
+| **Phase 15** — Documentation (#157-167) | ✅ Complete | Install guide, ops runbook, API docs, user manuals, IR playbook |
+| **Phase 16** — CI/CD (#168-176) | ✅ Complete | Matrix builds, image signing, MSI sign, release automation |
+| **Phase 17** — Customer Success (#177-190) | ✅ Complete | Sales materials, POC, demo deck, pilot walkthrough, final smoke test |
+| **Phase 1 Pilot Launch** | 🔜 Ready | 500 endpoint customer pilot |
+
+**Still pending** (human-in-the-loop blockers, see CLAUDE.md §0 "AWAITING
+CUSTOMER ACTION"): EV code signing cert purchase, third-party pentest
+contract, code audit contract, DPA review lawyer, VERBİS registration,
+Faz 5 operator deployment handoff, restore drill RTO/RPO measurement.
 
 ---
 
@@ -336,10 +378,17 @@ personel/
 | Belge | Açıklama |
 |---|---|
 | [`CLAUDE.md`](CLAUDE.md) | Tüm proje context'i, build komutları, tech debt, agent workflow |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Branch + commit + PR + review disiplini |
+| [`docs/README.md`](docs/README.md) | 80+ belgelik ikili dilde doküman indeksi |
 | [`docs/architecture/overview.md`](docs/architecture/overview.md) | Türkçe yönetici özeti |
 | [`docs/compliance/kvkk-framework.md`](docs/compliance/kvkk-framework.md) | 15 bölümlü KVKK uyum çerçevesi |
+| [`docs/operations/pilot-walkthrough.md`](docs/operations/pilot-walkthrough.md) | 6 senaryo pilot demo akışı (90 dk) |
+| [`docs/operations/installation-guide.md`](docs/operations/installation-guide.md) | Kurulum kılavuzu |
+| [`docs/operations/ops-runbook.md`](docs/operations/ops-runbook.md) | İşletim runbook'u |
 | [`docs/product/competitive-analysis.md`](docs/product/competitive-analysis.md) | Teramind/ActivTrak/Safetica vs teardown |
 | [`docs/adr/`](docs/adr/) | 13 Architecture Decision Record |
+| [`docs/policies/`](docs/policies/) | ISO 27001 / SOC 2 Type II policy suite |
+| [`infra/runbooks/final-smoke-test.md`](infra/runbooks/final-smoke-test.md) | Sürüm öncesi 10 dakikalık tam yığın doğrulaması |
 
 ---
 
@@ -359,9 +408,11 @@ Personel **KVKK 6698 sayılı Kanun** ile tam uyum için tasarlanmıştır. Ür�
 
 ## 🧑‍💻 Contributing
 
-Bu repository **özel (proprietary)** ticari bir ürünün kaynağıdır. Şu anda dış katkıya kapalıdır.
+Bu repository **özel (proprietary)** ticari bir ürünün kaynağıdır. Şu anda
+dış katkıya kapalıdır. Takım üyeleri için tam rehber:
+[`CONTRIBUTING.md`](CONTRIBUTING.md).
 
-Takım üyeleri için:
+Özetle:
 
 1. Her PR'da ilgili ADR'ye referans ver. Yeni mimari karar → yeni ADR.
 2. `go vet` + `cargo clippy` + `pnpm lint` + `pnpm type-check` geçmeli.
@@ -377,6 +428,8 @@ Takım üyeleri için:
 **Proprietary — All rights reserved.**
 
 © 2026 Sermet Kartal. Bu yazılımın tüm hakları saklıdır. İzinsiz kopyalama, dağıtma, tersine mühendislik yapma veya ticari olarak kullanma yasaktır.
+
+**Sales & Licensing**: `sales@personel.local` *(placeholder — update when real domain exists)*
 
 ---
 
