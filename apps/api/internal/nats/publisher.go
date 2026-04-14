@@ -89,12 +89,16 @@ type LiveViewStopCommand struct {
 }
 
 // PublishLiveViewStart publishes a live view start command to the gateway.
+//
+// Subject scheme matches the live_view_control JetStream filter
+// `live_view.control.>` — using `liveview.v1.start.*` landed on a subject
+// that no stream captured, producing "no response from stream" errors.
 func (p *Publisher) PublishLiveViewStart(ctx context.Context, tenantID, endpointID string, cmd LiveViewStartCommand) error {
 	data, err := json.Marshal(cmd)
 	if err != nil {
 		return fmt.Errorf("nats: marshal live view start: %w", err)
 	}
-	subject := fmt.Sprintf("liveview.v1.start.%s.%s", tenantID, endpointID)
+	subject := fmt.Sprintf("live_view.control.start.%s.%s", tenantID, endpointID)
 	return p.Publish(ctx, subject, data)
 }
 
@@ -104,7 +108,7 @@ func (p *Publisher) PublishLiveViewStop(ctx context.Context, tenantID, endpointI
 	if err != nil {
 		return fmt.Errorf("nats: marshal live view stop: %w", err)
 	}
-	subject := fmt.Sprintf("liveview.v1.stop.%s.%s", tenantID, endpointID)
+	subject := fmt.Sprintf("live_view.control.stop.%s.%s", tenantID, endpointID)
 	return p.Publish(ctx, subject, data)
 }
 

@@ -211,6 +211,16 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 		// When AuditBroker is nil the handler returns 503.
 		r.Get("/audit/stream", audit.StreamHandler(svc.AuditBroker))
 
+		// --- Notifications stub (Faz 9 polish) ---
+		// The console's notification bell polls /v1/notifications?unread=true
+		// on every page load. There is no real notifications backend yet
+		// (scheduled for Phase 2.11); until then we return an empty list
+		// so the UI does not spam 404s.
+		r.Get("/notifications", func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"items":[],"unread_count":0}`))
+		})
+
 		// --- Tenants ---
 		r.Route("/tenants", func(r chi.Router) {
 			// Tenant-scoped preference: screenshot capture preset.
@@ -344,7 +354,10 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 		r.Route("/dsr", func(r chi.Router) {
 			r.Post("/", dsr.SubmitHandler(svc.DSR))       // Employee or DPO
 			r.Group(func(r chi.Router) {
-				r.Use(auth.RequireRole(auth.RoleDPO))
+				// ADR 0026: Admin is the ultimate system operator and has
+				// the same DSR management authority as DPO. Only the
+				// irreversible erasure fulfilment is locked to DPO.
+				r.Use(auth.RequireRole(auth.RoleDPO, auth.RoleAdmin))
 				r.Get("/", dsr.ListHandler(svc.DSR))
 				r.Route("/{dsrID}", func(r chi.Router) {
 					r.Get("/", dsr.GetHandler(svc.DSR))
