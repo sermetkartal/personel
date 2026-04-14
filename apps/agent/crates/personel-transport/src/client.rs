@@ -365,12 +365,21 @@ async fn stream_once(
                         // the EventMeta.extra_json field (Phase 2.0 reservation). Gateway
                         // publishes whatever Event batch we send; enricher handles per-kind
                         // decoding from meta.event_type.
-                        use personel_proto::v1::{Event, EventMeta, TenantId, EndpointId, AgentVersion};
+                        use personel_proto::v1::{Event, EventMeta, TenantId, EndpointId, AgentVersion, WindowsUserSid};
                         use prost_types::Timestamp;
                         let tenant_id_proto = TenantId { value: identity.tenant_id.to_vec() };
                         let endpoint_id_proto = EndpointId { value: identity.endpoint_id.to_vec() };
                         let (maj, min, pat) = parse_semver(&identity.agent_version);
                         let agent_ver = AgentVersion { major: maj, minor: min, patch: pat, build: String::new() };
+                        // Faz 2 #12: stamp every EventMeta.user_sid with the currently-cached
+                        // interactive user SID. The cache is populated every 60s by the
+                        // Windows-gated refresh task in `personel-collectors::user_sid`
+                        // (spawned from `CollectorRegistry::start_all`). When the agent
+                        // boots before any user is logged on, or on non-Windows dev targets,
+                        // the slot is `None` and we emit the `LOCAL_SYSTEM_SID` fallback so
+                        // the downstream proto field is never empty.
+                        let cached_user_sid = personel_core::user_context::current_sid_or_system();
+                        let user_sid_proto = WindowsUserSid { value: cached_user_sid };
                         let proto_events: Vec<Event> = items
                             .iter()
                             .map(|raw| {
@@ -381,7 +390,7 @@ async fn stream_once(
                                     schema_version: 1,
                                     tenant_id: Some(tenant_id_proto.clone()),
                                     endpoint_id: Some(endpoint_id_proto.clone()),
-                                    user_sid: None,
+                                    user_sid: Some(user_sid_proto.clone()),
                                     occurred_at: Some(Timestamp {
                                         seconds: raw.occurred_at / 1_000_000_000,
                                         nanos: (raw.occurred_at % 1_000_000_000) as i32,
@@ -432,7 +441,7 @@ async fn stream_once(
                         return Err(AgentError::Grpc(status.to_string()));
                     }
                     Some(Ok(server_msg)) => {
-                        handle_server_message(server_msg);
+                        handle_server_message(server_msg, &queue);
                     }
                 }
             }
@@ -453,20 +462,47 @@ fn parse_semver(s: &str) -> (u32, u32, u32) {
 
 // ── Server message dispatch ───────────────────────────────────────────────────
 
-fn handle_server_message(msg: personel_proto::v1::ServerMessage) {
+fn handle_server_message(
+    msg: personel_proto::v1::ServerMessage,
+    queue: &Arc<personel_queue::queue::EventQueue>,
+) {
     use server_message::Payload;
     match msg.payload {
         Some(Payload::Welcome(w)) => {
             info!(server_version = %w.server_version, ack_up_to = w.ack_up_to_seq, "transport: Welcome received");
         }
         Some(Payload::BatchAck(ack)) => {
-            debug!(
-                batch_id = ack.batch_id,
-                accepted = ack.accepted_count,
-                rejected = ack.rejected_count,
-                "transport: BatchAck"
-            );
-            // TODO Phase 2: call queue.ack_batch(ack.batch_id)
+            // Commit the in-flight rows for this batch. The queue uses the
+            // batch_id assigned by dequeue_batch as the correlation key;
+            // ack_batch() deletes the rows from event_queue. A zero delete
+            // count is not inherently fatal (the batch may have been nacked
+            // earlier by a transport error, or the ack is stale after a
+            // reconnect), but we log it at warn level so operators can
+            // notice if it happens repeatedly.
+            match queue.ack_batch(ack.batch_id) {
+                Ok(n) => {
+                    debug!(
+                        batch_id = ack.batch_id,
+                        accepted = ack.accepted_count,
+                        rejected = ack.rejected_count,
+                        committed_rows = n,
+                        "transport: BatchAck"
+                    );
+                    if n == 0 {
+                        warn!(
+                            batch_id = ack.batch_id,
+                            "transport: BatchAck committed 0 rows — stale or already-acked batch"
+                        );
+                    }
+                }
+                Err(e) => {
+                    error!(
+                        batch_id = ack.batch_id,
+                        error = %e,
+                        "transport: ack_batch failed — in-flight rows remain"
+                    );
+                }
+            }
         }
         Some(Payload::PolicyPush(p)) => {
             info!(version = %p.policy_version, "transport: PolicyPush — TODO Phase 2: apply");
@@ -728,6 +764,94 @@ mod tests {
         assert_eq!(cfg.max, Duration::from_secs(30));
         assert!((cfg.jitter - 0.3).abs() < 1e-9);
         assert!((cfg.multiplier - 2.0).abs() < 1e-9);
+    }
+
+    /// Builds a fresh disk-backed queue in a temp directory for unit tests.
+    /// We cannot use the crate-private `open_in_memory` test helper from
+    /// personel-queue because it is gated on that crate's `cfg(test)`, so
+    /// we stand up a real SQLCipher file with an all-zero key instead.
+    fn test_queue() -> Arc<personel_queue::queue::EventQueue> {
+        use personel_queue::queue::{EventQueue, QueueConfig};
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("queue.db");
+        // Leak the TempDir so the file stays alive for the lifetime of
+        // the test. The OS cleans up %TEMP% eventually; this is a unit
+        // test so it's fine.
+        std::mem::forget(dir);
+        let key = zeroize::Zeroizing::new(vec![0u8; 32]);
+        let cfg = QueueConfig::new(path, key);
+        Arc::new(EventQueue::open(cfg).expect("open queue"))
+    }
+
+    /// BatchAck handler calls queue.ack_batch with the received batch_id
+    /// and removes the in-flight rows. Regression for the pre-fix TODO where
+    /// in-flight rows were never committed.
+    #[test]
+    fn batch_ack_commits_in_flight_rows() {
+        use personel_core::event::Priority;
+        use personel_proto::v1::{BatchAck, ServerMessage};
+
+        let queue = test_queue();
+
+        // Enqueue three events, then dequeue them into batch_id 42.
+        let now = 1_700_000_000_000_000_000i64;
+        for i in 0..3u8 {
+            queue
+                .enqueue(
+                    &[i; 16],
+                    "test.event",
+                    Priority::Normal,
+                    now,
+                    now,
+                    b"payload",
+                )
+                .unwrap();
+        }
+        let batch_id: u64 = 42;
+        let dequeued = queue.dequeue_batch(100, batch_id).unwrap();
+        assert_eq!(dequeued.len(), 3, "three rows should be in-flight");
+        let stats = queue.stats().unwrap();
+        assert_eq!(stats.in_flight_count, 3, "stats should reflect in-flight");
+        assert_eq!(stats.pending_count, 0);
+
+        // Send a BatchAck through handle_server_message — this is the
+        // production dispatch entry point that was previously a TODO.
+        let msg = ServerMessage {
+            payload: Some(server_message::Payload::BatchAck(BatchAck {
+                batch_id,
+                accepted_count: 3,
+                rejected_count: 0,
+            })),
+        };
+        handle_server_message(msg, &queue);
+
+        // After the ack the in-flight rows must be gone.
+        let stats = queue.stats().unwrap();
+        assert_eq!(
+            stats.in_flight_count, 0,
+            "in-flight rows must be committed by BatchAck"
+        );
+        assert_eq!(stats.pending_count, 0);
+    }
+
+    /// A BatchAck for an unknown batch_id is a no-op (does not panic).
+    /// Exercises the "stale ack" path, which can happen after a reconnect.
+    #[test]
+    fn batch_ack_unknown_batch_is_noop() {
+        use personel_proto::v1::{BatchAck, ServerMessage};
+
+        let queue = test_queue();
+        let msg = ServerMessage {
+            payload: Some(server_message::Payload::BatchAck(BatchAck {
+                batch_id: 999,
+                accepted_count: 0,
+                rejected_count: 0,
+            })),
+        };
+        handle_server_message(msg, &queue); // must not panic
+        let stats = queue.stats().unwrap();
+        assert_eq!(stats.pending_count, 0);
+        assert_eq!(stats.in_flight_count, 0);
     }
 
     /// Minimal jitter ile art arda iki çağrı aynı cap'ten gelir.

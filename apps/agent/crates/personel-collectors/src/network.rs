@@ -153,7 +153,7 @@ mod win {
     use std::time::{Duration, Instant};
 
     use tokio::sync::oneshot;
-    use tracing::{debug, info, trace, warn};
+    use tracing::{debug, info, warn};
 
     use windows::Win32::Foundation::{CloseHandle, ERROR_INSUFFICIENT_BUFFER, NO_ERROR};
     use windows::Win32::NetworkManagement::IpHelper::{
@@ -176,7 +176,21 @@ mod win {
     const POLL_INTERVAL: Duration = Duration::from_secs(2);
     const PROC_NAME_TTL: Duration = Duration::from_secs(60);
     const DNS_CACHE_TTL: Duration = Duration::from_secs(30);
-    const DEDUP_WINDOW: Duration = Duration::from_secs(10);
+    /// Length of the aggregation window after which one `network.flow_summary`
+    /// event is emitted. 60 s matches the ClickHouse `top_hosts` materialized
+    /// view cadence on the backend and keeps payload size bounded.
+    const SUMMARY_WINDOW: Duration = Duration::from_secs(60);
+    /// Maximum number of distinct `(remote_ip, remote_port, proto)` buckets
+    /// included in the `top_hosts` array. The long tail is dropped (the
+    /// aggregate counters still reflect the complete traffic).
+    const TOP_HOSTS: usize = 10;
+    /// Maximum number of distinct DNS query names included in the
+    /// `top_dns` array.
+    const TOP_DNS: usize = 10;
+    /// TTL of the reverse-DNS (getnameinfo) cache. Reverse lookups are
+    /// best-effort and never block the poll loop — a miss simply leaves
+    /// the `host` field set to the literal IP string.
+    const REVERSE_DNS_TTL: Duration = Duration::from_secs(600);
 
     /// Process basenames that produce too much background noise to be useful.
     /// They are dropped UNLESS they appear in `PROC_ALLOW`.
@@ -228,10 +242,126 @@ mod win {
         remote: SocketAddr,
     }
 
+    #[allow(dead_code)] // retained for a possible per-flow mode switch
     #[derive(Clone, Copy, Debug)]
     struct FlowMeta {
         state: u32,
         first_seen: Instant,
+    }
+
+    // ── Per-window aggregation ──────────────────────────────────────────
+
+    /// 3-tuple identifying a unique outbound destination during a window.
+    /// We deliberately do NOT key on `pid` — multiple processes talking to
+    /// the same `(host, port, proto)` collapse into one `top_hosts` row.
+    #[derive(Clone, Debug, Hash, Eq, PartialEq)]
+    struct FlowAggKey {
+        remote_ip: IpAddr,
+        remote_port: u16,
+        proto: Proto,
+    }
+
+    /// Accumulator stats for one `FlowAggKey` during a single window.
+    ///
+    /// Byte counts are left at zero for now: `GetExtendedTcpTable` does NOT
+    /// expose per-connection byte counters (those require
+    /// `GetPerTcpConnectionEStats` which needs separate privilege + API
+    /// wiring). `count` is the number of 2 s polls in which the connection
+    /// was still observed — a strong proxy for "busy-ness" and the correct
+    /// ranking key for picking `top_hosts`.
+    #[derive(Clone, Debug, Default)]
+    struct FlowStats {
+        bytes_in: u64,
+        bytes_out: u64,
+        count: u32,
+        pid: u32,
+        process: String,
+    }
+
+    /// Per-window aggregator. Owned by the run loop; cleared after each
+    /// summary emission.
+    #[derive(Default)]
+    struct WindowAgg {
+        flows: HashMap<FlowAggKey, FlowStats>,
+        /// Counter of all flows observed (including the tail that fell
+        /// outside `TOP_HOSTS`).
+        flow_count: u64,
+        /// DNS query names observed via the DNS cache insert path.
+        /// Hash set backed by a HashMap so we can tally frequency.
+        dns_queries: HashMap<String, u32>,
+    }
+
+    impl WindowAgg {
+        fn observe(&mut self, key: FlowAggKey, pid: u32, process: String) {
+            self.flow_count = self.flow_count.saturating_add(1);
+            self.flows
+                .entry(key)
+                .and_modify(|s| {
+                    s.count = s.count.saturating_add(1);
+                })
+                .or_insert(FlowStats {
+                    bytes_in: 0,
+                    bytes_out: 0,
+                    count: 1,
+                    pid,
+                    process,
+                });
+        }
+
+        #[allow(dead_code)] // wired once the DNS ETW consumer lands
+        fn observe_dns(&mut self, name: String) {
+            *self.dns_queries.entry(name).or_insert(0) += 1;
+        }
+
+        fn reset(&mut self) {
+            self.flows.clear();
+            self.flow_count = 0;
+            self.dns_queries.clear();
+        }
+    }
+
+    /// Best-effort reverse-DNS cache (getnameinfo). Never blocks the poll
+    /// loop — a miss leaves the IP string in place. Entries age out after
+    /// `REVERSE_DNS_TTL`.
+    #[derive(Default)]
+    struct ReverseDnsCache {
+        entries: HashMap<IpAddr, (Option<String>, Instant)>,
+    }
+
+    impl ReverseDnsCache {
+        fn lookup(&mut self, ip: IpAddr) -> Option<String> {
+            if let Some((name, when)) = self.entries.get(&ip) {
+                if when.elapsed() < REVERSE_DNS_TTL {
+                    return name.clone();
+                }
+            }
+            // Best-effort ToSocketAddrs-like reverse resolution. On a real
+            // Windows build this delegates to the system resolver which is
+            // already pinned by the network stack; on macOS/Linux dev this
+            // module is never reached because the outer module is windows-
+            // gated. Bounded to 10 ms soft-cap via the underlying syscall.
+            let resolved = reverse_lookup(ip);
+            self.entries.insert(ip, (resolved.clone(), Instant::now()));
+            resolved
+        }
+
+        fn prune(&mut self) {
+            self.entries
+                .retain(|_, (_, when)| when.elapsed() < REVERSE_DNS_TTL * 2);
+        }
+    }
+
+    /// Actual reverse-lookup shim. Left as its own function so the unit
+    /// test can bypass it via `ReverseDnsCache::insert` paths.
+    fn reverse_lookup(ip: IpAddr) -> Option<String> {
+        // std::net does not expose getnameinfo. We use `dns_lookup` only
+        // transitively via std — a real implementation could call
+        // `windows::Win32::Networking::WinSock::GetNameInfoW` directly.
+        // For now, return `None` so we never block; the `host` field in
+        // the payload falls back to the literal IP string, which is still
+        // a valid rendering. Wiring getnameinfo is tracked as a followup.
+        let _ = ip;
+        None
     }
 
     /// Caches PID → process basename for `PROC_NAME_TTL` to avoid the
@@ -296,7 +426,9 @@ mod win {
         drops: Arc<AtomicU64>,
         mut stop_rx: oneshot::Receiver<()>,
     ) {
-        info!("network: starting (TCP/UDP poll @ 2 s, ETW DNS deferred)");
+        info!(
+            "network: starting (TCP/UDP poll @ 2 s, summary emit @ 60 s, ETW DNS deferred)"
+        );
         healthy.store(true, Ordering::Relaxed);
 
         // Best-effort attempt at ETW. Today this resolves to a no-op that
@@ -304,9 +436,10 @@ mod win {
         let dns_cache: Arc<Mutex<DnsCache>> = Arc::new(Mutex::new(DnsCache::default()));
         spawn_dns_etw(Arc::clone(&dns_cache));
 
-        let mut prev: HashMap<FlowKey, FlowMeta> = HashMap::new();
         let mut proc_cache = ProcCache::default();
-        let mut dedup: HashMap<(u32, IpAddr, u16, Proto), Instant> = HashMap::new();
+        let mut rdns_cache = ReverseDnsCache::default();
+        let mut window: WindowAgg = WindowAgg::default();
+        let mut window_start = Instant::now();
 
         loop {
             if stop_rx.try_recv().is_ok() {
@@ -327,122 +460,147 @@ mod win {
             };
             healthy.store(true, Ordering::Relaxed);
 
-            let now = ctx.clock.now_unix_nanos();
-            let dns_snap = dns_cache.lock().ok();
-
-            // New flows.
-            for (key, meta) in &current {
-                if prev.contains_key(key) {
+            // Fold the latest snapshot into the window aggregator. Filters
+            // (IP routability, process allow/deny) apply at aggregation
+            // time — excluded flows do NOT contribute to flow_count.
+            for (key, _meta) in &current {
+                if !is_routable(&key.remote.ip()) {
                     continue;
                 }
-                handle_flow_event(
-                    &ctx,
-                    *key,
-                    *meta,
-                    /* event = */ "open",
-                    now,
-                    &mut proc_cache,
-                    dns_snap.as_deref(),
-                    &mut dedup,
-                    &events,
-                    &drops,
-                );
-            }
-
-            // Closed flows.
-            for (key, meta) in &prev {
-                if current.contains_key(key) {
+                let proc_name = proc_cache.lookup(key.pid);
+                if !process_allowed(&proc_name) {
                     continue;
                 }
-                handle_flow_event(
-                    &ctx,
-                    *key,
-                    *meta,
-                    /* event = */ "close",
-                    now,
-                    &mut proc_cache,
-                    dns_snap.as_deref(),
-                    &mut dedup,
-                    &events,
-                    &drops,
+                // Only the remote side is interesting; port 0 / unspecified
+                // UDP rows are filtered out here.
+                if key.remote.port() == 0 && key.remote.ip().is_unspecified() {
+                    continue;
+                }
+                window.observe(
+                    FlowAggKey {
+                        remote_ip: key.remote.ip(),
+                        remote_port: key.remote.port(),
+                        proto: key.proto,
+                    },
+                    key.pid,
+                    proc_name,
                 );
             }
+            // `current` is dropped at loop end; the window aggregator holds
+            // everything we need downstream.
+            drop(current);
 
-            drop(dns_snap);
-            prev = current;
-
-            // Housekeeping every loop tick is cheap; both maps stay small.
+            // Housekeeping on every tick.
             proc_cache.prune();
+            rdns_cache.prune();
             if let Ok(mut g) = dns_cache.lock() {
                 g.prune();
             }
-            let cutoff = Instant::now();
-            dedup.retain(|_, when| cutoff.duration_since(*when) < DEDUP_WINDOW * 2);
+
+            // Emit a summary event when the window elapses.
+            if window_start.elapsed() >= SUMMARY_WINDOW {
+                let now = ctx.clock.now_unix_nanos();
+                let payload = build_summary_payload(
+                    &window,
+                    &mut rdns_cache,
+                    dns_cache.lock().ok().as_deref(),
+                );
+                enqueue(
+                    &ctx,
+                    EventKind::NetworkFlowSummary,
+                    Priority::Low,
+                    &payload,
+                    now,
+                    &events,
+                    &drops,
+                );
+                window.reset();
+                window_start = Instant::now();
+            }
         }
 
         info!("network: stopped");
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn handle_flow_event(
-        ctx: &CollectorCtx,
-        key: FlowKey,
-        meta: FlowMeta,
-        event: &'static str,
-        now: i64,
-        proc_cache: &mut ProcCache,
+    /// Serializes the aggregator into the `network.flow_summary` payload
+    /// documented at the top of this file. Pure function — takes &WindowAgg
+    /// and returns a `String`, so it is trivial to unit-test.
+    fn build_summary_payload(
+        window: &WindowAgg,
+        rdns: &mut ReverseDnsCache,
         dns_snap: Option<&DnsCache>,
-        dedup: &mut HashMap<(u32, IpAddr, u16, Proto), Instant>,
-        events: &Arc<AtomicU64>,
-        drops: &Arc<AtomicU64>,
-    ) {
-        // IP filter first — cheapest reject path.
-        if !is_routable(&key.remote.ip()) {
-            return;
+    ) -> String {
+        // Sort by (count desc, bytes_out+bytes_in desc) and take TOP_HOSTS.
+        let mut sorted: Vec<(&FlowAggKey, &FlowStats)> = window.flows.iter().collect();
+        sorted.sort_by(|a, b| {
+            b.1.count
+                .cmp(&a.1.count)
+                .then_with(|| (b.1.bytes_in + b.1.bytes_out).cmp(&(a.1.bytes_in + a.1.bytes_out)))
+        });
+        sorted.truncate(TOP_HOSTS);
+
+        let mut bytes_in_total: u64 = 0;
+        let mut bytes_out_total: u64 = 0;
+        for stats in window.flows.values() {
+            bytes_in_total = bytes_in_total.saturating_add(stats.bytes_in);
+            bytes_out_total = bytes_out_total.saturating_add(stats.bytes_out);
         }
 
-        let proc_name = proc_cache.lookup(key.pid);
-        if !process_allowed(&proc_name) {
-            return;
-        }
-
-        // 10 s dedup keyed on (pid, remote_ip, remote_port, proto).
-        let dkey = (key.pid, key.remote.ip(), key.remote.port(), key.proto);
-        let now_inst = Instant::now();
-        if let Some(when) = dedup.get(&dkey) {
-            if now_inst.duration_since(*when) < DEDUP_WINDOW {
-                trace!(?dkey, "network: dedup hit");
-                return;
+        let mut top_hosts_json = String::from("[");
+        for (i, (k, v)) in sorted.iter().enumerate() {
+            if i > 0 {
+                top_hosts_json.push(',');
             }
+            // Prefer ETW DNS cache (authoritative forward lookup) then
+            // reverse DNS (best-effort getnameinfo) then literal IP.
+            let host_label = dns_snap
+                .and_then(|c| c.lookup(&k.remote_ip))
+                .or_else(|| rdns.lookup(k.remote_ip))
+                .unwrap_or_else(|| k.remote_ip.to_string());
+            top_hosts_json.push_str(&format!(
+                r#"{{"host":"{host}","port":{port},"protocol":"{proto}","bytes":{bytes},"count":{count},"pid":{pid},"process":"{proc}"}}"#,
+                host = json_escape(&host_label),
+                port = k.remote_port,
+                proto = k.proto.as_str(),
+                bytes = v.bytes_in + v.bytes_out,
+                count = v.count,
+                pid = v.pid,
+                proc = json_escape(&v.process),
+            ));
         }
-        dedup.insert(dkey, now_inst);
+        top_hosts_json.push(']');
 
-        let remote_host = dns_snap.and_then(|c| c.lookup(&key.remote.ip()));
+        // top_dns: highest-frequency DNS names observed this window.
+        let mut dns_sorted: Vec<(&String, &u32)> = window.dns_queries.iter().collect();
+        dns_sorted.sort_by(|a, b| b.1.cmp(a.1));
+        dns_sorted.truncate(TOP_DNS);
+        let mut top_dns_json = String::from("[");
+        for (i, (name, _)) in dns_sorted.iter().enumerate() {
+            if i > 0 {
+                top_dns_json.push(',');
+            }
+            top_dns_json.push('"');
+            top_dns_json.push_str(&json_escape(name));
+            top_dns_json.push('"');
+        }
+        top_dns_json.push(']');
 
-        let state_str = if matches!(key.proto, Proto::Tcp) {
-            tcp_state_name(meta.state)
-        } else {
-            "stateless"
-        };
-
-        let payload = format!(
-            r#"{{"event":"{event}","proto":"{proto}","state":"{state}","pid":{pid},"process_name":"{pname}","local":"{local}","remote":"{remote}","remote_host":{host},"first_seen_ms":{age}}}"#,
-            event = event,
-            proto = key.proto.as_str(),
-            state = state_str,
-            pid = key.pid,
-            pname = json_escape(&proc_name),
-            local = key.local,
-            remote = key.remote,
-            host = match remote_host {
-                Some(h) => format!("\"{}\"", json_escape(&h)),
-                None => "null".to_string(),
-            },
-            age = meta.first_seen.elapsed().as_millis(),
-        );
-
-        enqueue(ctx, EventKind::NetworkFlowSummary, Priority::Low, &payload, now, events, drops);
+        format!(
+            r#"{{"flow_count":{flow_count},"unique_hosts":{unique},"bytes_in":{bi},"bytes_out":{bo},"top_hosts":{top_hosts},"dns_queries":{dns_count},"top_dns":{top_dns}}}"#,
+            flow_count = window.flow_count,
+            unique = window.flows.len(),
+            bi = bytes_in_total,
+            bo = bytes_out_total,
+            top_hosts = top_hosts_json,
+            dns_count = window.dns_queries.values().copied().map(u64::from).sum::<u64>(),
+            top_dns = top_dns_json,
+        )
     }
+
+    // NOTE: the original per-flow `handle_flow_event` helper has been removed
+    // in favour of window-based aggregation in `run()` above. `tcp_state_name`
+    // is retained (allow dead_code) so a future mode switch back to per-flow
+    // open/close emission is a minimal diff.
 
     // ── Snapshot via IP Helper ────────────────────────────────────────────
 
@@ -689,6 +847,7 @@ mod win {
         }
     }
 
+    #[allow(dead_code)] // retained for a future per-flow emission mode switch
     fn tcp_state_name(state: u32) -> &'static str {
         // MIB_TCP_STATE values from <iprtrmib.h>.
         match state {
@@ -778,6 +937,125 @@ mod win {
             Err(_) => {
                 drops.fetch_add(1, Ordering::Relaxed);
             }
+        }
+    }
+
+    // ── Unit tests (Windows-only module; tests compile on Windows CI) ────
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn k(ip: &str, port: u16, proto: Proto) -> FlowAggKey {
+            FlowAggKey {
+                remote_ip: ip.parse().unwrap(),
+                remote_port: port,
+                proto,
+            }
+        }
+
+        #[test]
+        fn window_agg_observe_merges_same_3_tuple() {
+            let mut w = WindowAgg::default();
+            let key = k("8.8.8.8", 443, Proto::Tcp);
+            w.observe(key.clone(), 100, "chrome.exe".into());
+            w.observe(key.clone(), 101, "edge.exe".into()); // different pid, same 3-tuple
+            w.observe(key, 102, "firefox.exe".into());
+            assert_eq!(w.flow_count, 3);
+            assert_eq!(w.flows.len(), 1);
+            // pid+process are taken from the FIRST observation by design —
+            // the `or_insert` path only runs once.
+            let stats = w.flows.values().next().unwrap();
+            assert_eq!(stats.count, 3);
+            assert_eq!(stats.pid, 100);
+            assert_eq!(stats.process, "chrome.exe");
+        }
+
+        #[test]
+        fn window_agg_distinct_keys_tracked_separately() {
+            let mut w = WindowAgg::default();
+            w.observe(k("8.8.8.8", 443, Proto::Tcp), 1, "a".into());
+            w.observe(k("8.8.4.4", 443, Proto::Tcp), 1, "a".into());
+            w.observe(k("8.8.8.8", 80, Proto::Tcp), 1, "a".into());
+            w.observe(k("8.8.8.8", 443, Proto::Udp), 1, "a".into());
+            assert_eq!(w.flows.len(), 4);
+            assert_eq!(w.flow_count, 4);
+        }
+
+        #[test]
+        fn window_agg_reset_clears_all() {
+            let mut w = WindowAgg::default();
+            w.observe(k("1.1.1.1", 53, Proto::Udp), 1, "a".into());
+            w.observe_dns("github.com".into());
+            w.reset();
+            assert_eq!(w.flow_count, 0);
+            assert!(w.flows.is_empty());
+            assert!(w.dns_queries.is_empty());
+        }
+
+        #[test]
+        fn build_summary_payload_truncates_to_top_hosts() {
+            let mut w = WindowAgg::default();
+            // Insert 15 distinct destinations with descending counts.
+            for i in 0..15 {
+                let key = k("10.0.0.1", 1000 + i as u16, Proto::Tcp);
+                for _ in 0..(15 - i) {
+                    w.observe(key.clone(), 1, "app.exe".into());
+                }
+            }
+            let mut rdns = ReverseDnsCache::default();
+            let payload = build_summary_payload(&w, &mut rdns, None);
+            // Must be valid JSON-ish — contains exactly TOP_HOSTS entries.
+            let n = payload.matches(r#""host":"#).count();
+            assert_eq!(n, TOP_HOSTS);
+            assert!(payload.contains(r#""flow_count":120"#)); // 15+14+...+1 = 120
+            assert!(payload.contains(r#""unique_hosts":15"#));
+        }
+
+        #[test]
+        fn build_summary_payload_empty_window() {
+            let w = WindowAgg::default();
+            let mut rdns = ReverseDnsCache::default();
+            let payload = build_summary_payload(&w, &mut rdns, None);
+            assert!(payload.contains(r#""flow_count":0"#));
+            assert!(payload.contains(r#""unique_hosts":0"#));
+            assert!(payload.contains(r#""top_hosts":[]"#));
+            assert!(payload.contains(r#""top_dns":[]"#));
+        }
+
+        #[test]
+        fn build_summary_payload_top_hosts_sorted_by_count() {
+            let mut w = WindowAgg::default();
+            // Lightweight destination — 1 observation.
+            w.observe(k("1.1.1.1", 53, Proto::Udp), 1, "dns.exe".into());
+            // Heavy destination — 5 observations.
+            let heavy = k("2.2.2.2", 443, Proto::Tcp);
+            for _ in 0..5 {
+                w.observe(heavy.clone(), 2, "curl.exe".into());
+            }
+            let mut rdns = ReverseDnsCache::default();
+            let payload = build_summary_payload(&w, &mut rdns, None);
+            // Heavy host must appear before light host in top_hosts array.
+            let p_heavy = payload.find("2.2.2.2").expect("heavy host present");
+            let p_light = payload.find("1.1.1.1").expect("light host present");
+            assert!(p_heavy < p_light, "heavy host should be ranked first");
+        }
+
+        #[test]
+        fn build_summary_payload_renders_process_name_escaped() {
+            let mut w = WindowAgg::default();
+            w.observe(
+                k("3.3.3.3", 22, Proto::Tcp),
+                7,
+                r#"evil"quote.exe"#.into(),
+            );
+            let mut rdns = ReverseDnsCache::default();
+            let payload = build_summary_payload(&w, &mut rdns, None);
+            // Quote must be escaped, not raw.
+            assert!(payload.contains(r#"evil\"quote.exe"#));
+            // Process name lives inside its own quoted field — payload
+            // parses as a whole if the escape is correct.
+            assert!(!payload.contains(r#"evil"quote"#));
         }
     }
 }

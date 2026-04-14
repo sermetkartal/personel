@@ -65,34 +65,69 @@ fn main() -> Result<()> {
     // Faz 4 Wave 1 #31.
     crash_dump::install_unhandled_exception_filter();
 
-    let data_dir = crate::config::default_data_dir();
-    let agent_config = crate::config::AgentConfig::load_or_default(&data_dir)
-        .context("load agent config")?;
-
-    let rt = runtime::build_runtime().context("build tokio runtime")?;
-
-    // Determine run mode.
+    // Determine run mode as early as possible. We must defer all heavy
+    // bring-up work (runtime build, config load, queue open, TLS channel
+    // setup) until AFTER we have registered the SCM control handler —
+    // otherwise Windows SCM kills us with error 1053 ("service did not
+    // respond to start request in a timely fashion") when that deadline
+    // (~30 s from process start) passes before we call
+    // `service_dispatcher::start`.
     let is_service = !force_console && !debug && personel_platform::service::is_service_context();
 
     if is_service {
         // Windows service mode: the SCM owns the lifecycle.
-        // run_as_service blocks until the SCM sends SERVICE_CONTROL_STOP.
+        //
+        // The ordering here is load-bearing: `os_run_as_service` calls
+        // `service_dispatcher::start` which is the fast path Windows is
+        // waiting for. All agent bring-up (runtime build, config load,
+        // queue open, enrollment check, TLS channel, collector registry
+        // spawn) is packaged into the body closure and executed AFTER the
+        // SCM control handler has been registered and the service has
+        // transitioned to Running.
         info!("starting in Windows service mode");
 
         #[cfg(target_os = "windows")]
         {
-            let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-            let (done_tx, done_rx) = oneshot::channel::<()>();
-            rt.spawn(async move {
-                let _ = service::run_agent(agent_config, shutdown_rx).await;
-                let _ = done_tx.send(());
-            });
-            os_run_as_service(shutdown_tx)
-                .context("Windows SCM dispatcher")?;
-            let _ = rt.block_on(done_rx);
+            os_run_as_service(move |shutdown_rx| {
+                // Build the tokio runtime INSIDE the service body so the
+                // thread creation + worker spawn does not count toward the
+                // SCM start deadline.
+                let rt = match runtime::build_runtime() {
+                    Ok(rt) => rt,
+                    Err(e) => {
+                        tracing::error!(error = %e, "service body: build_runtime failed");
+                        return;
+                    }
+                };
+
+                // Load the agent config inside the body too — any file IO
+                // or DPAPI unwrap here is safe because we are past the
+                // SCM deadline.
+                let data_dir = crate::config::default_data_dir();
+                let agent_config = match crate::config::AgentConfig::load_or_default(&data_dir) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        tracing::error!(error = %e, "service body: load agent config failed");
+                        return;
+                    }
+                };
+
+                rt.block_on(async move {
+                    if let Err(e) = service::run_agent(agent_config, shutdown_rx).await {
+                        tracing::error!(error = %e, "service body: run_agent returned error");
+                    }
+                });
+            })
+            .context("Windows SCM dispatcher")?;
         }
         #[cfg(not(target_os = "windows"))]
         {
+            // Non-Windows service fallback path. We still load the config
+            // + build the runtime up-front since there is no SCM deadline.
+            let data_dir = crate::config::default_data_dir();
+            let agent_config = crate::config::AgentConfig::load_or_default(&data_dir)
+                .context("load agent config")?;
+            let rt = runtime::build_runtime().context("build tokio runtime")?;
             rt.block_on(async move {
                 let (shutdown_tx, shutdown_rx) = oneshot::channel();
                 tokio::spawn(runtime::wait_for_shutdown(shutdown_tx));
@@ -101,8 +136,12 @@ fn main() -> Result<()> {
             .context("agent run_agent (non-windows service fallback)")?;
         }
     } else {
-        // Console / debug mode.
+        // Console / debug mode — no SCM deadline, do the bring-up inline.
         info!("starting in console mode");
+        let data_dir = crate::config::default_data_dir();
+        let agent_config = crate::config::AgentConfig::load_or_default(&data_dir)
+            .context("load agent config")?;
+        let rt = runtime::build_runtime().context("build tokio runtime")?;
         rt.block_on(async move {
             let (shutdown_tx, shutdown_rx) = oneshot::channel();
             tokio::spawn(runtime::wait_for_shutdown(shutdown_tx));

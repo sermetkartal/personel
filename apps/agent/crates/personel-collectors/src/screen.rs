@@ -991,6 +991,10 @@ fn capture_loop(
     use personel_core::error::AgentError;
 
     let mut last_frame_hash_per_monitor: HashMap<u32, [u8; 32]> = HashMap::new();
+    // First-tick fires immediately (not after policy_secs) so operators can see
+    // a screenshot.captured event within a few seconds of agent startup.
+    let mut first_tick = true;
+    let mut tick_counter: u64 = 0;
 
     loop {
         if stop_rx.try_recv().is_ok() {
@@ -1007,19 +1011,36 @@ fn capture_loop(
         let game_mode = detect_game_mode();
         let delay_secs =
             next_tick_delay_secs_with_game_mode(idle_ms, policy_secs, game_mode);
-        if game_mode {
-            debug!(
-                delay_secs,
-                "screen: game/full-screen mode detected — stretching tick"
+
+        if first_tick {
+            info!(
+                policy_secs,
+                idle_ms,
+                "screen: first tick — capturing immediately (skipping initial interval sleep)"
             );
-        }
-        for _ in 0..delay_secs {
-            std::thread::sleep(Duration::from_secs(1));
-            if stop_rx.try_recv().is_ok() {
-                info!("screen collector: stop received during interval sleep");
-                return;
+            first_tick = false;
+        } else {
+            if game_mode {
+                debug!(
+                    delay_secs,
+                    "screen: game/full-screen mode detected — stretching tick"
+                );
+            }
+            info!(
+                delay_secs, idle_ms, game_mode, policy_secs,
+                "screen: tick sleep starting"
+            );
+            for _ in 0..delay_secs {
+                std::thread::sleep(Duration::from_secs(1));
+                if stop_rx.try_recv().is_ok() {
+                    info!("screen collector: stop received during interval sleep");
+                    return;
+                }
             }
         }
+
+        tick_counter += 1;
+        info!(tick = tick_counter, idle_ms, "screen: tick fired");
 
         // ── Sensitivity guard (#23) — KVKK m.6 / ADR 0013 anchor.
         // MUST run before the operational battery skip so a sensitive
@@ -1035,6 +1056,7 @@ fn capture_loop(
                 drops.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
+            debug!(exe = %exe, title = %fg.title, "screen: sensitivity gate passed");
         }
 
         // ── Battery aware (#33) ───────────────────────────────────────────
@@ -1059,47 +1081,87 @@ fn capture_loop(
         }
 
         // ── Grab a raw BGRA frame ─────────────────────────────────────────
-        let frame = match capture.capture_frame() {
-            Ok(f) => f,
-            Err(AgentError::CollectorRuntime { ref reason, .. })
-                if reason.contains("frame timeout") =>
-            {
-                debug!("screen: frame timeout — no desktop update");
-                continue;
-            }
-            Err(AgentError::CollectorRuntime { ref reason, .. })
-                if reason.contains("access lost") =>
-            {
-                warn!("screen: access lost — reopening duplication output");
-                if let Err(e) = capture.reopen() {
-                    error!(error = %e, "screen: reopen failed");
-                    healthy.store(false, Ordering::Relaxed);
+        // DXGI Desktop Duplication AcquireNextFrame returns DXGI_ERROR_WAIT_TIMEOUT
+        // (→ CollectorRuntime "frame timeout") if nothing on the desktop has
+        // changed in the last 100 ms. On a static desktop (VM, console-mode
+        // test, user AFK) this is EXTREMELY common and previously caused the
+        // whole tick to be skipped for policy_secs (default 300 s!) — zero
+        // events ever reached the queue.
+        //
+        // Fix: retry up to 20 × 250 ms = 5 s within one tick before giving up.
+        // This gives the GPU compositor plenty of chances to present a frame
+        // (cursor blink, clock tick, window redraw) without spinning.
+        info!("screen: capture attempt (with up to 20 × 250 ms retries on frame timeout)");
+        let mut frame_opt = None;
+        let mut retries_used = 0u32;
+        for attempt in 0..20u32 {
+            match capture.capture_frame() {
+                Ok(f) => {
+                    frame_opt = Some(f);
+                    retries_used = attempt;
+                    break;
                 }
-                continue;
-            }
-            Err(AgentError::CollectorRuntime { ref reason, .. })
-                if reason.contains("device removed") =>
-            {
-                error!("screen: D3D11 device removed — sleeping 5 s then reconstructing");
-                healthy.store(false, Ordering::Relaxed);
-                std::thread::sleep(Duration::from_secs(5));
-                if stop_rx.try_recv().is_ok() {
-                    return;
-                }
-                let q = ctx.policy().screenshot.quality_percent as u8;
-                match personel_os::capture::DxgiCapture::open(0, q) {
-                    Ok(new_cap) => {
-                        capture = new_cap;
-                        healthy.store(true, Ordering::Relaxed);
-                        info!("screen: DXGI reconstructed");
+                Err(AgentError::CollectorRuntime { ref reason, .. })
+                    if reason.contains("frame timeout") =>
+                {
+                    debug!(attempt, "screen: frame timeout — retrying");
+                    std::thread::sleep(Duration::from_millis(250));
+                    if stop_rx.try_recv().is_ok() {
+                        return;
                     }
-                    Err(e) => error!(error = %e, "screen: DXGI reconstruction failed"),
+                    continue;
                 }
-                continue;
+                Err(AgentError::CollectorRuntime { ref reason, .. })
+                    if reason.contains("access lost") =>
+                {
+                    warn!("screen: access lost — reopening duplication output");
+                    if let Err(e) = capture.reopen() {
+                        error!(error = %e, "screen: reopen failed");
+                        healthy.store(false, Ordering::Relaxed);
+                    }
+                    break;
+                }
+                Err(AgentError::CollectorRuntime { ref reason, .. })
+                    if reason.contains("device removed") =>
+                {
+                    error!("screen: D3D11 device removed — sleeping 5 s then reconstructing");
+                    healthy.store(false, Ordering::Relaxed);
+                    std::thread::sleep(Duration::from_secs(5));
+                    if stop_rx.try_recv().is_ok() {
+                        return;
+                    }
+                    let q = ctx.policy().screenshot.quality_percent as u8;
+                    match personel_os::capture::DxgiCapture::open(0, q) {
+                        Ok(new_cap) => {
+                            capture = new_cap;
+                            healthy.store(true, Ordering::Relaxed);
+                            info!("screen: DXGI reconstructed");
+                        }
+                        Err(e) => error!(error = %e, "screen: DXGI reconstruction failed"),
+                    }
+                    break;
+                }
+                Err(e) => {
+                    error!(error = %e, "screen: unexpected capture error");
+                    healthy.store(false, Ordering::Relaxed);
+                    break;
+                }
             }
-            Err(e) => {
-                error!(error = %e, "screen: unexpected capture error");
-                healthy.store(false, Ordering::Relaxed);
+        }
+        let frame = match frame_opt {
+            Some(f) => {
+                info!(
+                    retries = retries_used,
+                    width = f.width,
+                    height = f.height,
+                    monitor = f.monitor_index,
+                    "screen: captured frame"
+                );
+                f
+            }
+            None => {
+                info!("screen: capture abandoned this tick (timeouts exhausted or transient error) — will retry next tick");
+                drops.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
         };
@@ -1109,12 +1171,13 @@ fn capture_loop(
         let monitor_idx = frame.monitor_index;
         if let Some(prev) = last_frame_hash_per_monitor.get(&monitor_idx) {
             if *prev == hash {
-                debug!(monitor_idx, "screen: identical frame — skipping");
+                info!(monitor_idx, "screen: identical frame — skipping (dedup)");
                 frames_deduped.fetch_add(1, Ordering::Relaxed);
                 continue;
             }
         }
         last_frame_hash_per_monitor.insert(monitor_idx, hash);
+        info!(monitor_idx, bytes = frame.pixels.len(), "screen: frame accepted, encoding");
 
         // ── Optional OCR preprocess (#26) + WebP encode (#24) ─────────────
         let quality = ctx.policy().screenshot.quality_percent as f32;
@@ -1204,7 +1267,7 @@ fn enqueue_screenshot(ctx: &CollectorCtx, payload: Vec<u8>, events: &Arc<AtomicU
     ) {
         Ok(_) => {
             events.fetch_add(1, Ordering::Relaxed);
-            debug!(bytes = payload.len(), "screen: screenshot enqueued");
+            info!(bytes = payload.len(), "screen: screenshot enqueued");
         }
         Err(e) => {
             warn!(error = %e, "screen: queue error — dropping screenshot");

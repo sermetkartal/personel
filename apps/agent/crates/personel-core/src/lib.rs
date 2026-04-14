@@ -17,5 +17,6 @@ pub mod error;
 pub mod event;
 pub mod ids;
 pub mod throttle;
+pub mod user_context;
 
 pub use error::{AgentError, Result};

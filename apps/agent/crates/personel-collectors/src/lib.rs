@@ -42,6 +42,7 @@ pub mod process_app;
 pub mod screen;
 pub mod system_events;
 pub mod usb;
+pub mod user_sid;
 pub mod window_title;
 pub mod window_url_extraction;
 
@@ -221,6 +222,13 @@ impl CollectorRegistry {
     /// Always returns `Ok(())`. Individual start failures are observable
     /// through the `tracing` log stream (level `error`).
     pub async fn start_all(&mut self, ctx: &CollectorCtx) -> Result<()> {
+        // Launch the background user-SID refresh task ONCE per registry
+        // start. The task pushes results into `personel_core::user_context`
+        // so the transport layer can stamp `EventMeta.user_sid` without
+        // depending on `personel-collectors` (which would be a crate cycle).
+        // On non-Windows targets this is a no-op; see user_sid.rs.
+        user_sid::spawn_refresh_task();
+
         for collector in &self.collectors {
             let name = collector.name();
             info!(name, "starting collector");

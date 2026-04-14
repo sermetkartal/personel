@@ -258,8 +258,10 @@ mod windows {
         };
 
         let mut counts: HashMap<String, u64> = HashMap::new();
+        let mut total_keys_since_flush: u64 = 0;
         let mut last_flush = Instant::now();
         let flush_dur = Duration::from_secs(FLUSH_SECS);
+        let mut next_progress_log = Instant::now() + Duration::from_secs(10);
 
         loop {
             if stop_rx.try_recv().is_ok() {
@@ -274,15 +276,37 @@ mod windows {
                         .map(|f| f.title)
                         .unwrap_or_default();
                     *counts.entry(window).or_insert(0) += 1;
+                    total_keys_since_flush += 1;
                 }
             }
 
+            // Periodic progress log — lets operators confirm the hook callback
+            // is firing without waiting a full 60 s flush interval.
+            if Instant::now() >= next_progress_log {
+                info!(
+                    keys_since_flush = total_keys_since_flush,
+                    unique_windows = counts.len(),
+                    seconds_until_flush = flush_dur.saturating_sub(last_flush.elapsed()).as_secs(),
+                    "keystroke_meta: progress"
+                );
+                next_progress_log = Instant::now() + Duration::from_secs(10);
+            }
+
             if last_flush.elapsed() >= flush_dur {
+                info!(
+                    unique_windows = counts.len(),
+                    total_keys = total_keys_since_flush,
+                    "keystroke_meta: flush interval elapsed — draining counts"
+                );
+                if counts.is_empty() {
+                    info!("keystroke_meta: flush skipped — no keys captured in last interval");
+                }
                 for (window, count) in counts.drain() {
                     if count > 0 {
                         flush_meta(&ctx, &window, count, FLUSH_SECS, &events);
                     }
                 }
+                total_keys_since_flush = 0;
                 last_flush = Instant::now();
             }
 
@@ -321,7 +345,7 @@ mod windows {
         ) {
             Ok(_) => {
                 events.fetch_add(1, Ordering::Relaxed);
-                debug!(window, count, "keystroke_meta: flushed");
+                info!(window, count, interval_sec, "keystroke_meta: flushed window_stats event");
             }
             Err(e) => warn!(error = %e, "keystroke_meta: queue error"),
         }
@@ -345,18 +369,32 @@ mod windows {
         if !content_on {
             if pe_dek.is_none() {
                 warn!("keystroke_content: PE-DEK not provisioned — \
-                       metadata-only mode (ADR 0013 default-OFF)");
+                       ADR 0013 default-OFF. Parking collector (meta collector \
+                       owns the sole WH_KEYBOARD_LL hook slot).");
             } else {
                 info!("keystroke_content: policy.keystroke_content_enabled=false — \
-                       metadata-only mode (ADR 0013 default-OFF)");
+                       ADR 0013 default-OFF. Parking collector (meta collector \
+                       owns the sole WH_KEYBOARD_LL hook slot).");
             }
+            // CRITICAL: do NOT install a second global WH_KEYBOARD_LL hook here.
+            // The personel_os::input::KEY_EVENT_TX global is a single slot —
+            // a second install would clobber the meta collector's Sender and
+            // starve its receive loop (the bug that made both collectors emit
+            // zero events in the Faz 2 bring-up). Just park until stopped.
+            healthy.store(true, Ordering::Relaxed);
+            let _ = stop_rx.blocking_recv();
+            drop(ctx);
+            drop(pe_dek);
+            drop(events);
+            info!("keystroke_content: stopped (parked)");
+            return;
         }
 
         let (tx, rx) = mpsc::channel::<personel_os::input::KeyEvent>();
         let _hook = match personel_os::input::install_keyboard_hook(tx) {
             Ok(h) => {
                 healthy.store(true, Ordering::Relaxed);
-                info!("keystroke_content: WH_KEYBOARD_LL hook installed (content_mode={})", content_on);
+                info!("keystroke_content: WH_KEYBOARD_LL hook installed (content_mode=true)");
                 Some(h)
             }
             Err(e) => {

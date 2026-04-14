@@ -116,6 +116,8 @@ windows = { version = "0.54", features = [
     "Win32_System_ProcessStatus",
     # system_events collector — WTS session notifications + active console session id.
     "Win32_System_RemoteDesktop",
+    # user_sid resolver — ConvertSidToStringSidW lives under Security_Authorization.
+    "Win32_Security_Authorization",
     # bluetooth_devices collector — BluetoothFindFirstDevice / BluetoothFindNextDevice
     # (paired device enumeration via bluetoothapis.dll).
     "Win32_Devices_Bluetooth",

@@ -18,7 +18,7 @@
 //! MSI custom action during setup and uninstall.
 
 use std::ffi::OsString;
-use std::sync::OnceLock;
+use std::sync::{Mutex, OnceLock};
 use std::time::Duration;
 
 use tokio::sync::oneshot;
@@ -37,6 +37,17 @@ use windows_service::{
 
 use personel_core::error::{AgentError, Result};
 
+/// Type of the service body closure: receives a oneshot::Receiver that fires
+/// when the SCM has delivered Stop or Shutdown. The closure is expected to
+/// block until the receiver fires and all work has wound down.
+type ServiceBody = Box<dyn FnOnce(oneshot::Receiver<()>) + Send + 'static>;
+
+/// Holds the body closure between `run_as_service` and `service_main_wrapper`.
+/// `service_dispatcher::start` spawns a brand-new thread for the FFI trampoline
+/// which has no way to carry a captured closure, so we stash it here. The
+/// `Mutex<Option<_>>` is taken exactly once inside `run_service_main`.
+static SERVICE_BODY: OnceLock<Mutex<Option<ServiceBody>>> = OnceLock::new();
+
 // ── Service constants ─────────────────────────────────────────────────────────
 
 /// SCM service name (must match the name used in `service_dispatcher::start`).
@@ -46,16 +57,6 @@ const SERVICE_DISPLAY_NAME: &str = "Personel Agent";
 /// Service description shown in the SCM property sheet.
 const SERVICE_DESCRIPTION: &str =
     "Personel UAM endpoint agent — activity monitoring and compliance.";
-
-// ── Global shutdown channel ───────────────────────────────────────────────────
-//
-// The `define_windows_service!` macro generates a bare `extern "system"` FFI
-// entry point that takes no arguments.  We need to get the shutdown sender into
-// the service_main_wrapper without global mutable state.  The OnceLock lets us
-// stash it exactly once before calling `service_dispatcher::start`.
-
-static SHUTDOWN_TX: OnceLock<tokio::sync::Mutex<Option<oneshot::Sender<()>>>> =
-    OnceLock::new();
 
 // ── FFI trampoline ────────────────────────────────────────────────────────────
 
@@ -70,18 +71,32 @@ fn service_main_wrapper(_arguments: Vec<OsString>) {
 }
 
 fn run_service_main() -> std::result::Result<(), windows_service::Error> {
-    // ── Register the service control handler ──────────────────────────────────
+    // ── Register the service control handler FIRST ────────────────────────────
     //
-    // The closure must be `Send + 'static`.  We share a clone of a channel so
-    // that the Stop/Shutdown event can wake the tokio task below.
-    let (stop_tx, stop_rx) = std::sync::mpsc::channel::<()>();
-    let stop_tx_clone = stop_tx.clone();
+    // Windows SCM requires the control handler to be registered and the
+    // service to report StartPending within ~30 s of the service process
+    // being launched. If we do any heavy pre-work before this point we risk
+    // error 1053 ("service did not respond to start request in a timely
+    // fashion"). Everything here must stay cheap and allocation-light —
+    // the real agent bring-up (tokio runtime build, queue open, TLS channel
+    // construction, collector spawn) happens later from inside the body
+    // closure, AFTER we have transitioned to Running.
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let shutdown_tx_slot = std::sync::Arc::new(Mutex::new(Some(shutdown_tx)));
+    let shutdown_tx_for_handler = std::sync::Arc::clone(&shutdown_tx_slot);
 
     let status_handle =
         service_control_handler::register(SERVICE_NAME, move |event| match event {
             ServiceControl::Stop | ServiceControl::Shutdown => {
                 info!("SCM → Stop/Shutdown received");
-                let _ = stop_tx_clone.send(());
+                if let Ok(mut guard) = shutdown_tx_for_handler.lock() {
+                    if let Some(tx) = guard.take() {
+                        // `oneshot::Sender::send` consumes self on both Ok
+                        // and Err; the Err path just means the receiver has
+                        // already been dropped, which is fine.
+                        let _ = tx.send(());
+                    }
+                }
                 ServiceControlHandlerResult::NoError
             }
             ServiceControl::Interrogate => ServiceControlHandlerResult::NoError,
@@ -89,17 +104,26 @@ fn run_service_main() -> std::result::Result<(), windows_service::Error> {
         })?;
 
     // ── StartPending ──────────────────────────────────────────────────────────
+    // Report StartPending immediately so the SCM stops counting down from
+    // 30 s. The wait_hint tells the SCM to wait up to 60 s for the body
+    // closure to finish its own bring-up before Running is reported.
     status_handle.set_service_status(ServiceStatus {
         service_type: ServiceType::OWN_PROCESS,
         current_state: ServiceState::StartPending,
         controls_accepted: ServiceControlAccept::empty(),
         exit_code: ServiceExitCode::Win32(0),
         checkpoint: 0,
-        wait_hint: Duration::from_secs(10),
+        wait_hint: Duration::from_secs(60),
         process_id: None,
     })?;
 
     // ── Running ───────────────────────────────────────────────────────────────
+    // We transition to Running BEFORE the body closure runs. This is safe
+    // because the handler is already registered and will deliver Stop into
+    // the shutdown channel the body owns. Transitioning to Running now
+    // unblocks `sc start` on the caller side and prevents the watchdog
+    // from tripping the 1053 deadline even if agent bring-up takes a few
+    // seconds (queue open, TLS, enrollment fingerprint verification, …).
     status_handle.set_service_status(ServiceStatus {
         service_type: ServiceType::OWN_PROCESS,
         current_state: ServiceState::Running,
@@ -110,25 +134,24 @@ fn run_service_main() -> std::result::Result<(), windows_service::Error> {
         process_id: None,
     })?;
 
-    info!("service running; waiting for SCM stop event");
+    info!("service running; invoking body closure");
 
-    // Signal the tokio runtime that the service is up (through the OnceLock).
-    if let Some(lock) = SHUTDOWN_TX.get() {
-        // We intentionally do NOT send here — the tokio tx lives until Stop.
-        let _ = lock; // just assert it exists
-    }
+    // ── Run the body closure (heavy agent bring-up + event loop) ──────────────
+    // Take the body out of the static slot and invoke it with the
+    // shutdown_rx. The body is expected to block until the receiver fires
+    // and all worker tasks have drained. If no body was stashed this is a
+    // programmer error — we log loudly and fall through to Stopped.
+    let body = SERVICE_BODY
+        .get()
+        .and_then(|slot| slot.lock().ok().and_then(|mut g| g.take()));
 
-    // Block until Stop/Shutdown.
-    let _ = stop_rx.recv();
-    info!("stop event received; transitioning to StopPending");
-
-    // Also forward the shutdown into the tokio world via the OnceLock sender.
-    if let Some(lock) = SHUTDOWN_TX.get() {
-        // Try a non-blocking lock; if it fails the runtime is already down.
-        if let Ok(mut guard) = lock.try_lock() {
-            if let Some(tx) = guard.take() {
-                let _ = tx.send(());
-            }
+    match body {
+        Some(body) => {
+            body(shutdown_rx);
+            info!("service body closure returned; transitioning to StopPending");
+        }
+        None => {
+            error!("SERVICE_BODY was not stashed before service_dispatcher::start");
         }
     }
 
@@ -160,22 +183,58 @@ fn run_service_main() -> std::result::Result<(), windows_service::Error> {
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
-/// Runs the current process as a Windows service.
+/// Runs the current process as a Windows service with `body` as the service
+/// body closure.
 ///
-/// Registers `ffi_service_main` with the SCM and blocks until the SCM sends a
-/// `Stop` or `Shutdown` control.  When that happens the provided `shutdown_tx`
-/// is consumed to signal the tokio runtime.
+/// The body is invoked **after** the SCM control handler has been registered
+/// and the service has transitioned to Running. This ordering is critical:
+/// Windows requires the control handler to be registered within ~30 s of the
+/// service process launching or it kills the process with error 1053
+/// ("service did not respond to start request in a timely fashion"). Moving
+/// heavy bring-up (tokio runtime build, queue open, TLS channel construction,
+/// collector spawn, enrollment verification) into the body closure guarantees
+/// it happens AFTER registration and therefore never races the deadline.
+///
+/// `body` receives a `oneshot::Receiver<()>` that fires when SCM delivers a
+/// Stop or Shutdown control. The body should block until the receiver fires
+/// and all work has drained, then return. A typical body:
+///
+/// ```ignore
+/// run_as_service(Box::new(|shutdown_rx| {
+///     let rt = build_runtime().unwrap();
+///     rt.block_on(async move {
+///         service::run_agent(config, shutdown_rx).await.ok();
+///     });
+/// }))
+/// ```
 ///
 /// # Errors
 ///
 /// Returns [`AgentError::Internal`] if the SCM dispatcher cannot be started
-/// (e.g. the process was not launched by the SCM).
-pub fn run_as_service(shutdown_tx: oneshot::Sender<()>) -> Result<()> {
-    // Stash the sender in the OnceLock so service_main_wrapper can reach it.
-    SHUTDOWN_TX
-        .set(tokio::sync::Mutex::new(Some(shutdown_tx)))
-        .map_err(|_| AgentError::Internal("SHUTDOWN_TX already initialised".into()))?;
+/// (e.g. the process was not launched by the SCM), or if `run_as_service` is
+/// called more than once in the same process lifetime.
+pub fn run_as_service<F>(body: F) -> Result<()>
+where
+    F: FnOnce(oneshot::Receiver<()>) + Send + 'static,
+{
+    // Stash the body in the OnceLock so `service_main_wrapper` can pick it
+    // up after it has finished the fast-path registration.
+    let slot = SERVICE_BODY.get_or_init(|| Mutex::new(None));
+    {
+        let mut guard = slot
+            .lock()
+            .map_err(|_| AgentError::Internal("SERVICE_BODY mutex poisoned".into()))?;
+        if guard.is_some() {
+            return Err(AgentError::Internal(
+                "run_as_service already called — body slot occupied".into(),
+            ));
+        }
+        *guard = Some(Box::new(body));
+    }
 
+    // `service_dispatcher::start` blocks until the service has stopped. The
+    // SCM spawns a fresh thread for `ffi_service_main`; everything inside
+    // `run_service_main` runs on that thread.
     service_dispatcher::start(SERVICE_NAME, ffi_service_main)
         .map_err(|e| AgentError::Internal(format!("SCM dispatcher error: {e}")))?;
 

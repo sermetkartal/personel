@@ -270,7 +270,10 @@ pub mod service {
     /// # Errors
     ///
     /// Always returns `AgentError::Unsupported`.
-    pub fn run_as_service(_shutdown_tx: oneshot::Sender<()>) -> Result<()> {
+    pub fn run_as_service<F>(_body: F) -> Result<()>
+    where
+        F: FnOnce(oneshot::Receiver<()>) + Send + 'static,
+    {
         Err(AgentError::Unsupported { os: OS, component: "service::run_as_service" })
     }
 
