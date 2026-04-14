@@ -69,7 +69,9 @@
     "openNavigation": "Navigasyonu aç",
     "closeNavigation": "Navigasyonu kapat",
     "mainNavigation": "Ana navigasyon",
-    "skipToContent": "İçeriğe geç"
+    "skipToContent": "İçeriğe geç",
+    "comingSoon": "Bu modül hazırlanıyor",
+    "comingSoonHint": "Arayüz iskeleti hazır, veri akışı entegrasyonu devam ediyor."
   },
 
   "auth": {
@@ -415,7 +417,7 @@
     "appBlocks": {
       "title": "Uygulama Engelleme Olayları",
       "description": "Politika tarafından engellenen uygulamalar ve olay sayıları",
-      "noticeTitle": "Phase 2 Özelliği",
+      "noticeTitle": "Bilgi",
       "noEvents": "Henüz engelleme olayı kaydedilmedi.",
       "col": {
         "occurredAt": "Zaman",
@@ -991,7 +993,7 @@
       "preview": "Önizleme (JSON)",
       "readOnly": "Salt Okunur",
       "test": "Örnek Olay ile Test Et",
-      "testNotImplemented": "Test koşumu Faz 2.11'de gerçek backend ile bağlanacak.",
+      "testNotImplemented": "Test koşumu yakında gerçek backend ile bağlanacak.",
       "emptyRules": "Henüz kural eklenmemiş",
       "emptyRulesHint": "Sol paletden bir kural türü seçerek başlayın",
       "add": "Ekle",
@@ -1104,7 +1106,7 @@
       "comingSoon": "Yakında",
       "save": "Kaydet",
       "saving": "Kaydediliyor...",
-      "saveScaffold": "Kaydedildi (iskelet — backend wiring Faz 2.11)",
+      "saveScaffold": "Kaydedildi (arayüz iskeleti — sunucu entegrasyonu yakında)",
       "screenshot": {
         "title": "Ekran Görüntüsü Yakalama",
         "description": "Agent'ın ekran görüntülerini hangi sıklıkta ve ne kadar detayla yakaladığını kontrol eder. Düşük preset'ler disk maliyetini azaltır, yüksek preset'ler daha fazla okunabilir detay yakalar.",
@@ -1181,7 +1183,7 @@
       "deactivateTitle": "Kiracıyı Devre Dışı Bırak",
       "deactivateBody": "Devre dışı bırakma ajan bağlantısını keser ama veri silinmez. Denetim için 5 yıl saklanır.",
       "deactivate": "Kiracıyı Devre Dışı Bırak",
-      "deactivateNotImplemented": "Devre dışı bırakma akışı Faz 2.11'de açılacak",
+      "deactivateNotImplemented": "Devre dışı bırakma akışı yakında etkinleşecek",
       "errors": {
         "slugInvalid": "Slug küçük harf, rakam ve tireden oluşmalı (2-64 karakter)"
       }
@@ -1204,7 +1206,7 @@
       "allRoles": "Tüm roller",
       "syncKeycloak": "Keycloak'tan Sync",
       "syncSuccess": "Senkronizasyon tamamlandı: {count} kullanıcı.",
-      "syncPending": "Keycloak senkronizasyonu Faz 2'de gelecek.",
+      "syncPending": "Keycloak senkronizasyonu yakında kullanıma açılacak.",
       "noUsers": "Kullanıcı bulunamadı.",
       "tableCaption": "Sistemdeki kullanıcılar ve rolleri",
       "totalUsers": "Toplam {count} kullanıcı",
@@ -1227,7 +1229,7 @@
     "integrations": {
       "title": "Entegrasyonlar",
       "subtitle": "HRIS, SIEM ve gözlemlenebilirlik entegrasyonları",
-      "scaffoldBadge": "İskelet — Faz 2.11",
+      "scaffoldBadge": "Yakında — entegrasyon hazırlanıyor",
       "keycloak": "Keycloak OIDC",
       "livekit": "LiveKit SFU",
       "vault": "HashiCorp Vault",

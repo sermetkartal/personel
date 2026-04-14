@@ -223,7 +223,7 @@ function SiemExporterCard({
                 <Switch disabled />
               </div>
             </TooltipTrigger>
-            <TooltipContent>Scaffold — Faz 2.11</TooltipContent>
+            <TooltipContent>Yakında</TooltipContent>
           </Tooltip>
         </div>
         <p className="text-xs text-muted-foreground">{description}</p>
@@ -281,7 +281,7 @@ function ScaffoldButton({
           </Button>
         </span>
       </TooltipTrigger>
-      <TooltipContent>Scaffold — Faz 2.11</TooltipContent>
+      <TooltipContent>Yakında</TooltipContent>
     </Tooltip>
   );
 }

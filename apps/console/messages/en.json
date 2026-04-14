@@ -69,7 +69,9 @@
     "openNavigation": "Open navigation",
     "closeNavigation": "Close navigation",
     "mainNavigation": "Main navigation",
-    "skipToContent": "Skip to content"
+    "skipToContent": "Skip to content",
+    "comingSoon": "This module is being prepared",
+    "comingSoonHint": "UI scaffold is ready; data-flow wiring is in progress."
   },
 
   "auth": {
@@ -415,7 +417,7 @@
     "appBlocks": {
       "title": "App Blocking Events",
       "description": "Applications blocked by policy and event counts",
-      "noticeTitle": "Phase 2 Feature",
+      "noticeTitle": "Notice",
       "noEvents": "No blocking events recorded yet.",
       "col": {
         "occurredAt": "Time",
@@ -991,7 +993,7 @@
       "preview": "Preview (JSON)",
       "readOnly": "Read-only",
       "test": "Test with Sample Event",
-      "testNotImplemented": "Test run will be wired to the real backend in Phase 2.11.",
+      "testNotImplemented": "Test run will be wired to the real backend soon.",
       "emptyRules": "No rules added yet",
       "emptyRulesHint": "Select a rule type from the palette on the left",
       "add": "Add",
@@ -1104,7 +1106,7 @@
       "comingSoon": "Coming soon",
       "save": "Save",
       "saving": "Saving...",
-      "saveScaffold": "Saved (scaffold — backend wiring in Phase 2.11)",
+      "saveScaffold": "Saved (UI scaffold — backend wiring coming soon)",
       "screenshot": {
         "title": "Screenshot capture",
         "description": "Controls how often and how detailed the agent captures screens. Lower presets reduce disk cost; higher presets keep more readable detail.",
@@ -1181,7 +1183,7 @@
       "deactivateTitle": "Deactivate Tenant",
       "deactivateBody": "Deactivation disconnects agents but does not delete data. Records are retained for 5 years for audit.",
       "deactivate": "Deactivate Tenant",
-      "deactivateNotImplemented": "Deactivation flow ships in Phase 2.11",
+      "deactivateNotImplemented": "Deactivation flow will ship soon",
       "errors": {
         "slugInvalid": "Slug must be lowercase letters, digits, or hyphens (2-64 chars)"
       }
@@ -1204,7 +1206,7 @@
       "allRoles": "All roles",
       "syncKeycloak": "Sync from Keycloak",
       "syncSuccess": "Sync complete: {count} users.",
-      "syncPending": "Keycloak sync will be available in Phase 2.",
+      "syncPending": "Keycloak sync will be available soon.",
       "noUsers": "No users found.",
       "tableCaption": "System users and their roles",
       "totalUsers": "{count} users total",
@@ -1227,7 +1229,7 @@
     "integrations": {
       "title": "Integrations",
       "subtitle": "HRIS, SIEM, and observability integrations",
-      "scaffoldBadge": "Scaffold — Phase 2.11",
+      "scaffoldBadge": "Coming soon — integration in preparation",
       "keycloak": "Keycloak OIDC",
       "livekit": "LiveKit SFU",
       "vault": "HashiCorp Vault",

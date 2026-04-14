@@ -23,11 +23,14 @@ export default async function LegalHoldNewPage({
     redirect(`/${locale}/unauthorized`);
   }
 
+  const tc = await getTranslations("common");
+
   return (
     <div className="space-y-6 max-w-2xl animate-fade-in">
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center">
         <Construction className="mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
-        <p className="text-muted-foreground text-sm">Phase 2 — new legal hold form</p>
+        <p className="text-muted-foreground text-sm">{tc("comingSoon")}</p>
+        <p className="text-muted-foreground/70 text-xs mt-1">{tc("comingSoonHint")}</p>
       </div>
     </div>
   );

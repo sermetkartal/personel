@@ -26,6 +26,7 @@ export default async function LegalHoldPage({
   }
 
   const t = await getTranslations("legalHold");
+  const tc = await getTranslations("common");
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -43,7 +44,8 @@ export default async function LegalHoldPage({
       </div>
       <div className="flex flex-col items-center justify-center rounded-lg border border-dashed py-20 text-center">
         <Construction className="mb-3 h-10 w-10 text-muted-foreground/40" aria-hidden="true" />
-        <p className="text-muted-foreground text-sm">Phase 2</p>
+        <p className="text-muted-foreground text-sm">{tc("comingSoon")}</p>
+        <p className="text-muted-foreground/70 text-xs mt-1">{tc("comingSoonHint")}</p>
       </div>
     </div>
   );
