@@ -70,9 +70,15 @@ func (c *Client) PutObject(ctx context.Context, objectKey string, data []byte, c
 }
 
 // bucketForKey infers the bucket from the object key prefix.
+// kvkk/ KVKK compliance documents (DPA, DPIA, açık rıza PDFs) share the
+// DSR bucket — both are long-retention tamper-evident legal artifacts and
+// splitting them into a new bucket adds ops burden without a KVKK
+// requirement.
 func (c *Client) bucketForKey(key string) string {
 	switch {
 	case len(key) >= 4 && key[:4] == "dsr-":
+		return c.bucketDSR
+	case len(key) >= 5 && key[:5] == "kvkk/":
 		return c.bucketDSR
 	case len(key) >= 11 && key[:11] == "destruction":
 		return c.bucketDestruction

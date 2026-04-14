@@ -273,6 +273,42 @@ const (
 	ActionAPIKeyRevoked Action = "apikey.revoked"
 )
 
+// --- KVKK compliance (Wave 9 Sprint 2 — console KVKK section) ---
+const (
+	// ActionKvkkVerbisUpdate is emitted when an admin/DPO updates the
+	// tenant's VERBİS registration number and tescil date via
+	// PATCH /v1/kvkk/verbis.
+	ActionKvkkVerbisUpdate Action = "kvkk.verbis.update"
+
+	// ActionKvkkAydinlatmaPublish is emitted on every publish of the
+	// aydınlatma metni. The version counter on the tenants row is
+	// monotonically incremented; the audit details carry the version
+	// before/after and the markdown length.
+	ActionKvkkAydinlatmaPublish Action = "kvkk.aydinlatma.publish"
+
+	// ActionKvkkDpaUpload records a new signed DPA PDF upload.
+	// Details include the SHA-256 hash, MinIO object key, and the
+	// signatory list. The previous document (if any) remains in the
+	// object store — the audit chain is the authoritative history.
+	ActionKvkkDpaUpload Action = "kvkk.dpa.upload"
+
+	// ActionKvkkDpiaUpload records a DPIA amendment PDF upload.
+	// KVKK DPIA is an ADR 0013 prerequisite to DLP enable; this
+	// action is surfaced in the pre-enable readiness check.
+	ActionKvkkDpiaUpload Action = "kvkk.dpia.upload"
+
+	// ActionKvkkConsentRecord is emitted when an explicit employee
+	// consent (açık rıza) is recorded. Details include consent_type,
+	// document SHA-256, and whether this replaces a prior consent.
+	ActionKvkkConsentRecord Action = "kvkk.consent.record"
+
+	// ActionKvkkConsentRevoke is emitted when an employee withdraws
+	// an açık rıza. The DLP engine must honour this revocation within
+	// the next policy push cycle — KVKK Art. 5-2/h requires revocation
+	// to be as easy as granting.
+	ActionKvkkConsentRevoke Action = "kvkk.consent.revoke"
+)
+
 // --- Audit stream (Faz 6 #66) ---
 const (
 	// ActionAuditStreamSubscribed is recorded when a principal opens
@@ -398,6 +434,12 @@ var AllActions = []Action{
 	ActionAuditStreamUnsubscribed,
 	ActionAPIKeyCreated,
 	ActionAPIKeyRevoked,
+	ActionKvkkVerbisUpdate,
+	ActionKvkkAydinlatmaPublish,
+	ActionKvkkDpaUpload,
+	ActionKvkkDpiaUpload,
+	ActionKvkkConsentRecord,
+	ActionKvkkConsentRevoke,
 }
 
 // ValidAction returns true if a is a known audit action.

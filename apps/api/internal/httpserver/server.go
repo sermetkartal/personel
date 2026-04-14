@@ -29,6 +29,7 @@ import (
 	"github.com/personel/api/internal/evidence"
 	"github.com/personel/api/internal/featureflags"
 	"github.com/personel/api/internal/incident"
+	"github.com/personel/api/internal/kvkk"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	"github.com/personel/api/internal/mobile"
@@ -82,6 +83,10 @@ type Services struct {
 	AccessReview  *accessreview.Service
 	Incident      *incident.Service
 	BCP           *bcp.Service
+	// KVKK is the Wave 9 Sprint 2A backend for the console KVKK
+	// compliance section (VERBİS, aydınlatma, DPA, DPIA, açık rıza).
+	// Nil-safe: when nil the /v1/kvkk/* routes are not mounted.
+	KVKK          *kvkk.Service
 	Pipeline      *pipeline.Service
 	// FeatureFlags is the Faz 16 #173 feature flag evaluator + admin
 	// surface. Nil-safe: when nil the /v1/system/feature-flags routes
@@ -632,6 +637,36 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 					Delete("/feature-flags/{key}", featureflags.DeleteHandler(svc.FeatureFlags))
 			}
 		})
+
+		// --- KVKK compliance (Wave 9 Sprint 2A) ---
+		// VERBİS / aydınlatma metni / DPA / DPIA / açık rıza. Every
+		// GET readable by admin+dpo+auditor; every mutation gated to
+		// admin+dpo only (auditors are read-only). Document uploads
+		// are multipart PDFs for DPA/DPIA and base64 JSON for per-user
+		// consent, all with a 10 MB cap enforced in the service layer.
+		if svc.KVKK != nil {
+			r.Route("/kvkk", func(r chi.Router) {
+				// Reads — admin, dpo, auditor.
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO, auth.RoleAuditor))
+					r.Get("/verbis", kvkk.GetVerbisHandler(svc.KVKK))
+					r.Get("/aydinlatma", kvkk.GetAydinlatmaHandler(svc.KVKK))
+					r.Get("/dpa", kvkk.GetDpaHandler(svc.KVKK))
+					r.Get("/dpia", kvkk.GetDpiaHandler(svc.KVKK))
+					r.Get("/consents", kvkk.ListConsentsHandler(svc.KVKK))
+				})
+				// Mutations — admin + dpo only.
+				r.Group(func(r chi.Router) {
+					r.Use(auth.RequireRole(auth.RoleAdmin, auth.RoleDPO))
+					r.Patch("/verbis", kvkk.PatchVerbisHandler(svc.KVKK))
+					r.Post("/aydinlatma/publish", kvkk.PublishAydinlatmaHandler(svc.KVKK))
+					r.Post("/dpa/upload", kvkk.UploadDpaHandler(svc.KVKK))
+					r.Post("/dpia/upload", kvkk.UploadDpiaHandler(svc.KVKK))
+					r.Post("/consents", kvkk.RecordConsentHandler(svc.KVKK))
+					r.Delete("/consents/{userID}/{consentType}", kvkk.RevokeConsentHandler(svc.KVKK))
+				})
+			})
+		}
 
 		// --- Pipeline (Faz 7 #74 + #75) ---
 		// GET  /v1/pipeline/dlq    — admin, dpo, investigator

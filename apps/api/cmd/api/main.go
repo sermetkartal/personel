@@ -42,6 +42,7 @@ import (
 	"github.com/personel/api/internal/featureflags"
 	"github.com/personel/api/internal/httpserver"
 	"github.com/personel/api/internal/incident"
+	"github.com/personel/api/internal/kvkk"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
 	minioclient "github.com/personel/api/internal/minio"
@@ -341,6 +342,13 @@ func main() {
 	// --- 10. Mobile BFF service (Phase 2.9) ---
 	mobileSvc := mobile.NewService(pool, recorder, log, dsrSvc, lvSvc, silenceSvc, dlpStateSvc)
 
+	// --- 10. KVKK compliance service (Wave 9 Sprint 2A) ---
+	// VERBİS / aydınlatma metni / DPA / DPIA / açık rıza backend. PDF
+	// uploads are routed through the minio.Client.PutObject path — the
+	// "kvkk/" key prefix lands in the DSR bucket (tamper-evident long
+	// retention is shared between DSR artefacts and KVKK documents).
+	kvkkSvc := kvkk.NewService(pool, recorder, kvkkDocAdapter{mc: mc}, log)
+
 	// --- 10b. Pipeline service (Faz 7 #73 + #74 + #75) ---
 	// DLQ inspection + replay. The DLQReader and EventPublisher share
 	// the same NATS JetStream context already owned by natsPublisher —
@@ -416,6 +424,7 @@ func main() {
 		AccessReview: accessReviewSvc,
 		Incident:     incidentSvc,
 		BCP:          bcpSvc,
+		KVKK:         kvkkSvc,
 		DBPool:       pool,
 		AuditBroker:  auditBroker,
 		Log:          log,
@@ -515,4 +524,22 @@ type pipelineCHAdapter struct {
 // replay reconstruction.
 func (a pipelineCHAdapter) Count(_ context.Context, _ pipeline.CHReplayFilter) (int, error) {
 	return 0, nil
+}
+
+// kvkkDocAdapter satisfies kvkk.DocumentStore by delegating to the
+// existing minio.Client.PutObject path. Keeping it here avoids a
+// cross-package dependency from kvkk into minio — the kvkk package
+// only knows the narrow DocumentStore interface, and this adapter is
+// the single wiring point.
+//
+// Compile-time assertion: if minio.Client.PutObject ever changes
+// signature the build breaks here rather than at first upload.
+type kvkkDocAdapter struct {
+	mc *minioclient.Client
+}
+
+var _ kvkk.DocumentStore = kvkkDocAdapter{}
+
+func (a kvkkDocAdapter) PutDocument(ctx context.Context, key string, data []byte, contentType string) error {
+	return a.mc.PutObject(ctx, key, data, contentType)
 }
