@@ -164,6 +164,7 @@ impl TransportClient {
 
         let mut tonic_tls = ClientTlsConfig::new().identity(identity);
 
+        let ca_len = cfg.tenant_ca_pem.as_ref().map(|c| c.len());
         if let Some(ca_pem) = cfg.tenant_ca_pem {
             tonic_tls = tonic_tls.ca_certificate(Certificate::from_pem(ca_pem));
         }
@@ -171,7 +172,12 @@ impl TransportClient {
         let endpoint = Endpoint::from_shared(cfg.gateway_url.clone())
             .map_err(|e| AgentError::Grpc(format!("invalid gateway URL: {e}")))?
             .tls_config(tonic_tls)
-            .map_err(|e| AgentError::Grpc(format!("tls_config error: {e}")))?
+            .map_err(|e| AgentError::Grpc(format!(
+                "tls_config error: {e:?} (cert_len={}, key_len={}, ca_len={:?})",
+                cfg.client_cert_pem.len(),
+                cfg.client_key_pem.len(),
+                ca_len,
+            )))?
             // Keepalive — ensures the OS TCP stack doesn't drop idle connections.
             .keep_alive_while_idle(true)
             .http2_keep_alive_interval(Duration::from_secs(20))
@@ -353,11 +359,47 @@ async fn stream_once(
                         debug!("transport: upload tick — queue empty");
                     }
                     Ok(items) => {
-                        let proto_events: Vec<personel_proto::v1::Event> = items
+                        // Wrap each queue item into a minimal proto Event with meta populated
+                        // from the SQLite row. The `payload_pb` column stores collector-emitted
+                        // JSON bytes which we forward as the event's `raw_json` equivalent via
+                        // the EventMeta.extra_json field (Phase 2.0 reservation). Gateway
+                        // publishes whatever Event batch we send; enricher handles per-kind
+                        // decoding from meta.event_type.
+                        use personel_proto::v1::{Event, EventMeta, TenantId, EndpointId, AgentVersion};
+                        use prost_types::Timestamp;
+                        let tenant_id_proto = TenantId { value: identity.tenant_id.to_vec() };
+                        let endpoint_id_proto = EndpointId { value: identity.endpoint_id.to_vec() };
+                        let (maj, min, pat) = parse_semver(&identity.agent_version);
+                        let agent_ver = AgentVersion { major: maj, minor: min, patch: pat, build: String::new() };
+                        let proto_events: Vec<Event> = items
                             .iter()
-                            .filter_map(|raw| {
-                                use prost::Message;
-                                personel_proto::v1::Event::decode(raw.payload_pb.as_slice()).ok()
+                            .map(|raw| {
+                                let payload_utf8 = String::from_utf8_lossy(&raw.payload_pb).to_string();
+                                let meta = EventMeta {
+                                    event_id: Some(personel_proto::v1::EventId { value: raw.event_id.clone() }),
+                                    event_type: raw.event_type.clone(),
+                                    schema_version: 1,
+                                    tenant_id: Some(tenant_id_proto.clone()),
+                                    endpoint_id: Some(endpoint_id_proto.clone()),
+                                    user_sid: None,
+                                    occurred_at: Some(Timestamp {
+                                        seconds: raw.occurred_at / 1_000_000_000,
+                                        nanos: (raw.occurred_at % 1_000_000_000) as i32,
+                                    }),
+                                    received_at: None,
+                                    agent_version: Some(agent_ver.clone()),
+                                    seq: raw.id as u64,
+                                    pii: 0,
+                                    retention: 0,
+                                    raw_payload_json: payload_utf8,
+                                    category: String::new(),
+                                    category_confidence: 0.0,
+                                    sensitive_flagged: false,
+                                    hris_department: String::new(),
+                                    hris_manager_user_id: String::new(),
+                                    ocr_language: String::new(),
+                                };
+                                Event { meta: Some(meta), payload: None }
                             })
                             .collect();
                         let n = proto_events.len();

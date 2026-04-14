@@ -107,11 +107,19 @@ message EventMeta {
   // OCR is not enabled for this tenant.
   string ocr_language = 18;
 
+  // Raw collector payload (JSON-serialised) — the agent emits all
+  // collector outputs as JSON because the Phase-1 collectors don't yet
+  // have per-kind proto messages. The enricher reads this field via
+  // `meta.event_type` dispatch and writes the JSON straight into the
+  // ClickHouse `payload` column. Phase 2+ collectors that have real
+  // proto payloads will populate Event.payload oneof instead and leave
+  // this field empty.
+  string raw_payload_json = 19;
+
   // Reserved block for future enrichment. Claimed so nothing else grabs
   // these tag numbers.
-  reserved 19 to 30;
-  reserved "reserved_phase_2_enrichment_19",
-           "reserved_phase_2_enrichment_20",
+  reserved 20 to 30;
+  reserved "reserved_phase_2_enrichment_20",
            "reserved_phase_2_enrichment_21",
            "reserved_phase_2_enrichment_22",
            "reserved_phase_2_enrichment_23",
