@@ -29,6 +29,7 @@ import (
 	"github.com/personel/api/internal/evidence"
 	"github.com/personel/api/internal/featureflags"
 	"github.com/personel/api/internal/incident"
+	"github.com/personel/api/internal/integrations"
 	"github.com/personel/api/internal/kvkk"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
@@ -39,6 +40,7 @@ import (
 	"github.com/personel/api/internal/reportspg"
 	"github.com/personel/api/internal/screenshots"
 	"github.com/personel/api/internal/search"
+	"github.com/personel/api/internal/settings"
 	"github.com/personel/api/internal/silence"
 	"github.com/personel/api/internal/tenant"
 	"github.com/personel/api/internal/transparency"
@@ -80,6 +82,18 @@ type Services struct {
 	Evidence      *evidence.Store
 	EvidencePack  *evidence.PackBuilder
 	Backup        *backup.Service
+	// BackupTargets is the Wave 9 Sprint 3A settings CRUD surface for
+	// per-tenant backup destinations + run history. Nil-safe: when
+	// nil the /v1/settings/backup/* routes are not mounted.
+	BackupTargets *backup.TargetService
+	// Integrations is the Wave 9 Sprint 3A third-party credential
+	// vault (MaxMind, Cloudflare, PagerDuty, Slack, Sentry). Nil-safe:
+	// when nil the /v1/settings/integrations routes are not mounted.
+	Integrations *integrations.Service
+	// Settings is the Wave 9 Sprint 3A tenant CA mode + retention
+	// policy surface. Nil-safe: when nil the /v1/settings/ca-mode
+	// and /v1/settings/retention routes are not mounted.
+	Settings *settings.Service
 	AccessReview  *accessreview.Service
 	Incident      *incident.Service
 	BCP           *bcp.Service
@@ -667,6 +681,38 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 				})
 			})
 		}
+
+		// --- Settings (Wave 9 Sprint 3A) ---
+		// Integrations (third-party credentials), CA mode, retention
+		// policy, and backup targets + run history. Every read and
+		// every mutation is admin-only — these are deployment-critical
+		// knobs that should never be hit by HR/DPO/manager roles.
+		r.Route("/settings", func(r chi.Router) {
+			r.Use(auth.RequireRole(auth.RoleAdmin))
+
+			if svc.Integrations != nil {
+				r.Get("/integrations", integrations.ListHandler(svc.Integrations))
+				r.Get("/integrations/{service}", integrations.GetHandler(svc.Integrations))
+				r.Put("/integrations/{service}", integrations.UpsertHandler(svc.Integrations))
+				r.Delete("/integrations/{service}", integrations.DeleteHandler(svc.Integrations))
+			}
+
+			if svc.Settings != nil {
+				r.Get("/ca-mode", settings.GetCaModeHandler(svc.Settings))
+				r.Patch("/ca-mode", settings.UpdateCaModeHandler(svc.Settings))
+				r.Get("/retention", settings.GetRetentionHandler(svc.Settings))
+				r.Patch("/retention", settings.UpdateRetentionHandler(svc.Settings))
+			}
+
+			if svc.BackupTargets != nil {
+				r.Get("/backup/targets", backup.ListTargetsHandler(svc.BackupTargets))
+				r.Post("/backup/targets", backup.CreateTargetHandler(svc.BackupTargets))
+				r.Patch("/backup/targets/{id}", backup.UpdateTargetHandler(svc.BackupTargets))
+				r.Delete("/backup/targets/{id}", backup.DeleteTargetHandler(svc.BackupTargets))
+				r.Post("/backup/targets/{id}/run", backup.TriggerRunHandler(svc.BackupTargets))
+				r.Get("/backup/targets/{id}/runs", backup.ListRunsHandler(svc.BackupTargets))
+			}
+		})
 
 		// --- Pipeline (Faz 7 #74 + #75) ---
 		// GET  /v1/pipeline/dlq    — admin, dpo, investigator

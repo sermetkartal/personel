@@ -309,6 +309,51 @@ const (
 	ActionKvkkConsentRevoke Action = "kvkk.consent.revoke"
 )
 
+// --- Settings (Wave 9 Sprint 3A — integrations, CA mode, retention, backup targets) ---
+const (
+	// ActionIntegrationUpsert is emitted when an admin creates or
+	// updates a third-party service integration (MaxMind, Cloudflare,
+	// PagerDuty, Slack, Sentry). Details include the service name and
+	// whether secret values were rotated; plaintext secrets are never
+	// logged.
+	ActionIntegrationUpsert Action = "settings.integration.upsert"
+
+	// ActionIntegrationDelete is emitted when a third-party service
+	// integration is removed. Details include the service name.
+	ActionIntegrationDelete Action = "settings.integration.delete"
+
+	// ActionCaModeUpdate is emitted when the tenant's production CA
+	// mode is changed (letsencrypt/internal/commercial). Details
+	// include the previous and new mode plus the sanitized config
+	// shape.
+	ActionCaModeUpdate Action = "settings.ca_mode.update"
+
+	// ActionRetentionUpdate is emitted when the tenant's retention
+	// policy is updated. Details include the before/after values;
+	// KVKK minimums are enforced at the service layer and rejected
+	// values are logged with a separate failure action.
+	ActionRetentionUpdate Action = "settings.retention.update"
+
+	// ActionBackupTargetCreate is emitted when a new backup
+	// destination is registered for the tenant. Details include the
+	// target name, kind, and the sanitized (no secrets) config shape.
+	ActionBackupTargetCreate Action = "settings.backup.target.create"
+
+	// ActionBackupTargetUpdate is emitted when an existing backup
+	// destination is modified.
+	ActionBackupTargetUpdate Action = "settings.backup.target.update"
+
+	// ActionBackupTargetDelete is emitted when a backup destination
+	// is deleted. The backup_runs rows for the target are cascaded.
+	ActionBackupTargetDelete Action = "settings.backup.target.delete"
+
+	// ActionBackupRunTrigger is emitted when an admin manually
+	// triggers a backup run via the settings UI. The actual backup
+	// work is performed by the out-of-API cron process; this action
+	// records the request.
+	ActionBackupRunTrigger Action = "settings.backup.run.trigger"
+)
+
 // --- Audit stream (Faz 6 #66) ---
 const (
 	// ActionAuditStreamSubscribed is recorded when a principal opens
@@ -440,6 +485,14 @@ var AllActions = []Action{
 	ActionKvkkDpiaUpload,
 	ActionKvkkConsentRecord,
 	ActionKvkkConsentRevoke,
+	ActionIntegrationUpsert,
+	ActionIntegrationDelete,
+	ActionCaModeUpdate,
+	ActionRetentionUpdate,
+	ActionBackupTargetCreate,
+	ActionBackupTargetUpdate,
+	ActionBackupTargetDelete,
+	ActionBackupRunTrigger,
 }
 
 // ValidAction returns true if a is a known audit action.

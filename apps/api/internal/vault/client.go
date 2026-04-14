@@ -219,6 +219,80 @@ func parseKeyVersion(s string) (string, int, error) {
 	return name, n, nil
 }
 
+// Encrypt calls transit/encrypt/{keyName} with the given plaintext and
+// returns (ciphertext_bytes, key_version_int, error). ciphertext_bytes
+// is the raw Vault wire format ("vault:vN:<base64>") as BYTEA so that
+// callers can roundtrip it through Postgres without further encoding.
+// key_version is the integer N so callers can persist it alongside the
+// ciphertext for rotation-aware decrypt.
+//
+// Used by settings-scoped packages (integrations, backup targets) that
+// store third-party credentials and backup destination configs.
+func (c *Client) Encrypt(ctx context.Context, keyName string, plaintext []byte) ([]byte, int, error) {
+	if c.stubMode {
+		return c.overrideEncrypt(ctx, keyName, plaintext)
+	}
+	if keyName == "" {
+		return nil, 0, fmt.Errorf("vault: encrypt: empty key name")
+	}
+	path := fmt.Sprintf("transit/encrypt/%s", keyName)
+	secret, err := c.raw.Logical().WriteWithContext(ctx, path, map[string]interface{}{
+		"plaintext": base64.StdEncoding.EncodeToString(plaintext),
+	})
+	if err != nil {
+		return nil, 0, fmt.Errorf("vault: encrypt %q: %w", keyName, err)
+	}
+	if secret == nil || secret.Data == nil {
+		return nil, 0, fmt.Errorf("vault: encrypt %q: nil response", keyName)
+	}
+	ct, ok := secret.Data["ciphertext"].(string)
+	if !ok || ct == "" {
+		return nil, 0, fmt.Errorf("vault: encrypt %q: missing ciphertext", keyName)
+	}
+	ver := 1
+	if kv, ok := secret.Data["key_version"].(float64); ok {
+		ver = int(kv)
+	}
+	return []byte(ct), ver, nil
+}
+
+// Decrypt calls transit/decrypt/{keyName} with the ciphertext previously
+// returned from Encrypt and returns the original plaintext. The Vault
+// key MUST still have a decryption version covering the ciphertext's
+// embedded version — operators must NOT rotate min_decryption_version
+// past any version still referenced in tenants_integrations or
+// backup_targets, or existing rows will become permanently unreadable.
+func (c *Client) Decrypt(ctx context.Context, keyName string, ciphertext []byte) ([]byte, error) {
+	if c.stubMode {
+		return c.overrideDecrypt(ctx, keyName, ciphertext)
+	}
+	if keyName == "" {
+		return nil, fmt.Errorf("vault: decrypt: empty key name")
+	}
+	if len(ciphertext) == 0 {
+		return nil, fmt.Errorf("vault: decrypt: empty ciphertext")
+	}
+	path := fmt.Sprintf("transit/decrypt/%s", keyName)
+	secret, err := c.raw.Logical().WriteWithContext(ctx, path, map[string]interface{}{
+		"ciphertext": string(ciphertext),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("vault: decrypt %q: %w", keyName, err)
+	}
+	if secret == nil || secret.Data == nil {
+		return nil, fmt.Errorf("vault: decrypt %q: nil response", keyName)
+	}
+	b64, ok := secret.Data["plaintext"].(string)
+	if !ok {
+		return nil, fmt.Errorf("vault: decrypt %q: missing plaintext", keyName)
+	}
+	pt, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return nil, fmt.Errorf("vault: decrypt %q: decode plaintext: %w", keyName, err)
+	}
+	return pt, nil
+}
+
 // IssueEnrollmentSecretID issues a single-use enrollment Secret ID for an agent.
 // This uses the agent-enrollment AppRole, NOT the admin-api AppRole.
 func (c *Client) IssueEnrollmentSecretID(ctx context.Context) (string, error) {

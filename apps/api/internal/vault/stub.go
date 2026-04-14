@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"os"
@@ -51,6 +52,30 @@ func signStub(payload []byte) []byte {
 // overrideSignWithControlKey is called by SignWithControlKey when stubMode is true.
 func (c *Client) overrideSignWithControlKey(_ context.Context, payload []byte) ([]byte, string, error) {
 	return signStub(payload), "stub-key:v1", nil
+}
+
+// overrideEncrypt is called by Encrypt when stubMode is true. Produces
+// a deterministic "vault:v1:<base64(plaintext)>" string so that round-
+// tripping through Decrypt recovers the original bytes. This is NOT
+// real encryption — tests rely on the wire format only.
+func (c *Client) overrideEncrypt(_ context.Context, _ string, plaintext []byte) ([]byte, int, error) {
+	encoded := base64.StdEncoding.EncodeToString(plaintext)
+	return []byte("vault:v1:" + encoded), 1, nil
+}
+
+// overrideDecrypt is called by Decrypt when stubMode is true. Strips
+// the "vault:v1:" prefix and returns the decoded bytes.
+func (c *Client) overrideDecrypt(_ context.Context, _ string, ciphertext []byte) ([]byte, error) {
+	const prefix = "vault:v1:"
+	s := string(ciphertext)
+	if len(s) < len(prefix) || s[:len(prefix)] != prefix {
+		return nil, fmt.Errorf("vault stub: unknown ciphertext format")
+	}
+	out, err := base64.StdEncoding.DecodeString(s[len(prefix):])
+	if err != nil {
+		return nil, fmt.Errorf("vault stub: decode: %w", err)
+	}
+	return out, nil
 }
 
 // overrideVerify is called by Verify when stubMode is true. Recomputes

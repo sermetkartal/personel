@@ -42,6 +42,7 @@ import (
 	"github.com/personel/api/internal/featureflags"
 	"github.com/personel/api/internal/httpserver"
 	"github.com/personel/api/internal/incident"
+	"github.com/personel/api/internal/integrations"
 	"github.com/personel/api/internal/kvkk"
 	"github.com/personel/api/internal/legalhold"
 	"github.com/personel/api/internal/liveview"
@@ -55,6 +56,7 @@ import (
 	"github.com/personel/api/internal/reports"
 	"github.com/personel/api/internal/screenshots"
 	"github.com/personel/api/internal/search"
+	"github.com/personel/api/internal/settings"
 	"github.com/personel/api/internal/silence"
 	"github.com/personel/api/internal/tenant"
 	"github.com/personel/api/internal/transparency"
@@ -335,6 +337,23 @@ func main() {
 	// When evidenceRecorder is nil they still write audit entries; the
 	// SOC 2 evidence emission is the only thing skipped in scaffold mode.
 	backupSvc := backup.NewService(recorder, evidenceRecorder, log)
+
+	// Wave 9 Sprint 3A — settings surface services. vc (vault client)
+	// is shared with the audit / evidence signers; it already
+	// implements Encrypt / Decrypt and can be reused here for the
+	// integrations and backup_targets transit keys. The settings and
+	// backup target services gracefully degrade when vc is nil — GET
+	// endpoints still work (rows are returned masked) but mutations
+	// short-circuit with ErrVaultUnavailable.
+	var integrationsVault integrations.VaultEncryptor
+	var backupTargetsVault backup.VaultEncryptor
+	if vc != nil {
+		integrationsVault = vc
+		backupTargetsVault = vc
+	}
+	integrationsSvc := integrations.NewService(pool, recorder, integrationsVault, log)
+	settingsSvc := settings.NewService(pool, recorder, log)
+	backupTargetsSvc := backup.NewTargetService(pool, recorder, backupTargetsVault, log)
 	accessReviewSvc := accessreview.NewService(recorder, evidenceRecorder, log)
 	incidentSvc := incident.NewService(recorder, evidenceRecorder, log)
 	bcpSvc := bcp.NewService(recorder, evidenceRecorder, log)
@@ -418,7 +437,10 @@ func main() {
 		Mobile:       mobileSvc,
 		Evidence:     evidenceStore,
 		EvidencePack: evidencePackBuilder,
-		Backup:       backupSvc,
+		Backup:        backupSvc,
+		BackupTargets: backupTargetsSvc,
+		Integrations:  integrationsSvc,
+		Settings:      settingsSvc,
 		Pipeline:     pipelineSvc,
 		FeatureFlags: featureFlagsSvc,
 		AccessReview: accessReviewSvc,
