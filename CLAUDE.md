@@ -26,18 +26,18 @@ Müşteri onayıyla 27 maddelik plan. 6 sprint halinde otonom çalışılıyor. 
 
 ### 27-Madde Plan — İlerleme Durumu
 
-**Sprint 1 — KVKK menü yapısı (Task #51):**
-- [ ] 1. KVKK menü bölümü (`nav.kvkk`, sidebar entry)
-- [ ] 2. `/dsr`, `/legal-hold`, `/destruction-reports`, `/dlp` → `/kvkk/*` redirect
-- [ ] 3. 6 yeni scaffold sayfası: verbis, aydinlatma, dpa, dpia, acik-riza, guide
+**Sprint 1 — KVKK menü yapısı (Task #51): ✅ TAMAM — commit `4791685`**
+- [x] 1. KVKK menü bölümü (`nav.kvkk`, sidebar entry + 10 children)
+- [x] 2. `/dsr`, `/legal-hold`, `/destruction-reports`, `/settings/dlp` → `/kvkk/*` taşındı + redirect
+- [x] 3. 6 yeni scaffold sayfası: verbis, aydinlatma, dpa, dpia, acik-riza, guide
+- [x] `manage:kvkk` + `view:kvkk` RBAC aksiyonları (admin + dpo + auditor)
+- [x] Full i18n (tr + en) kvkk.* namespace
 
-**Sprint 2 — KVKK sayfa içerikleri (Task #52):**
-- [ ] 4. `/kvkk/verbis` — rehber + registration_number input
-- [ ] 5. `/kvkk/aydinlatma` — Markdown editor + yayınla butonu + portal entegrasyon
-- [ ] 6. `/kvkk/dpa` — PDF upload + imzacı metadata
-- [ ] 7. `/kvkk/dpia` — DLP durumu + DPIA upload
-- [ ] 8. `/kvkk/acik-riza` — form template + per-user signature tracking + `user_consent` tablosu
-- [ ] 9. `/kvkk/guide` — ana rehber index
+**Sprint 2 — KVKK sayfa içerikleri (Task #52): 🔄 IN PROGRESS**
+- [x] Backend (Sprint 2A, commit `b7089b7`): migrations 0038+0039, internal/kvkk paketi (service+handler+types+test), 6 audit action, server mount, MinIO entegrasyonu, 19 unit test yeşil
+- [x] Console API client (Sprint 2B): `apps/console/src/lib/api/kvkk.ts` — type'lar + fetcher'lar + kvkkKeys + AllowedConsentType (284 satır)
+- [ ] Sprint 2C: 6 sayfanın UI fonksiyonel hale getirilmesi (background agent aad4b7af çalışıyor)
+- [x] 9. `/kvkk/guide` — Sprint 1'de statik olarak tamamlandı
 
 **Sprint 3 — Settings genişletme (Task #53):**
 - [ ] 10. `/settings/integrations/external-services` — MaxMind + CF + PD + Sentry input kartları
