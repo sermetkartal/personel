@@ -36,12 +36,15 @@ COPY --from=builder /gateway /gateway
 COPY --from=builder /enricher /enricher
 
 # TLS certificates and config will be bind-mounted at runtime.
-# Default config path: /etc/personel/gateway.yaml
-# Override with: docker run ... -v /host/config:/etc/personel ...
+# Default config path: /configs/gateway.yaml
+# The production compose stack mounts infra/compose/gateway/gateway.yaml
+# into /configs — match that path here so this Dockerfile is interchangeable
+# with infra/compose/gateway/Dockerfile. Override with:
+#   docker run ... -v /host/config:/configs ...
 
 EXPOSE 9443 9090
 
 USER nonroot:nonroot
 
 ENTRYPOINT ["/gateway"]
-CMD ["--config", "/etc/personel/gateway.yaml"]
+CMD ["--config", "/configs/gateway.yaml"]

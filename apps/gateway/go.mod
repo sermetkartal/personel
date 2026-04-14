@@ -13,6 +13,7 @@ require (
 	github.com/knadh/koanf/v2 v2.1.1
 	github.com/minio/minio-go/v7 v7.0.70
 	github.com/nats-io/nats.go v1.33.1
+	github.com/oschwald/maxminddb-golang/v2 v2.0.0-beta.3
 	github.com/personel/proto v0.0.0
 	github.com/prometheus/client_golang v1.19.0
 	github.com/testcontainers/testcontainers-go/modules/nats v0.42.0

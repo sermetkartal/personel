@@ -143,6 +143,29 @@ func main() {
 
 	// ----- Enricher pipeline -----
 	enrich := enricher.NewEnricher(db)
+
+	// Optional MaxMind GeoLite2 server-side GeoIP enrichment.
+	// Disabled when cfg.GeoIP.MMDBPath is empty. When the path is set
+	// but the open fails, we log a warning and continue — a
+	// misconfigured GeoIP file should not take the pipeline down.
+	if cfg.GeoIP.MMDBPath != "" {
+		geo, gerr := enricher.NewGeoLookup(cfg.GeoIP.MMDBPath)
+		if gerr != nil {
+			logger.Warn("enricher: geoip lookup open failed (continuing without geo)",
+				slog.String("path", cfg.GeoIP.MMDBPath),
+				slog.String("error", gerr.Error()),
+			)
+		} else if geo != nil {
+			enrich.SetGeoLookup(geo)
+			defer func() { _ = geo.Close() }()
+			logger.Info("enricher: geoip lookup initialised",
+				slog.String("path", geo.Path()),
+			)
+		}
+	} else {
+		logger.Info("enricher: geoip lookup disabled (no mmdb_path configured)")
+	}
+
 	router := enricher.NewRouter()
 	consumer := enricher.NewConsumer(js, batcher, enrich, router, metrics, logger)
 

@@ -41,3 +41,19 @@ observability:
 batch:
   max_size: 10000          # rows per ClickHouse insert batch
   flush_interval: "2s"     # max time before incomplete batch is sent
+
+# Optional MaxMind GeoLite2 server-side GeoIP enrichment. When
+# mmdb_path is empty the enricher skips geo lookups entirely and
+# logs "geoip lookup disabled" at boot. When set, the enricher
+# opens the file once and attaches geo_country_code + geo_city_name
+# to the PayloadJSON of every network.* event whose payload contains
+# a public IP in remote_ip / source_ip / dest_ip / answer_ip.
+#
+# The mmdb file is installed (and refreshed weekly) by the systemd
+# unit personel-maxmind-download.timer. Operator setup runbook:
+# docs/operations/maxmind-setup.md
+#
+# Override via env:
+#   PERSONEL_ENRICHER_GEOIP__MMDB_PATH=/var/lib/personel/geolite2/GeoLite2-City.mmdb
+geoip:
+  mmdb_path: ""

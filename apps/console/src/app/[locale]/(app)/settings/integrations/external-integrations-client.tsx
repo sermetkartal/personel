@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Save, TestTube2, Trash2, Loader2 } from "lucide-react";
+import { Save, TestTube2, Trash2, Loader2, CheckCircle2, XCircle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,11 +30,13 @@ import {
   listIntegrations,
   upsertIntegration,
   deleteIntegration,
+  testIntegration,
   settingsKeys,
   SERVICE_NAMES,
   SERVICE_SCHEMAS,
   type ServiceName,
   type IntegrationRecord,
+  type TestConnectionResult,
 } from "@/lib/api/settings-extended";
 import { toUserFacingError } from "@/lib/errors";
 
@@ -130,6 +132,19 @@ function IntegrationCard({
   const [config, setConfig] = useState<Record<string, string>>(initialConfig);
   const [enabled, setEnabled] = useState(record?.enabled ?? false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Inline test-connection status badge that appears next to the button
+  // for ~5 seconds after a probe completes, then clears itself so the
+  // operator gets an unobtrusive pass/fail signal without stacking
+  // toasts. Cleared on unmount.
+  const [testStatus, setTestStatus] = useState<TestConnectionResult | null>(
+    null,
+  );
+
+  useEffect(() => {
+    if (testStatus === null) return;
+    const id = setTimeout(() => setTestStatus(null), 5000);
+    return () => clearTimeout(id);
+  }, [testStatus]);
 
   const upsert = useMutation({
     mutationFn: () => upsertIntegration(service, { enabled, config }, { token }),
@@ -140,6 +155,28 @@ function IntegrationCard({
     onError: (err) => {
       const ufe = toUserFacingError(err);
       toast.error(t("saveError"), { description: ufe.description });
+    },
+  });
+
+  const test = useMutation({
+    mutationFn: () => testIntegration(service, { token }),
+    onSuccess: (result) => {
+      setTestStatus(result);
+      if (result.status === "ok") {
+        toast.success(
+          t("testSuccess", {
+            message: result.message,
+            latency: result.latency_ms ?? 0,
+          }),
+        );
+      } else {
+        toast.error(t("testFail", { message: result.message }));
+      }
+    },
+    onError: (err) => {
+      const ufe = toUserFacingError(err);
+      setTestStatus({ status: "fail", message: ufe.description });
+      toast.error(t("testFail", { message: ufe.description }));
     },
   });
 
@@ -227,12 +264,38 @@ function IntegrationCard({
           <Button
             size="sm"
             variant="outline"
-            disabled
-            title={t("testConnectionSoon")}
+            onClick={() => test.mutate()}
+            disabled={test.isPending || !isConfigured}
+            title={
+              !isConfigured ? t("testConnectionNotConfigured") : undefined
+            }
           >
-            <TestTube2 className="mr-1.5 h-3 w-3" />
-            {t("testConnection")}
+            {test.isPending ? (
+              <Loader2 className="mr-1.5 h-3 w-3 animate-spin" />
+            ) : (
+              <TestTube2 className="mr-1.5 h-3 w-3" />
+            )}
+            {test.isPending ? t("testing") : t("testConnection")}
           </Button>
+          {testStatus !== null && (
+            <span
+              className={
+                testStatus.status === "ok"
+                  ? "inline-flex items-center gap-1 text-xs text-green-600"
+                  : "inline-flex items-center gap-1 text-xs text-destructive"
+              }
+            >
+              {testStatus.status === "ok" ? (
+                <CheckCircle2 className="h-3 w-3" />
+              ) : (
+                <XCircle className="h-3 w-3" />
+              )}
+              {testStatus.message}
+              {testStatus.latency_ms !== undefined && testStatus.status === "ok"
+                ? ` (${testStatus.latency_ms}ms)`
+                : ""}
+            </span>
+          )}
           {isConfigured && (
             <Button
               size="sm"

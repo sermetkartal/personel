@@ -1,0 +1,65 @@
+# =============================================================================
+# Personel Platform — MaxMind GeoLite2 Database Updater
+#
+# Weekly oneshot that refreshes the GeoLite2-City.mmdb file consumed by
+# the enricher's server-side GeoIP lookup. The script is in
+# infra/scripts/maxmind-download.sh and verifies SHA256 before atomic
+# replace, so the enricher never reads a torn file.
+#
+# REQUIREMENTS
+#   - /etc/personel/maxmind.env exists (root:personel, mode 0640):
+#       MAXMIND_ACCOUNT_ID=<numeric account id>
+#       MAXMIND_LICENSE_KEY=<license key>
+#   - /var/lib/personel/geolite2 exists, owned by personel:personel
+#   - Host has outbound HTTPS to download.maxmind.com
+#   - curl, tar, sha256sum, install available (all in coreutils/curl)
+#
+# LICENSE NOTE
+#   MaxMind GeoLite2 terms (2026-04) permit internal business use and
+#   prohibit redistribution / commercial resale. Personel uses this data
+#   ONLY for server-side event enrichment — never redistributed, never
+#   exposed verbatim to customers.
+# =============================================================================
+
+[Unit]
+Description=Personel MaxMind GeoLite2 Database Updater
+Documentation=file:///opt/personel/docs/operations/maxmind-setup.md
+Wants=network-online.target
+After=network-online.target
+PartOf=personel.target
+
+[Service]
+Type=oneshot
+User=personel
+Group=personel
+
+WorkingDirectory=/opt/personel/infra
+
+EnvironmentFile=/etc/personel/maxmind.env
+Environment=MMDB_TARGET_DIR=/var/lib/personel/geolite2
+Environment=MMDB_EDITION=GeoLite2-City
+
+ExecStart=/opt/personel/infra/scripts/maxmind-download.sh
+
+TimeoutStartSec=600
+Restart=no
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=personel-maxmind-download
+
+# Hardening — only the mmdb dir and /tmp are writable.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/personel/geolite2
+ProtectHome=true
+NoNewPrivileges=true
+PrivateTmp=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=personel.target

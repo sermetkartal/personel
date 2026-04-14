@@ -88,6 +88,31 @@ func UpsertHandler(svc *Service) http.HandlerFunc {
 	}
 }
 
+// TestHandler handles POST /v1/settings/integrations/{service}/test.
+// It runs the per-service connection probe and returns a TestResult
+// JSON body. Unknown services return 400; the probe itself never
+// returns an error — operator-readable "fail" rows carry the detail.
+func TestHandler(svc *Service) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		p := auth.PrincipalFromContext(r.Context())
+		if p == nil {
+			writeErr(w, r, http.StatusUnauthorized, "unauthenticated")
+			return
+		}
+		service := chi.URLParam(r, "service")
+		result, err := svc.TestConnection(r.Context(), p.TenantID, service)
+		if err != nil {
+			if errors.Is(err, ErrUnknownService) {
+				writeErr(w, r, http.StatusBadRequest, err.Error())
+				return
+			}
+			writeErr(w, r, http.StatusInternalServerError, err.Error())
+			return
+		}
+		httpx.WriteJSON(w, http.StatusOK, result)
+	}
+}
+
 // DeleteHandler handles DELETE /v1/settings/integrations/{service}.
 func DeleteHandler(svc *Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {

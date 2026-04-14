@@ -34,6 +34,20 @@ type EnricherConfig struct {
 	Postgres   PostgresConfig   `koanf:"postgres"`
 	Observ     ObservConfig     `koanf:"observability"`
 	Batch      BatchConfig      `koanf:"batch"`
+	GeoIP      GeoIPConfig      `koanf:"geoip"`
+}
+
+// GeoIPConfig configures the optional MaxMind GeoLite2 lookup used by
+// the enricher for server-side network event geolocation. When
+// MMDBPath is empty (the default), geo enrichment is disabled and the
+// enricher continues without it — no customer-facing failure.
+type GeoIPConfig struct {
+	// MMDBPath is the absolute path to a GeoLite2-City.mmdb file on
+	// the enricher host. Populated by the weekly
+	// personel-maxmind-download.timer systemd unit; see
+	// `infra/scripts/maxmind-download.sh` and
+	// `docs/operations/maxmind-setup.md`.
+	MMDBPath string `koanf:"mmdb_path"`
 }
 
 // GRPCConfig configures the gRPC server.

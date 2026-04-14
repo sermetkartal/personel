@@ -695,6 +695,7 @@ func BuildRouter(svc *Services, met *Metrics) http.Handler {
 				r.Get("/integrations/{service}", integrations.GetHandler(svc.Integrations))
 				r.Put("/integrations/{service}", integrations.UpsertHandler(svc.Integrations))
 				r.Delete("/integrations/{service}", integrations.DeleteHandler(svc.Integrations))
+				r.Post("/integrations/{service}/test", integrations.TestHandler(svc.Integrations))
 			}
 
 			if svc.Settings != nil {

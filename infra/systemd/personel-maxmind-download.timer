@@ -1,0 +1,21 @@
+# =============================================================================
+# Personel Platform — MaxMind GeoLite2 Refresh Timer
+#
+# Fires weekly on Monday at 03:00 local time. MaxMind publishes GeoLite2
+# database updates on Tuesdays (and occasionally more often), so Monday
+# 03:00 catches the previous week's final snapshot. A 30-minute random
+# delay spreads load across the MaxMind edge cache.
+# =============================================================================
+
+[Unit]
+Description=Personel MaxMind GeoLite2 Refresh Timer
+PartOf=personel.target
+
+[Timer]
+OnCalendar=Mon *-*-* 03:00:00
+Persistent=true
+RandomizedDelaySec=1800
+Unit=personel-maxmind-download.service
+
+[Install]
+WantedBy=personel.target

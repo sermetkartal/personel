@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,11 +31,16 @@ type EnrichedEvent struct {
 // Enricher adds tenant/endpoint context to events. It caches endpoint metadata
 // with a short TTL to avoid a Postgres round-trip per event on the hot path.
 type Enricher struct {
-	pg     *postgres.Pool
-	cache  *metaCache
+	pg    *postgres.Pool
+	cache *metaCache
 	// policyCache stores the SensitivityGuard config per tenant, refreshed periodically.
 	policyMu    sync.RWMutex
 	policyCache map[string]*personelv1.SensitivityGuard
+	// geo is optional. When non-nil, Enrich() resolves public IPs in
+	// network-category payloads to {geo_country_code, geo_city_name}
+	// and writes them back into PayloadJSON. Wired via SetGeoLookup
+	// from cmd/enricher/main.go. See geo.go (Sprint 3C-1).
+	geo *GeoLookup
 }
 
 // NewEnricher creates an Enricher backed by the given Postgres pool.
@@ -44,6 +50,13 @@ func NewEnricher(pg *postgres.Pool) *Enricher {
 		cache:       newMetaCache(5 * time.Minute),
 		policyCache: make(map[string]*personelv1.SensitivityGuard),
 	}
+}
+
+// SetGeoLookup attaches a MaxMind GeoLite2 lookup to the enricher.
+// Passing nil disables geo enrichment (the default). Safe to call
+// only before Run() — there is no concurrent-safe hot swap.
+func (e *Enricher) SetGeoLookup(g *GeoLookup) {
+	e.geo = g
 }
 
 // Enrich adds tenant/endpoint metadata to an event and derives the JSON payload map.
@@ -73,6 +86,22 @@ func (e *Enricher) Enrich(ctx context.Context, ev *personelv1.Event) (*EnrichedE
 
 	payloadJSON := protoPayloadToMap(ev)
 	category := deriveCategory(meta.GetEventType())
+
+	// Server-side GeoIP enrichment for network events.
+	// Writes geo_country_code + geo_city_name into PayloadJSON when
+	// the payload contains a public IP. Disabled (nil) by default; we
+	// only touch network.* events to avoid chasing IPs out of, e.g.,
+	// window title payloads.
+	if e.geo != nil && strings.HasPrefix(meta.GetEventType(), "network.") {
+		if ip := extractPayloadIP(payloadJSON); ip != "" {
+			if cc, city, ok := e.geo.Lookup(ip); ok {
+				payloadJSON["geo_country_code"] = cc
+				if city != "" {
+					payloadJSON["geo_city_name"] = city
+				}
+			}
+		}
+	}
 
 	return &EnrichedEvent{
 		Event:       ev,
@@ -139,6 +168,26 @@ func byteSliceToUUID(b []byte) string {
 	}
 	uid, _ := uuid.FromBytes(b)
 	return uid.String()
+}
+
+// extractPayloadIP returns the most-likely geolocatable IP from a
+// network event's payload map. Priority order:
+//  1. remote_ip / source_ip  — inbound connection / server-side view
+//  2. dest_ip                — outbound connection
+//  3. dns resolution answer (answer_ip)
+//
+// A public IP in any of those slots is good enough for country/city
+// resolution. Returns "" when no recognised field is present.
+func extractPayloadIP(payload map[string]interface{}) string {
+	if payload == nil {
+		return ""
+	}
+	for _, key := range []string{"remote_ip", "source_ip", "dest_ip", "answer_ip"} {
+		if v, ok := payload[key].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // protoPayloadToMap converts the proto event payload to a map[string]interface{}

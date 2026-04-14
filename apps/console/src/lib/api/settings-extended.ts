@@ -443,6 +443,32 @@ export async function deleteIntegration(
   );
 }
 
+/**
+ * Result shape for POST /v1/settings/integrations/{service}/test.
+ *
+ * The backend never returns a 5xx for a failed probe — it wraps the
+ * failure reason in a `status: "fail"` payload so the UI can show an
+ * operator-readable message inline without toasting a cryptic 500.
+ * `latency_ms` is the wall-clock duration of the probe (decrypt +
+ * HTTP round-trip where applicable).
+ */
+export interface TestConnectionResult {
+  status: "ok" | "fail";
+  message: string;
+  latency_ms?: number;
+}
+
+export async function testIntegration(
+  service: ServiceName,
+  opts: { token?: string; signal?: AbortSignal } = {},
+): Promise<TestConnectionResult> {
+  return apiClient.post<TestConnectionResult>(
+    `/v1/settings/integrations/${encodeURIComponent(service)}/test`,
+    {},
+    opts,
+  );
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // CA mode — fetchers
 // ────────────────────────────────────────────────────────────────────────────
