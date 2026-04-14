@@ -77,7 +77,24 @@
     "acknowledgement": "Acknowledgement",
     "acknowledgementPlain": "The existence of this notice is designed to inform you at installation. You can access the current notice in this portal at any time.",
     "downloadPdf": "Download as PDF",
-    "lastVersion": "Version 1.0 — April 2026"
+    "lastVersion": "Version 1.0 — April 2026",
+    "jumpToAck": "Jump to acknowledgement",
+    "ackHeading": "Acknowledgement",
+    "versionLabel": "Version",
+    "lastUpdatedLabel": "Last updated",
+    "ackExplain": "Confirming that you have read this privacy notice is legally required. This acknowledgement is NOT a consent — processing remains based on KVKK Art. 5/2-c and 5/2-f. This checkbox only records that you were informed.",
+    "ackCheckboxLabel": "I have read and understood the above privacy notice and confirm that I have been informed.",
+    "ackSubmit": "I Acknowledge",
+    "ackSubmitting": "Saving...",
+    "ackSuccessTitle": "Acknowledgement recorded",
+    "ackSuccessDesc": "Your acknowledgement has been written to the audit log.",
+    "ackLocalOnly": "Your acknowledgement was recorded locally. Server-side recording will be enabled soon.",
+    "ackFailed": "Failed to record acknowledgement. Please try again.",
+    "ackAlreadyTitle": "Previously acknowledged",
+    "ackAlreadyDesc": "You previously acknowledged version {version} of this notice. You will be asked to re-acknowledge when a new version is published.",
+    "ackAuditNote": "Clicking this button writes a timestamp, user ID and version to the hash-chained audit log. This action cannot be undone.",
+    "pdfSoonTitle": "PDF export coming soon",
+    "pdfSoonDesc": "Downloading the privacy notice as a PDF is not yet enabled. Please contact your administrator for a signed copy."
   },
   "verilerim": {
     "title": "My Data",
@@ -90,6 +107,11 @@
     "requestDataDeletion": "Request deletion (KVKK Art. 11)",
     "collectedSince": "Data collection began",
     "noDataYet": "No data collected in this category yet.",
+    "retentionHeader": "Retention Period",
+    "recentCount": "{count} events recorded in the last 30 days",
+    "downloadCtaTitle": "Download all of your data",
+    "downloadCtaDesc": "Under KVKK Art. 11/b you may request a copy of all personal data processed about you. You can start this self-service request in a few seconds. The legal response time is 30 days; average turnaround is 3-5 business days.",
+    "downloadCtaButton": "Request My Data",
     "categories": {
       "identity": {
         "name": "Identity and Session Data",
@@ -135,6 +157,40 @@
         "name": "Policy and Audit Data",
         "description": "Blocked application or URL events, agent health records."
       }
+    }
+  },
+  "dataDownload": {
+    "title": "Download My Data",
+    "subtitle": "Request a copy of the personal data processed about you under KVKK Art. 11/b.",
+    "back": "Back to My Data",
+    "idleHeading": "How does this work?",
+    "idleBody": "Clicking the button below automatically creates a KVKK Art. 11/b 'access' DSR on your behalf. The Data Protection Officer (DPO) reviews the request, evaluates any legal retention obligations, and prepares an encrypted package for you.",
+    "point1": "Once the request is created, a response is legally required within 30 days (KVKK Art. 13).",
+    "point2": "Average response time is 3-5 business days; actual duration depends on the DPO's review.",
+    "point3": "You will be notified by email when the package is ready, and you can download it from the same page.",
+    "idleButton": "Create KVKK Art. 11/b Request",
+    "creating": "Creating your request...",
+    "pendingHeading": "Your request is being processed",
+    "pendingBody": "Your request is under review by the DPO. You can keep this page open; it will update automatically when your package is ready. You may also close it and check status anytime from 'My Applications'.",
+    "refNumber": "Reference number",
+    "state": "Status",
+    "created": "Created",
+    "slaDeadline": "Legal deadline",
+    "polling": "Auto-refreshing (60s)",
+    "viewInApplications": "Track in My Applications",
+    "readyHeading": "Your package is ready",
+    "readyBody": "The encrypted package containing all data processed about you has been prepared. Click the button below to download. The download link is valid for 7 days.",
+    "downloadButton": "Download Package",
+    "errorHeading": "Request could not be created",
+    "errorGeneric": "An error occurred. Please try again or contact IT support.",
+    "rejectedMessage": "Your request was rejected by the DPO. Details are available in 'My Applications'.",
+    "retry": "Try again",
+    "states": {
+      "open": "Open",
+      "at_risk": "At risk",
+      "overdue": "Overdue",
+      "closed": "Closed",
+      "rejected": "Rejected"
     }
   },
   "nelerIzlenmiyor": {
@@ -204,7 +260,24 @@
     "yourRightsDuringText": "Even though there is no on-screen indicator during monitoring, you can always view your past monitoring sessions through this portal. Your right to object under KVKK Article 11 is reserved.",
     "viewHistory": "View my session history",
     "visibility": "Visibility policy",
-    "visibilityText": "Session history is visible to you by default. Only your company's Data Protection Officer (DPO) can restrict this visibility, with written justification and an audit record. If such a change occurs, you will be notified through the portal."
+    "visibilityText": "Session history is visible to you by default. Only your company's Data Protection Officer (DPO) can restrict this visibility, with written justification and an audit record. If such a change occurs, you will be notified through the portal.",
+    "kvkkConditionsTitle": "Under what conditions can your screen be monitored?",
+    "kvkkConditionsIntro": "Under KVKK Art. 5 and Art. 6, all of the following conditions must be satisfied before screen monitoring can begin. If any one is missing, monitoring cannot be started.",
+    "kvkkCondition1": "A documented legitimate interest (Art. 5/2-f) — e.g. a security investigation, internal inquiry, or suspected serious policy violation.",
+    "kvkkCondition2": "A manager's written and justified request (reason, incident ID, duration).",
+    "kvkkCondition3": "Approval by an HR or DPO officer separate from the requester (dual control).",
+    "kvkkCondition4": "Proportionality: session duration cannot exceed 15 minutes and only lasts as long as necessary.",
+    "rightToRefuseTitle": "Your Right to Object",
+    "rightToRefuseBody": "Under KVKK Art. 11/g you have the right to object to automated decisions and processing activities about you. If you want to retrospectively object to a live-view session, you may file an objection request from the link below. Your request will be reviewed by the DPO.",
+    "rightToRefuseAction": "File Objection Request",
+    "activeBanner": {
+      "title": "Your screen is currently being monitored",
+      "description": "Your screen is under active live monitoring right now. The requester and approver roles, reason category, and remaining time are shown below.",
+      "requester": "Requester",
+      "approver": "Approver",
+      "reason": "Reason",
+      "remaining": "Remaining"
+    }
   },
   "oturumGecmisi": {
     "title": "My Live View Session History",
@@ -320,8 +393,16 @@
       "restrict": "Restriction — I want data processing restricted",
       "portability": "Portability — I want a copy of my data"
     },
+    "charsMin": "characters (minimum)",
+    "refNumberLabel": "Reference number",
+    "attachment": "Attachment",
+    "attachmentOptional": "(optional, max 5 MB)",
+    "attachmentHint": "You can attach a PDF, image, or document. Attachments are used for DPO review and are subject to the retention policy.",
+    "attachmentRemove": "Remove attachment",
     "validation": {
-      "requestTypeRequired": "Please select a request type"
+      "requestTypeRequired": "Please select a request type",
+      "justificationRequired": "Please describe your request in at least 50 characters.",
+      "attachmentTooLarge": "File size exceeds 5 MB. Please choose a smaller file."
     }
   },
   "basvurularim": {
@@ -438,11 +519,24 @@
   "firstLoginModal": {
     "title": "This computer is subject to corporate monitoring",
     "subtitle": "Please read the following information before continuing.",
-    "body": "Your company has installed Personel endpoint monitoring software on this work computer. This software collects data in categories such as application usage, file events, network activity, and keystroke statistics. Live screen monitoring is available; however each monitoring session requires HR approval and creates an audit record you can view in this portal. All data is stored on your company's own servers; no data is transferred externally.",
-    "readFull": "Read the Privacy Notice",
+    "body": "Your company has installed Personel endpoint monitoring software on this work computer. Welcome — this short notice is legally required under KVKK Art. 10 and is only shown once.",
+    "monitoredTitle": "What is monitored?",
+    "point1": "Application usage, file events, and network activity are recorded.",
+    "point2": "Keystroke content is stored encrypted; no administrator can read it.",
+    "point3": "Live screen monitoring requires HR approval; sessions are visible in this portal.",
+    "point4": "No performance evaluation or automated decision-making is performed.",
+    "rightsTitle": "Your KVKK Art. 11 Rights",
+    "rightsLine": "You have rights of access, rectification, erasure, objection, and compensation. Every request is answered within 30 days.",
+    "rightsLink": "List of your rights",
+    "dlpTitle": "Keyboard Privacy (ADR 0013)",
+    "dlpLine": "Keyboard content is stored encrypted; administrators cannot read it. The DLP rule engine is off by default. This cannot change without your company's formal signed approval process.",
+    "onpremTitle": "On-prem Guarantee",
+    "onpremLine": "All data is stored on your company's own servers; no data is transferred externally (to cloud, abroad, or to third parties).",
+    "checkboxLabel": "I have read the above information and I understand that this computer is subject to corporate monitoring. I confirm that I have been informed under KVKK Art. 10.",
+    "readFull": "Read the Full Privacy Notice",
     "confirmButton": "I understand, continue",
     "confirmNote": "Clicking this button is required to record your acknowledgement in the audit log.",
-    "mustConfirm": "Please click 'I understand' to continue.",
+    "mustConfirm": "Please tick the acknowledgement checkbox before continuing.",
     "alreadyAcknowledged": "Previously acknowledged"
   },
   "legalTerms": {

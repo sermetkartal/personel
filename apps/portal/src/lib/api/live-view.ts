@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
-import type { MyLiveViewHistory } from "./types";
+import { ApiError } from "./types";
+import type { MyLiveViewHistory, ActiveLiveViewResponse } from "./types";
 
 /**
  * GET /v1/me/live-view-history
@@ -24,4 +25,28 @@ export async function getMyLiveViewHistory(
     `/v1/me/live-view-history?${params.toString()}`,
     accessToken
   );
+}
+
+/**
+ * GET /v1/me/live-view-active
+ * Returns the currently active live-view session observing the authenticated
+ * employee, or { active: false } if there is none.
+ *
+ * NOTE: scaffold endpoint — backend TODO. Returns { active: false } on 404
+ * so the banner can render the safe default without throwing.
+ */
+export async function getActiveLiveViewSession(
+  accessToken: string
+): Promise<ActiveLiveViewResponse> {
+  try {
+    return await apiClient.get<ActiveLiveViewResponse>(
+      "/v1/me/live-view-active",
+      accessToken
+    );
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return { active: false, session: null };
+    }
+    throw err;
+  }
 }

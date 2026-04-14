@@ -1,8 +1,17 @@
 import { redirect } from "next/navigation";
 import { getTranslations, getLocale } from "next-intl/server";
 import Link from "next/link";
-import { Monitor, Lock, Users, ClipboardCheck, ArrowRight, ShieldCheck } from "lucide-react";
+import {
+  Monitor,
+  Lock,
+  Users,
+  ClipboardCheck,
+  ArrowRight,
+  ShieldCheck,
+  HandMetal,
+} from "lucide-react";
 import { getSession } from "@/lib/auth/session";
+import { ActiveSessionBanner } from "@/components/live-view/active-session-banner";
 
 export async function generateMetadata(): Promise<{ title: string }> {
   const t = await getTranslations("canliIzleme");
@@ -27,6 +36,9 @@ export default async function CanliIzlemePage(): Promise<JSX.Element> {
 
   return (
     <div className="space-y-8 animate-fade-in">
+      {/* Active session banner — poll every 10s */}
+      <ActiveSessionBanner accessToken={session.accessToken} />
+
       <header className="page-header">
         <div className="flex items-center gap-3 mb-2">
           <div
@@ -111,6 +123,37 @@ export default async function CanliIzlemePage(): Promise<JSX.Element> {
         </ul>
       </section>
 
+      {/* KVKK m.5 conditions section — when can your screen be observed */}
+      <section className="card" aria-labelledby="kvkk-conditions">
+        <h2
+          id="kvkk-conditions"
+          className="text-base font-semibold text-warm-800 mb-3"
+        >
+          {t("kvkkConditionsTitle")}
+        </h2>
+        <p className="text-sm text-warm-600 mb-3 leading-relaxed">
+          {t("kvkkConditionsIntro")}
+        </p>
+        <ul className="space-y-2 text-sm text-warm-700" role="list">
+          {[
+            t("kvkkCondition1"),
+            t("kvkkCondition2"),
+            t("kvkkCondition3"),
+            t("kvkkCondition4"),
+          ].map((item, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span
+                className="mt-0.5 w-4 h-4 rounded-full bg-portal-100 text-portal-600 flex items-center justify-center text-xs flex-shrink-0"
+                aria-hidden="true"
+              >
+                {i + 1}
+              </span>
+              {item}
+            </li>
+          ))}
+        </ul>
+      </section>
+
       {/* Rights during session */}
       <section className="card bg-portal-50 border-portal-100" aria-labelledby="rights-during">
         <h2 id="rights-during" className="text-sm font-semibold text-portal-700 mb-2">
@@ -119,6 +162,32 @@ export default async function CanliIzlemePage(): Promise<JSX.Element> {
         <p className="text-sm text-portal-600 leading-relaxed">
           {t("yourRightsDuringText")}
         </p>
+      </section>
+
+      {/* Right to object / refuse */}
+      <section className="card border-l-4 border-l-trust-400" aria-labelledby="right-to-refuse">
+        <div className="flex items-start gap-3 mb-2">
+          <HandMetal
+            className="w-5 h-5 text-trust-600 mt-0.5 flex-shrink-0"
+            aria-hidden="true"
+          />
+          <h2
+            id="right-to-refuse"
+            className="text-base font-semibold text-warm-900"
+          >
+            {t("rightToRefuseTitle")}
+          </h2>
+        </div>
+        <p className="text-sm text-warm-700 leading-relaxed mb-3">
+          {t("rightToRefuseBody")}
+        </p>
+        <Link
+          href={`/${locale}/haklar/yeni-basvuru?type=object`}
+          className="inline-flex items-center gap-1.5 text-sm text-trust-700 font-medium hover:underline underline-offset-2"
+        >
+          {t("rightToRefuseAction")}
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
+        </Link>
       </section>
 
       {/* Visibility policy */}

@@ -1,0 +1,37 @@
+# .trivyignore — Faz 12 #126
+#
+# Format: one CVE-ID per line. Add a comment explaining WHY before each entry.
+# Entries expire: if the "Review by" date passes, CI linter should fail.
+#
+# Review cadence: quarterly (security-engineer agent).
+# Owner: Security team + relevant component owner.
+
+# ---------------------------------------------------------------------------
+# INTENTIONAL EXCLUSIONS
+# ---------------------------------------------------------------------------
+
+# Example: a CVE in a transitively-pulled dev-only dependency that we never
+# ship to production. Uncomment and customize as real entries arise.
+#
+# CVE-2024-12345
+# Component: some-dev-only-tooling
+# Rationale: Only used in qa/test/load simulator; never in production binary.
+# Mitigation: Contained to CI runner; cannot reach customer environment.
+# Review by: 2026-07-01
+# Owner: qa@personel
+
+# ---------------------------------------------------------------------------
+# TEMPORARILY DEFERRED (with fix plan)
+# ---------------------------------------------------------------------------
+# Entries here must have a linked GitHub issue AND a fix-by date.
+# CI linter should warn when review-by < today + 30 days.
+
+# (none currently)
+
+# ---------------------------------------------------------------------------
+# FALSE POSITIVES
+# ---------------------------------------------------------------------------
+# Entries where Trivy's version detection is wrong, upstream already patched,
+# or the vulnerable code path is not reachable.
+
+# (none currently)

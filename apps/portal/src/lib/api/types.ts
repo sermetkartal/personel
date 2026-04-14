@@ -112,6 +112,55 @@ export interface DLPStateResponse {
   disabled_at?: string | null;
 }
 
+// ── Transparency (aydınlatma) ────────────────────────────────────────────────
+// NOTE: /v1/transparency/* endpoints are scaffolds; backend TODO.
+
+export interface TransparencyAcknowledgeRequest {
+  version: string;
+  locale: "tr" | "en";
+}
+
+export interface TransparencyAcknowledgeResponse {
+  acknowledged: boolean;
+  acknowledged_at: string;
+  version: string;
+  audit_chain_ref: string;
+}
+
+// ── /v1/me/data-summary ──────────────────────────────────────────────────────
+// NOTE: scaffold endpoint that returns per-category event counts for the
+// employee's own endpoint. Not yet in openapi.yaml.
+
+export interface DataCategoryCount {
+  category: string;
+  count_last_30d: number;
+  count_lifetime: number;
+  last_event_at: string | null;
+}
+
+export interface MyDataSummaryResponse {
+  user_id: string;
+  categories: DataCategoryCount[];
+  generated_at: string;
+}
+
+// ── Active live view session ─────────────────────────────────────────────────
+// NOTE: scaffold endpoint used by the canlı-izleme page banner.
+
+export interface ActiveLiveViewSession {
+  session_id: string;
+  requester_role: RequesterRole;
+  approver_role: ApproverRole;
+  reason_category: ReasonCategory;
+  started_at: string;
+  expires_at: string;
+}
+
+export interface ActiveLiveViewResponse {
+  active: boolean;
+  session: ActiveLiveViewSession | null;
+}
+
 // ── First-login acknowledgement ───────────────────────────────────────────────
 // NOTE: /v1/me/acknowledge-notification is NOT in openapi.yaml — flagged as missing.
 

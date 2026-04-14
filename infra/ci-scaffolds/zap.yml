@@ -1,0 +1,94 @@
+name: OWASP ZAP DAST
+
+# Faz 12 #127 — OWASP ZAP baseline scan against running stack.
+# Staging: infra/ci-scaffolds/zap.yml
+# Operator: mv to .github/workflows/ with workflow-scope PAT.
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'   # Weekly (Mondays 04:00 UTC)
+  workflow_dispatch:
+    inputs:
+      target_url:
+        description: Target API URL
+        required: false
+        default: 'http://api:8000'
+      mode:
+        description: Scan mode (baseline | full | api)
+        required: false
+        default: baseline
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  zap-baseline:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start Personel stack
+        run: |
+          cd infra/compose
+          cp .env.example .env || true
+          # Use dev override so certs + secrets are self-contained
+          docker compose \
+            -f docker-compose.yaml \
+            -f docker-compose.override.yaml \
+            up -d postgres vault nats minio keycloak api gateway
+          # Wait for /healthz
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:8000/healthz; then
+              echo "API up"
+              break
+            fi
+            sleep 5
+          done
+
+      - name: ZAP Baseline Scan
+        if: ${{ github.event.inputs.mode != 'full' && github.event.inputs.mode != 'api' }}
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: ${{ github.event.inputs.target_url || 'http://localhost:8000' }}
+          rules_file_name: .zap/rules.tsv
+          cmd_options: '-a -j -T 30 -m 5'
+          allow_issue_writing: true
+          fail_action: false
+
+      - name: ZAP API Scan (OpenAPI)
+        if: ${{ github.event.inputs.mode == 'api' }}
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          target: ${{ github.event.inputs.target_url || 'http://localhost:8000/v1' }}
+          format: openapi
+          cmd_options: '-a -j -T 30 -m 10'
+          allow_issue_writing: true
+          fail_action: false
+
+      - name: ZAP Full Scan
+        if: ${{ github.event.inputs.mode == 'full' }}
+        uses: zaproxy/action-full-scan@v0.12.0
+        with:
+          target: ${{ github.event.inputs.target_url || 'http://localhost:8000' }}
+          rules_file_name: .zap/rules.tsv
+          cmd_options: '-a -j -T 60 -m 20'
+          allow_issue_writing: true
+          fail_action: false
+
+      - name: Stop stack
+        if: always()
+        run: |
+          cd infra/compose
+          docker compose down -v || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: zap-report
+          path: |
+            report_html.html
+            report_json.json
+            report_md.md

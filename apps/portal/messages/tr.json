@@ -77,7 +77,24 @@
     "acknowledgement": "Bilgi Teyidi",
     "acknowledgementPlain": "Bu metnin varlığı, kurulum anında sizi bilgilendirmek için tasarlanmıştır. Bu portalde her zaman güncel metne erişebilirsiniz.",
     "downloadPdf": "PDF olarak indir",
-    "lastVersion": "Versiyon 1.0 — Nisan 2026"
+    "lastVersion": "Versiyon 1.0 — Nisan 2026",
+    "jumpToAck": "Kabul bölümüne git",
+    "ackHeading": "Bilgilendirme Teyidi",
+    "versionLabel": "Versiyon",
+    "lastUpdatedLabel": "Son güncelleme",
+    "ackExplain": "Yukarıdaki aydınlatma metnini okuduğunuzu, bu yazılımın hangi verileri topladığını ve KVKK m.11 kapsamındaki haklarınızı anladığınızı onaylamanız yasal olarak zorunludur. Bu onay bir 'rıza' değildir — verilerin işlenmesi m.5/2-c ve m.5/2-f hukuki sebeplerine dayanır. Bu kutucuk yalnızca size bilgi verildiğini kaydeder.",
+    "ackCheckboxLabel": "Yukarıdaki aydınlatma metnini okudum, anladım ve bilgilendirildiğimi teyit ediyorum.",
+    "ackSubmit": "Kabul Ediyorum",
+    "ackSubmitting": "Kaydediliyor...",
+    "ackSuccessTitle": "Teyit kaydedildi",
+    "ackSuccessDesc": "Bilgilendirme teyidiniz denetim kaydına işlendi.",
+    "ackLocalOnly": "Teyidiniz yerel olarak kaydedildi. Sunucu tarafı kayıt yakında aktive olacak.",
+    "ackFailed": "Teyit kaydedilemedi. Lütfen tekrar deneyin.",
+    "ackAlreadyTitle": "Daha önce onaylandı",
+    "ackAlreadyDesc": "Bu aydınlatma metninin {version} versiyonunu daha önce onayladınız. Yeni bir versiyon yayınlandığında tekrar onay istenecektir.",
+    "ackAuditNote": "Bu kutucuğa tıkladığınızda zaman damgası, kullanıcı kimliği ve versiyon bilgisi hash-zincirli denetim defterine yazılır. İşlem geri alınamaz.",
+    "pdfSoonTitle": "PDF dışa aktarım yakında",
+    "pdfSoonDesc": "Aydınlatma metninin PDF olarak indirilmesi henüz etkin değil. Yöneticinize ulaşarak imzalı kopya talep edebilirsiniz."
   },
   "verilerim": {
     "title": "Verilerim",
@@ -90,6 +107,11 @@
     "requestDataDeletion": "Silme talebi aç (KVKK m.11)",
     "collectedSince": "Toplanmaya başlandığı tarih",
     "noDataYet": "Bu kategoride henüz veri toplanmamış.",
+    "retentionHeader": "Saklama Süresi",
+    "recentCount": "Son 30 günde {count} olay kaydedildi",
+    "downloadCtaTitle": "Verilerinizin tamamını indirin",
+    "downloadCtaDesc": "KVKK m.11/b kapsamında, hakkınızda işlenen verilerin tamamının bir kopyasını talep edebilirsiniz. Self-service talep oluşturarak süreci birkaç saniyede başlatabilirsiniz. Yanıt süresi 30 gündür, ortalama süre 3-5 iş günüdür.",
+    "downloadCtaButton": "Verilerimi Talep Et",
     "categories": {
       "identity": {
         "name": "Kimlik ve Oturum Verileri",
@@ -135,6 +157,40 @@
         "name": "Politika ve Denetim Verileri",
         "description": "Engellenen uygulama veya URL olayları, ajan sağlık kayıtları."
       }
+    }
+  },
+  "dataDownload": {
+    "title": "Verilerimi İndir",
+    "subtitle": "KVKK m.11/b kapsamında, hakkınızda işlenen kişisel verilerin bir kopyasını talep edin.",
+    "back": "Verilerime Dön",
+    "idleHeading": "Nasıl çalışır?",
+    "idleBody": "Aşağıdaki butona tıkladığınızda sisteminiz, sizin adınıza KVKK m.11/b kapsamında bir 'erişim talebi' (access DSR) otomatik olarak oluşturur. Veri Koruma Görevlisi (DPO) bu talebi inceler, yasal saklama yükümlülüklerini değerlendirir ve size şifreli bir paket hazırlar.",
+    "point1": "Talep oluşturulduktan sonra 30 gün içinde yanıt verilmek zorundadır (KVKK m.13).",
+    "point2": "Ortalama yanıt süresi 3-5 iş günüdür; DPO talebinizin içeriğine göre süre değişebilir.",
+    "point3": "Paket hazırlandığında e-posta ile bilgilendirilirsiniz ve aynı sayfadan indirebilirsiniz.",
+    "idleButton": "KVKK m.11/b Talebi Oluştur",
+    "creating": "Talebiniz oluşturuluyor...",
+    "pendingHeading": "Talebiniz işleniyor",
+    "pendingBody": "Talebiniz DPO tarafından inceleniyor. Bu sayfayı açık bırakabilirsiniz; paketiniz hazır olduğunda otomatik olarak güncellenecek. İsterseniz kapatabilirsiniz; durumu her zaman 'Başvurularım' sayfasından kontrol edebilirsiniz.",
+    "refNumber": "Referans numarası",
+    "state": "Durum",
+    "created": "Oluşturuldu",
+    "slaDeadline": "Yasal süre sonu",
+    "polling": "Otomatik olarak güncelleniyor (60s)",
+    "viewInApplications": "Başvurularım sayfasından takip et",
+    "readyHeading": "Paketiniz hazır",
+    "readyBody": "Hakkınızda işlenen verilerin tamamını içeren şifreli paket hazırlandı. Aşağıdaki butondan indirebilirsiniz. İndirme bağlantısı 7 gün geçerlidir.",
+    "downloadButton": "Paketi İndir",
+    "errorHeading": "Talep oluşturulamadı",
+    "errorGeneric": "Bir hata oluştu. Lütfen tekrar deneyin veya BT desteği ile iletişime geçin.",
+    "rejectedMessage": "Talebiniz DPO tarafından reddedildi. Detayları 'Başvurularım' sayfasından inceleyebilirsiniz.",
+    "retry": "Tekrar dene",
+    "states": {
+      "open": "Açık",
+      "at_risk": "Risk altında",
+      "overdue": "Süresi geçti",
+      "closed": "Kapatıldı",
+      "rejected": "Reddedildi"
     }
   },
   "nelerIzlenmiyor": {
@@ -204,7 +260,24 @@
     "yourRightsDuringText": "İzleme sırasında ekranınızda bir gösterge bulunmasa da, bu portal üzerinden geçmiş izleme oturumlarınızı her zaman görebilirsiniz. KVKK m.11 kapsamında itiraz hakkınız saklıdır.",
     "viewHistory": "Oturum geçmişimi gör",
     "visibility": "Görünürlük politikası",
-    "visibilityText": "Oturum geçmişi varsayılan olarak size açıktır. Yalnızca şirketinizin Veri Koruma Görevlisi (DPO), yazılı gerekçe ve denetim kaydı oluşturarak bu görünürlüğü kısıtlayabilir. Böyle bir değişiklik olursa size portal üzerinden bildirim gönderilir."
+    "visibilityText": "Oturum geçmişi varsayılan olarak size açıktır. Yalnızca şirketinizin Veri Koruma Görevlisi (DPO), yazılı gerekçe ve denetim kaydı oluşturarak bu görünürlüğü kısıtlayabilir. Böyle bir değişiklik olursa size portal üzerinden bildirim gönderilir.",
+    "kvkkConditionsTitle": "Ekranınız hangi koşullarda izlenebilir?",
+    "kvkkConditionsIntro": "KVKK m.5 ve m.6 kapsamında, ekran izlemesi yapılabilmesi için aşağıdaki koşulların tümü sağlanmalıdır. Bu koşullardan biri eksikse izleme başlatılamaz.",
+    "kvkkCondition1": "Belgelenmiş bir meşru menfaat (m.5/2-f) — güvenlik incelemesi, iç soruşturma, ciddi politika ihlali şüphesi gibi.",
+    "kvkkCondition2": "Bir yöneticinin yazılı + gerekçeli talebi (neden, hangi olay, ne kadar süre).",
+    "kvkkCondition3": "Talep edenden ayrı bir İK veya DPO yetkilisinin onayı (dual control).",
+    "kvkkCondition4": "Ölçülülük ilkesine uygunluk: oturum süresi 15 dakikayı aşamaz ve yalnızca gerekli olduğu kadar sürer.",
+    "rightToRefuseTitle": "Ret Hakkınız",
+    "rightToRefuseBody": "KVKK m.11/g kapsamında, hakkınızdaki otomatik kararlara ve veri işleme faaliyetlerine itiraz etme hakkınız vardır. Canlı izleme oturumuna retrospektif olarak itiraz etmek isterseniz, aşağıdaki bağlantıdan bir itiraz başvurusu açabilirsiniz. Başvurunuz DPO tarafından değerlendirilecektir.",
+    "rightToRefuseAction": "İtiraz Başvurusu Aç",
+    "activeBanner": {
+      "title": "Şu anda ekran izleniyor",
+      "description": "Bu anda ekranınız canlı izleme altındadır. Aşağıda talep eden ve onaylayan kişilerin rolleri, gerekçe ve kalan süre görüntülenmektedir.",
+      "requester": "Talep eden",
+      "approver": "Onaylayan",
+      "reason": "Gerekçe",
+      "remaining": "Kalan süre"
+    }
   },
   "oturumGecmisi": {
     "title": "Canlı İzleme Oturum Geçmişim",
@@ -320,8 +393,16 @@
       "restrict": "Kısıtlama — Veri işlemenin kısıtlanmasını istiyorum",
       "portability": "Taşınabilirlik — Verilerimin kopyasını istiyorum"
     },
+    "charsMin": "karakter (en az)",
+    "refNumberLabel": "Referans numarası",
+    "attachment": "Ek Dosya",
+    "attachmentOptional": "(opsiyonel, en fazla 5 MB)",
+    "attachmentHint": "PDF, görsel veya belge ekleyebilirsiniz. Ekler DPO incelemesinde kullanılır ve saklama süresine tabidir.",
+    "attachmentRemove": "Eki kaldır",
     "validation": {
-      "requestTypeRequired": "Lütfen bir başvuru türü seçin"
+      "requestTypeRequired": "Lütfen bir başvuru türü seçin",
+      "justificationRequired": "Başvurunuzu en az 50 karakter ile açıklayın.",
+      "attachmentTooLarge": "Dosya boyutu 5 MB'ı aşıyor. Lütfen daha küçük bir dosya seçin."
     }
   },
   "basvurularim": {
@@ -438,11 +519,24 @@
   "firstLoginModal": {
     "title": "Bu bilgisayar kurumsal izleme kapsamındadır",
     "subtitle": "Devam etmeden önce lütfen aşağıdaki bilgileri okuyun.",
-    "body": "Şirketiniz, bu iş bilgisayarına Personel uç nokta izleme yazılımını kurmuştur. Bu yazılım; uygulama kullanımı, dosya olayları, ağ etkinliği ve klavye istatistikleri gibi kategorilerde veri toplamaktadır. Canlı ekran izleme özelliği mevcuttur; ancak her izleme oturumu İK onayı gerektirir ve sizin bu portalde görebileceğiniz bir denetim kaydı oluşturur. Tüm veriler şirketinizin kendi sunucularında saklanır; hiçbir veri dışarı aktarılmaz.",
-    "readFull": "Aydınlatma Metnini Oku",
+    "body": "Şirketiniz, bu iş bilgisayarına Personel uç nokta izleme yazılımını kurmuştur. Hoşgeldiniz — bu kısa bilgilendirme KVKK m.10 kapsamında sizi bilgilendirmek için zorunludur ve yalnızca bir kez gösterilir.",
+    "monitoredTitle": "Neler İzleniyor?",
+    "point1": "Uygulama kullanımı, dosya olayları ve ağ etkinliği kaydedilmektedir.",
+    "point2": "Klavye içeriği şifreli olarak saklanır; hiçbir yönetici okuyamaz.",
+    "point3": "Canlı ekran izleme için İK onayı zorunludur; oturumlar bu portalde görünür.",
+    "point4": "Performans değerlendirmesi veya otomatik karar verme yapılmaz.",
+    "rightsTitle": "KVKK m.11 Haklarınız",
+    "rightsLine": "Verilerinize erişim, düzeltme, silme, itiraz ve tazminat hakkınız vardır. Her başvuru 30 gün içinde yanıtlanır.",
+    "rightsLink": "Haklarınızın listesi",
+    "dlpTitle": "Klavye Gizliliği (ADR 0013)",
+    "dlpLine": "Klavye içeriği şifrelenmiş biçimde saklanır; yöneticiler okuyamaz. Varsayılan olarak DLP kural motoru kapalıdır. Şirketinizin resmi imzalı onay süreci olmadan bu durum değiştirilemez.",
+    "onpremTitle": "On-prem Güvence",
+    "onpremLine": "Tüm veriler şirketinizin kendi sunucularında saklanır; hiçbir veri dışarı (buluta, yurt dışına, üçüncü kişilere) aktarılmaz.",
+    "checkboxLabel": "Yukarıdaki bilgileri okudum ve bu bilgisayarın kurumsal izleme kapsamında olduğunu anladım. KVKK m.10 kapsamında bilgilendirildiğimi teyit ediyorum.",
+    "readFull": "Aydınlatma Metninin Tamamını Oku",
     "confirmButton": "Anladım, devam et",
     "confirmNote": "Bu butona tıklamanız, bilgilendirme yapıldığının denetim kaydına işlenmesi için zorunludur.",
-    "mustConfirm": "Devam etmek için lütfen 'Anladım' butonuna tıklayın.",
+    "mustConfirm": "Devam etmek için önce onay kutucuğunu işaretleyin.",
     "alreadyAcknowledged": "Daha önce onaylanmış"
   },
   "legalTerms": {

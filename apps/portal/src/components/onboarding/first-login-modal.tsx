@@ -3,9 +3,18 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useLocale, useTranslations } from "next-intl";
-import { Shield, AlertCircle } from "lucide-react";
+import {
+  Shield,
+  AlertCircle,
+  Eye,
+  Lock,
+  Server,
+  FileText,
+  Scale,
+} from "lucide-react";
 import { toast } from "sonner";
 import { acknowledgeFirstLoginNotification } from "@/lib/api/dlp-state";
+import { acknowledgeAydinlatma } from "@/lib/api/transparency";
 
 interface FirstLoginModalProps {
   /**
@@ -34,29 +43,40 @@ export function FirstLoginModal({
   onAcknowledge,
 }: FirstLoginModalProps): JSX.Element {
   const t = useTranslations("firstLoginModal");
-  const tNav = useTranslations("nav");
   const locale = useLocale();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = useState(false);
 
   async function handleAcknowledge(): Promise<void> {
+    if (!acknowledged) {
+      setError(t("mustConfirm"));
+      return;
+    }
+
     setIsSubmitting(true);
     setError(null);
 
     try {
-      await acknowledgeFirstLoginNotification(accessToken);
+      // Dual write: the legacy /v1/me/acknowledge-notification endpoint
+      // (first-login marker) AND the newer /v1/transparency/acknowledge
+      // (versioned aydınlatma metni). Either one scaffolding to 404 is
+      // tolerated — the other still records the acceptance.
+      await Promise.allSettled([
+        acknowledgeFirstLoginNotification(accessToken),
+        acknowledgeAydinlatma(accessToken, "1.0.0", (locale as "tr" | "en")),
+      ]);
       onAcknowledge();
     } catch {
-      // If the API call fails, we still allow the user to proceed
-      // but log the failure. KVKK defensibility note: the modal was shown;
-      // network failure is not the employee's fault.
+      // If BOTH fail the browser already surfaced an error — we still let
+      // the user proceed. KVKK defensibility: the modal was shown; network
+      // failure is not the employee's fault.
       console.error("[first-login-modal] Failed to record acknowledgement to audit API");
       toast.error(
         "Onay kaydedilemedi — ancak devam edebilirsiniz. BT desteğini bilgilendirin.",
         { duration: 8000 }
       );
-      // Allow proceeding even if audit write fails — UX over failure
       onAcknowledge();
     } finally {
       setIsSubmitting(false);
@@ -91,7 +111,7 @@ export function FirstLoginModal({
         </div>
 
         {/* Body */}
-        <div className="px-8 py-6 space-y-4">
+        <div className="px-8 py-6 space-y-5">
           <p
             id="first-login-desc"
             className="text-sm text-warm-700 leading-relaxed"
@@ -99,37 +119,121 @@ export function FirstLoginModal({
             {t("body")}
           </p>
 
-          {/* Key points */}
-          <ul className="space-y-2 text-sm text-warm-700" role="list">
-            {[
-              "Uygulama kullanımı, dosya olayları ve ağ etkinliği kaydedilmektedir.",
-              "Klavye içeriği şifreli olarak saklanır; hiçbir yönetici okuyamaz.",
-              "Canlı ekran izleme için İK onayı zorunludur; oturumlar bu portalde görünür.",
-              "Tüm veriler şirketinizin kendi sunucularında kalır; dışarı aktarılmaz.",
-            ].map((point) => (
-              <li key={point} className="flex items-start gap-2">
-                <span
-                  className="mt-0.5 w-4 h-4 rounded-full bg-trust-100 text-trust-600 flex items-center justify-center text-xs flex-shrink-0"
-                  aria-hidden="true"
-                >
-                  ✓
-                </span>
-                {point}
-              </li>
-            ))}
-          </ul>
+          {/* What is monitored — short list */}
+          <section aria-labelledby="fl-monitored">
+            <h3
+              id="fl-monitored"
+              className="text-xs font-semibold text-warm-800 uppercase tracking-wide mb-2 flex items-center gap-1.5"
+            >
+              <Eye className="w-3.5 h-3.5 text-portal-600" aria-hidden="true" />
+              {t("monitoredTitle")}
+            </h3>
+            <ul className="space-y-1.5 text-sm text-warm-700" role="list">
+              {[
+                t("point1"),
+                t("point2"),
+                t("point3"),
+                t("point4"),
+              ].map((point) => (
+                <li key={point} className="flex items-start gap-2">
+                  <span
+                    className="mt-0.5 w-4 h-4 rounded-full bg-trust-100 text-trust-600 flex items-center justify-center text-xs flex-shrink-0"
+                    aria-hidden="true"
+                  >
+                    ✓
+                  </span>
+                  {point}
+                </li>
+              ))}
+            </ul>
+          </section>
+
+          {/* KVKK rights — 1-liner each */}
+          <section aria-labelledby="fl-rights">
+            <h3
+              id="fl-rights"
+              className="text-xs font-semibold text-warm-800 uppercase tracking-wide mb-2 flex items-center gap-1.5"
+            >
+              <Scale className="w-3.5 h-3.5 text-portal-600" aria-hidden="true" />
+              {t("rightsTitle")}
+            </h3>
+            <p className="text-xs text-warm-600 leading-relaxed">
+              {t("rightsLine")}{" "}
+              <Link
+                href={`/${locale}/haklar`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-portal-600 underline-offset-2 hover:underline"
+              >
+                {t("rightsLink")} →
+              </Link>
+            </p>
+          </section>
+
+          {/* DLP status — ADR 0013 */}
+          <section aria-labelledby="fl-dlp">
+            <h3
+              id="fl-dlp"
+              className="text-xs font-semibold text-warm-800 uppercase tracking-wide mb-2 flex items-center gap-1.5"
+            >
+              <Lock className="w-3.5 h-3.5 text-portal-600" aria-hidden="true" />
+              {t("dlpTitle")}
+            </h3>
+            <p className="text-xs text-warm-600 leading-relaxed">
+              {t("dlpLine")}
+            </p>
+          </section>
+
+          {/* On-prem guarantee */}
+          <section aria-labelledby="fl-onprem">
+            <h3
+              id="fl-onprem"
+              className="text-xs font-semibold text-warm-800 uppercase tracking-wide mb-2 flex items-center gap-1.5"
+            >
+              <Server className="w-3.5 h-3.5 text-portal-600" aria-hidden="true" />
+              {t("onpremTitle")}
+            </h3>
+            <p className="text-xs text-warm-600 leading-relaxed">
+              {t("onpremLine")}
+            </p>
+          </section>
 
           {/* Link to full text */}
-          <div className="pt-2">
+          <div className="pt-1 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-portal-600" aria-hidden="true" />
             <Link
               href={`/${locale}/aydinlatma`}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-sm text-portal-600 hover:text-portal-800 underline-offset-2 hover:underline"
+              className="text-sm text-portal-600 hover:text-portal-800 underline-offset-2 hover:underline font-medium"
             >
               {t("readFull")} →
             </Link>
           </div>
+
+          {/* Mandatory acknowledgement checkbox */}
+          <label
+            className="flex items-start gap-3 cursor-pointer group pt-3 border-t border-warm-100"
+            htmlFor="fl-ack-checkbox"
+          >
+            <input
+              id="fl-ack-checkbox"
+              type="checkbox"
+              checked={acknowledged}
+              onChange={(e) => {
+                setAcknowledged(e.target.checked);
+                if (e.target.checked) setError(null);
+              }}
+              className="mt-0.5 w-4 h-4 rounded border-warm-300 text-portal-600 focus:ring-portal-500 cursor-pointer flex-shrink-0"
+              aria-describedby="fl-ack-label"
+            />
+            <span
+              id="fl-ack-label"
+              className="text-sm text-warm-700 leading-relaxed group-hover:text-warm-900"
+            >
+              {t("checkboxLabel")}
+            </span>
+          </label>
         </div>
 
         {/* Footer */}
@@ -146,8 +250,8 @@ export function FirstLoginModal({
 
           <button
             onClick={handleAcknowledge}
-            disabled={isSubmitting}
-            className="w-full bg-portal-600 hover:bg-portal-700 disabled:bg-portal-300 text-white font-medium py-3 px-6 rounded-xl transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-portal-600 focus-visible:ring-offset-2 text-sm"
+            disabled={isSubmitting || !acknowledged}
+            className="w-full bg-portal-600 hover:bg-portal-700 disabled:bg-portal-300 disabled:cursor-not-allowed text-white font-medium py-3 px-6 rounded-xl transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-portal-600 focus-visible:ring-offset-2 text-sm"
             aria-busy={isSubmitting}
           >
             {isSubmitting ? "Kaydediliyor..." : t("confirmButton")}

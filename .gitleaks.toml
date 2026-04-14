@@ -1,0 +1,108 @@
+# Gitleaks config — Faz 12 #128
+# Personel custom rules + allowlist. Run: gitleaks detect -v --config .gitleaks.toml
+#
+# Review: quarterly. Every new allowlist entry must have rationale comment.
+
+title = "Personel UAM — gitleaks config"
+
+# Use upstream default rules as baseline, then extend.
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Personel-specific rules
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "personel-vault-root-token"
+description = "Vault root token (hvs.* format)"
+regex = '''hvs\.[A-Za-z0-9_\-]{24,}'''
+tags = ["vault", "token"]
+
+[[rules]]
+id = "personel-vault-unseal-key"
+description = "Vault unseal Shamir share (base64, 44 chars)"
+regex = '''(?i)(unseal[_\-]?key|vault[_\-]?key)[\s:=]+['"]?[A-Za-z0-9+/=]{40,50}['"]?'''
+tags = ["vault", "key"]
+
+[[rules]]
+id = "personel-keycloak-client-secret"
+description = "Keycloak client secret (UUID-like)"
+regex = '''(?i)(client[_\-]?secret|kc[_\-]?secret)[\s:=]+['"]?[A-Za-z0-9]{20,64}['"]?'''
+tags = ["keycloak", "oidc"]
+
+[[rules]]
+id = "personel-approle-secret-id"
+description = "Vault AppRole secret_id (UUID-like)"
+regex = '''(?i)(secret[_\-]?id)[\s:=]+['"]?[a-f0-9\-]{32,40}['"]?'''
+tags = ["vault", "approle"]
+
+[[rules]]
+id = "personel-ed25519-privkey-pem"
+description = "Ed25519 / other PKCS8 private key PEM"
+regex = '''-----BEGIN (?:ED25519 |OPENSSH |RSA |EC |DSA |ENCRYPTED )?PRIVATE KEY-----'''
+tags = ["pki", "privkey"]
+
+[[rules]]
+id = "personel-clickhouse-password"
+description = "ClickHouse password literal"
+regex = '''(?i)(clickhouse[_\-]?password|CH_PASSWORD)[\s:=]+['"]?[^\s'"]{8,}['"]?'''
+tags = ["clickhouse", "password"]
+
+[[rules]]
+id = "personel-postgres-password"
+description = "Postgres password in URI or env"
+regex = '''(?i)postgres(?:ql)?://[^:]+:([^@]{8,})@'''
+tags = ["postgres", "password"]
+
+[[rules]]
+id = "personel-minio-creds"
+description = "MinIO access key pair"
+regex = '''(?i)(minio_access_key|minio_secret_key|MINIO_ROOT_PASSWORD)[\s:=]+['"]?[^\s'"]{8,}['"]?'''
+tags = ["minio", "s3"]
+
+# ---------------------------------------------------------------------------
+# Allowlist — test fixtures, demo, and documentation examples
+# ---------------------------------------------------------------------------
+
+[allowlist]
+description = "Personel allowlist — test fixtures + documentation examples"
+
+# Whole paths
+paths = [
+  '''(.*?)testdata/.*''',
+  '''(.*?)test/fixtures/.*''',
+  '''apps/agent/crates/personel-tests/.*''',
+  '''apps/api/test/integration/.*\.json$''',
+  '''docs/compliance/.*\.md$''',
+  '''docs/security/.*\.md$''',
+  '''infra/compose/.*\.example$''',
+  '''\.env\.example$''',
+]
+
+# Test / demo values that look like secrets but are documented examples
+regexes = [
+  # ADR text quoting example tokens
+  '''hvs\.EXAMPLE[A-Z0-9]*''',
+  # CLAUDE.md server-side dev tokens (already public in CLAUDE.md §0)
+  '''U1VROrQeITje/ms1w29cs7vy29/q4Q5sAeKQeVdAZq0=''',
+  # 3737d80c-7b47-07df-9c36-20d68b628f6e — server-specific gateway role_id (dev)
+  '''3737d80c-7b47-07df-9c36-20d68b628f6e''',
+  # 1f2e613d-9ba9-d760-a426-4cd47d38d5fe — server-specific api role_id (dev)
+  '''1f2e613d-9ba9-d760-a426-4cd47d38d5fe''',
+  # Documented test clickhouse passwords
+  '''clickhouse_admin_pass''',
+  '''clickhouse_app_pass''',
+  # Documented test API pass
+  '''apipass123''',
+  '''enricher123''',
+  '''gw123''',
+  '''api-secret-dev''',
+  '''admin123''',
+  # Documented test unseal key
+  '''qwer123!!''',
+]
+
+commits = [
+  # If a commit intentionally added a known test vector, list its SHA here.
+]

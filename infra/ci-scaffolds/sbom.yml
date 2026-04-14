@@ -1,0 +1,174 @@
+name: SBOM Generation
+
+# Faz 12 #125 — Software Bill of Materials for every build artifact
+# Staging location: infra/ci-scaffolds/sbom.yml
+# Operator: move to .github/workflows/ with a workflow-scope PAT.
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  go-sbom:
+    name: Go SBOM (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - apps/api
+          - apps/gateway
+          - apps/qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+          cache: true
+          cache-dependency-path: ${{ matrix.project }}/go.sum
+      - name: Install cyclonedx-gomod
+        run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.7.0
+      - name: Generate SBOM
+        run: |
+          mkdir -p sbom
+          NAME=$(echo ${{ matrix.project }} | tr '/' '-')
+          cyclonedx-gomod mod -licenses -json -output sbom/${NAME}.cdx.json ${{ matrix.project }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ matrix.project }}
+          path: sbom/*.cdx.json
+          retention-days: 90
+
+  rust-sbom:
+    name: Rust SBOM (agent workspace)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.88'
+      - name: Install cargo-cyclonedx
+        run: cargo install cargo-cyclonedx --version 0.5.5 --locked
+      - name: Generate SBOM
+        working-directory: apps/agent
+        run: cargo cyclonedx --format json --all
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-rust-agent
+          path: apps/agent/**/*.cdx.json
+          retention-days: 90
+
+  node-sbom:
+    name: Node SBOM (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - apps/console
+          - apps/portal
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.project }}/pnpm-lock.yaml
+      - name: Install cyclonedx-npm
+        run: npm install -g @cyclonedx/cyclonedx-npm@1.19.3
+      - name: Install project deps
+        working-directory: ${{ matrix.project }}
+        run: pnpm install --frozen-lockfile
+      - name: Generate SBOM
+        working-directory: ${{ matrix.project }}
+        run: cyclonedx-npm --output-format json --output-file ../../sbom-$(basename ${{ matrix.project }}).cdx.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-node-${{ matrix.project }}
+          path: sbom-*.cdx.json
+          retention-days: 90
+
+  python-sbom:
+    name: Python SBOM (${{ matrix.project }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - apps/ml-classifier
+          - apps/ocr-service
+          - apps/uba-detector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install cyclonedx-bom
+        run: pip install cyclonedx-bom==4.5.0
+      - name: Generate SBOM
+        run: |
+          mkdir -p sbom
+          NAME=$(echo ${{ matrix.project }} | tr '/' '-')
+          if [ -f ${{ matrix.project }}/requirements.txt ]; then
+            cyclonedx-py requirements ${{ matrix.project }}/requirements.txt --output-format json --output-file sbom/${NAME}.cdx.json
+          elif [ -f ${{ matrix.project }}/pyproject.toml ]; then
+            cyclonedx-py poetry ${{ matrix.project }} --output-format json --output-file sbom/${NAME}.cdx.json || \
+            cyclonedx-py environment --output-format json --output-file sbom/${NAME}.cdx.json
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sbom-python-${{ matrix.project }}
+          path: sbom/*.cdx.json
+          retention-days: 90
+
+  sbom-summary:
+    name: SBOM summary comment
+    needs: [go-sbom, rust-sbom, node-sbom, python-sbom]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-sboms
+      - name: Summarize
+        id: summary
+        run: |
+          echo "## SBOM Summary" > summary.md
+          echo "" >> summary.md
+          find all-sboms -name '*.cdx.json' | while read f; do
+            COUNT=$(jq '.components | length' "$f" 2>/dev/null || echo "?")
+            echo "- \`$(basename $f)\`: $COUNT components" >> summary.md
+          done
+          cat summary.md
+      - uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: sbom
+          path: summary.md
+
+  release-attach:
+    name: Attach SBOMs to release
+    needs: [go-sbom, rust-sbom, node-sbom, python-sbom]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: all-sboms
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: all-sboms/**/*.cdx.json

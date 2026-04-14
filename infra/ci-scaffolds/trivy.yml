@@ -1,0 +1,150 @@
+name: Trivy — Vulnerability & License Scan
+
+# Faz 12 #126 — Trivy CI. Staging: infra/ci-scaffolds/trivy.yml
+# Operator: mv infra/ci-scaffolds/trivy.yml .github/workflows/ with workflow-scope PAT.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly scheduled scan — picks up new CVEs on unchanged branches
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
+jobs:
+  trivy-fs:
+    name: Trivy filesystem
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy scan (CRITICAL/HIGH — fail)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivyignores: .trivyignore
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: sarif
+          output: trivy-fs-high.sarif
+
+      - name: Upload high-severity SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs-high.sarif
+          category: trivy-fs-high
+
+      - name: Trivy scan (MEDIUM — warn only)
+        if: always()
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          trivyignores: .trivyignore
+          severity: MEDIUM
+          exit-code: '0'
+          format: sarif
+          output: trivy-fs-medium.sarif
+
+      - name: Upload medium-severity SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs-medium.sarif
+          category: trivy-fs-medium
+
+  trivy-config:
+    name: Trivy config (IaC)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy misconfig scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: sarif
+          output: trivy-config.sarif
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-config.sarif
+          category: trivy-config
+
+  trivy-license:
+    name: Trivy license check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: License scan (fail on copyleft)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: license
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: table
+          output: trivy-licenses.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: trivy-license-report
+          path: trivy-licenses.txt
+
+      - name: Comment license results on PR
+        if: github.event_name == 'pull_request' && always()
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: trivy-licenses
+          path: trivy-licenses.txt
+
+  trivy-image:
+    name: Trivy image scan
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'schedule'
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - apps/api
+          - apps/gateway
+          - apps/ml-classifier
+          - apps/ocr-service
+          - apps/uba-detector
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: |
+          if [ -f ${{ matrix.image }}/Dockerfile ]; then
+            docker build -t personel/${{ matrix.image }}:ci ${{ matrix.image }}
+          else
+            echo "No Dockerfile for ${{ matrix.image }} — skipping"
+            exit 0
+          fi
+      - name: Trivy image scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: personel/${{ matrix.image }}:ci
+          severity: CRITICAL,HIGH
+          exit-code: '1'
+          format: sarif
+          output: trivy-image-${{ matrix.image }}.sarif
+          trivyignores: .trivyignore
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-image-${{ matrix.image }}.sarif
+          category: trivy-image-${{ matrix.image }}

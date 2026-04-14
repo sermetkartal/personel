@@ -1,0 +1,46 @@
+# ZAP rules.tsv — Faz 12 #127
+# Format: RULE_ID	THRESHOLD	(NAME)
+# Thresholds: IGNORE, INFO, WARN, FAIL
+# Progressive mode: new rules start INFO → WARN → FAIL in subsequent weeks.
+
+# --- Critical rules (fail immediately) ---
+10020	FAIL	(X-Frame-Options Header Scanner)
+10021	FAIL	(X-Content-Type-Options Header Missing)
+10038	FAIL	(Content Security Policy Header Not Set)
+40018	FAIL	(SQL Injection)
+40019	FAIL	(SQL Injection - MySQL)
+40020	FAIL	(SQL Injection - Hypersonic)
+40021	FAIL	(SQL Injection - Oracle)
+40022	FAIL	(SQL Injection - PostgreSQL)
+40024	FAIL	(SQL Injection - SQLite)
+40035	FAIL	(Hidden File Finder)
+40012	FAIL	(Cross Site Scripting — Reflected)
+40014	FAIL	(Cross Site Scripting — Persistent)
+40016	FAIL	(Cross Site Scripting — Persistent Prime)
+40017	FAIL	(Cross Site Scripting — Persistent Spider)
+6	FAIL	(Path Traversal)
+90019	FAIL	(Server Side Code Injection)
+90020	FAIL	(Remote OS Command Injection)
+90021	FAIL	(XPath Injection)
+90022	FAIL	(Application Error Disclosure)
+
+# --- Warn (record but allow release) ---
+10015	WARN	(Incomplete or No Cache-control and Pragma HTTP Header Set)
+10016	WARN	(Web Browser XSS Protection Not Enabled)
+10017	WARN	(Cross-Domain JavaScript Source File Inclusion)
+10019	WARN	(Content-Type Header Missing)
+10023	WARN	(Information Disclosure - Debug Error Messages)
+10024	WARN	(Information Disclosure - Sensitive Information in URL)
+10025	WARN	(Information Disclosure - Sensitive Information in HTTP Referer Header)
+10027	WARN	(Information Disclosure - Suspicious Comments)
+10096	WARN	(Timestamp Disclosure)
+10098	WARN	(Cross-Domain Misconfiguration)
+10105	WARN	(Weak Authentication Method)
+10202	WARN	(Absence of Anti-CSRF Tokens)
+
+# --- Progressive: new rules ignored first pass, escalate next review ---
+# 10109	INFO	(Modern Web Application)
+# 10110	INFO	(Dangerous JS Functions)
+
+# --- Known test fixtures / false positives ---
+# Add with rationale comment.

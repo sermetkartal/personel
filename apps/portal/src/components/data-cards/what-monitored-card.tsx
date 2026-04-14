@@ -11,6 +11,8 @@ interface WhatMonitoredCardProps {
   legalBasis: string;
   retentionPeriod: string;
   isSensitive?: boolean;
+  /** Event count in the last 30 days; undefined means the summary is unavailable */
+  recentCount?: number | undefined;
 }
 
 /**
@@ -26,6 +28,7 @@ export function WhatMonitoredCard({
   legalBasis,
   retentionPeriod,
   isSensitive = false,
+  recentCount,
 }: WhatMonitoredCardProps): JSX.Element {
   const t = useTranslations("verilerim");
   const tCommon = useTranslations("common");
@@ -79,11 +82,19 @@ export function WhatMonitoredCard({
         </div>
         <div>
           <dt className="text-xs font-medium text-warm-400 uppercase tracking-wide">
-            Saklama Süresi
+            {t("retentionHeader")}
           </dt>
           <dd className="mt-0.5 text-xs text-warm-600">{retentionPeriod}</dd>
         </div>
       </dl>
+
+      {recentCount !== undefined && (
+        <p className="mt-3 text-xs text-portal-700 bg-portal-50 rounded-lg px-3 py-2">
+          {recentCount === 0
+            ? t("noDataYet")
+            : t("recentCount", { count: recentCount.toLocaleString("tr-TR") })}
+        </p>
+      )}
 
       <div className="mt-4 flex gap-3">
         <Link

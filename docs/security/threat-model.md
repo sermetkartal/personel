@@ -103,6 +103,262 @@ KVKK m.10 aydınlatma ilkesi implies the employee must know what is being proces
 
 The cross-reference is `docs/security/anti-tamper.md` which links back to this flow.
 
+## Faz 6–9 Genişletilmiş STRIDE Matrisi (2026-04-13, Faz 12 #124)
+
+> Scope: Phase 1 base + Phase 2/3/6/9 yeni endpoint'ler. Her satır: per-endpoint
+> saldırgan hedefi, STRIDE kategorisi, mevcut mitigation, artık risk, tespit
+> yolu, müdahale prosedürü.
+
+### Flow 8 — Search API (OpenSearch full-text)
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Tenant veri sızıntısı via query injection | I | Farklı tenant'ın audit kayıtlarını gör | Server-side RLS query rewriting; tenant_id pinned in search context; query AST validation reject unknown fields | Düşük | `personel_search_cross_tenant_attempt` metric + audit log | Incident response; erişim reviewer |
+| NLQ prompt injection → over-scoped query | T,E | "Show all employees' DLP matches" via LLM re-query | Query template whitelist; LLM output scanned for disallowed fields | Orta | `search.llm_refusal` rate | LLM refusal retraining |
+| DoS via expensive regex / wildcard | D | Kaynak tüketimi | Query cost estimator; per-tenant rate limit 60/min; circuit breaker | Düşük | Latency SLO breach | Rate limit bump; auto-block |
+
+### Flow 9 — DLQ Replay API
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Replay abuse: tekrar tekrar replay → duplicate audit kayıt | R,T | Audit inflation, false evidence | Replay idempotency key; audit `pipeline.replay_requested` + `replay_completed` hash chain entries | Düşük | `replay_rate_per_actor` metric | Throttle per actor; DPO review |
+| Stale payload replay → integrity drift | T | Old policy state reapplied | Replay bundles pinned to schema version; version mismatch → reject | Düşük | Schema drift alert | Manuel DPO evaluation |
+| Privilege bypass — Auditor replays DPO-only events | E | Role confusion | Replay endpoint RBAC: `pipeline_replay` permission → DPO only | Düşük | RBAC denial metric | SOC review |
+
+### Flow 10 — API Key / Service-to-Service Auth
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| API key exfiltration (log leak, env var dump) | I | Persistent access | Keys stored Vault-sealed; rotated 90d; log scrubber; secret scanning pre-commit | Orta | Gitleaks CI + Vault audit `read` count anomaly | Key revoke + rotate + audit |
+| Stolen key → lateral pivot | E | Tenant escalation | Per-key tenant binding; per-key scope list; IP allowlist optional | Orta | Unusual IP / geo metric | Revoke + MFA challenge operator |
+| Key brute force | D,E | Guess key | 256-bit entropy + per-IP rate limit + exponential backoff | Çok düşük | Rate limit metric | Auto-block |
+
+### Flow 11 — Audit Log Streaming (WebSocket)
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| WebSocket hijack via CORS bypass | S,I | Live audit tail okuma | Origin strict check; ws token per-session short-lived; server-side RBAC on subscribe | Düşük | CORS denial metric | Block IP; session kill |
+| DoS — 1000 WS connections | D | Kaynak tüketim | Per-user connection cap 5; total cap 100; heartbeat timeout | Düşük | Connection count metric | Cap enforcement |
+| Event filter bypass → cross-tenant peek | I,E | Başka tenant'ın audit'ini gör | Filter parsed + rewritten server-side; tenant_id locked | Düşük | Filter rewrite failure log | SOC review |
+
+### Flow 12 — ClickHouse Aggregation API
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Query-based info leak (narrow-GROUP-BY attack) | I | Individual employee identification in aggregated view | k-anonymity enforce: GROUP BY result count < 5 → reject; DP noise Phase 2 | Orta | Query rejection metric | Query refinement guide |
+| Expensive cross-join DoS | D | CH cluster overload | Query cost estimator; max execution time 30s; per-tenant memory cap | Düşük | `ch_query_aborted` counter | Auto-kill |
+| SQL injection via filter param | T,I,E | DB-level access | Parameterized queries only; koanf validation; no string concat | Düşük | WAF log + CH query log | Incident response |
+
+### Flow 13 — LLM ML Classifier (apps/ml-classifier)
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Prompt injection via window title → mis-categorize | T | Hide malicious app as "productive" | Output schema strict JSON; confidence threshold 0.70; regex fallback cross-check | Orta | Disagreement rate metric | Reclassification queue |
+| Jailbreak → LLM returns PII | I | Data exfiltration | Input pre-scrub (redaction); output post-scrub (regex filter); sandboxed model container | Orta | PII-in-output regex hit | Container kill + retrain |
+| Adversarial input → classifier DoS (very long title) | D | Stall classifier | Input length cap 512 chars; timeout 50ms; graceful fallback to regex | Düşük | Timeout metric | Rate limit |
+| Model poisoning via malicious update | T | Change classification behavior | Model file SHA + Ed25519 sig check at load; offline review cycle | Düşük | Boot signature check failure | Rollback |
+
+### Flow 14 — DSR Erasure (KVKK m.11/g)
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| DSR abuse — fake request for someone else | S,R | Wipe victim's data | Employee identity verified via Keycloak OIDC + 2nd factor; DPO review gate | Düşük | DPO queue + audit trail | DPO reject |
+| Over-erasure — wipe beyond scope | I,T | Collateral data loss | Scoped erasure: per employee_id only; audit log preserved (legal basis m.10) | Düşük | Erasure audit delta | Restore from backup |
+| Crypto-shred bypass — old backup still contains | I | Post-erasure recovery possible | PITR + backup retention aligned with DSR SLA; backup re-encryption on tenant key rotation | Orta | Backup scan | Delete backup batch |
+
+### Flow 15 — Policy Editor (visual SensitivityGuard)
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Malicious policy push → over-collection | E,T | Capture more than allowed (e.g., enable keystroke content) | ADR 0013 invariant: server-side validator rejects `dlp_enabled=false AND keystroke.content_enabled=true`; signing happens after validation | Düşük | Validator metric | Reject + audit |
+| Policy signing key abuse | E | Forge policy | Ed25519 signing via Vault transit; DPO + Admin dual control for prod push | Düşük | Vault audit | Key rotation |
+| Policy diff UI XSS | T,E | Inject code into admin browser | React strict escaping; CSP header nonce-based | Düşük | CSP violation report | Patch |
+
+### Flow 16 — Live View HR Approval
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Approver collusion — requester + approver same person / colluding pair | S,R,E | Bypass dual control | `approver != requester` enforced server-side; pattern detection on repeated pair anomaly | Orta | Pair frequency metric | Random audit sample; DPO review |
+| Approval expiry race — approve → revoke race → viewer already in room | D,E | Extended view | Short-lived JWT (60s); server-side session termination on revoke | Düşük | Race log | Token TTL bump |
+| Replay approval — same approval token reused | R | Multiple sessions one approval | Token one-time use; audit-bound to session_id | Düşük | Token reuse metric | Reject |
+
+### Flow 17 — Bulk Endpoint Operations (mass wipe / deactivate)
+
+| Threat | STRIDE | Attacker Goal | Mitigation | Residual | Detection | Response |
+|---|---|---|---|---|---|---|
+| Mass wipe attack — admin nukes all endpoints | D,E | Organization sabotage | Bulk op requires `bulk_operation` permission (Admin only); 2-step confirmation; cooldown 5min between bulk ops; target count cap 500 | Yüksek (insider) | Bulk op audit entry + executive alert | Executive review; possibly revert via backup |
+| Bulk enroll → rogue fleet | S,E | Shadow fleet for surveillance | Bulk enroll rate limit 50/hour; per-batch audit; DPO review bulk > 100 | Orta | Enrollment rate anomaly | DPO notification |
+| Partial bulk failure leaks error = endpoint existence oracle | I | Enumerate endpoint IDs | Error responses generic ("operation failed"); detailed only in server log | Düşük | Error response shape test | Response unification |
+
+---
+
+## Kill Chain Diyagramları / Kill Chain Diagrams
+
+### KC1 — Agent Enrollment MITM
+
+```
+[Attacker at employee network tap]
+         │
+         │ intercepts enroll token in transit
+         │ (HTTP over employee's corp LAN)
+         ▼
+[Replay enroll token from attacker machine]
+         │
+         │ calls /v1/agent-enroll with valid token + own CSR
+         ▼
+[Admin API signs CSR → attacker gets valid agent cert]
+         │
+         ▼
+[Attacker establishes mTLS as fake endpoint]
+         │
+         └── Mitigation chain:
+             1. Enroll token served over TLS 1.3 (mitigates network tap)
+             2. Token single-use + 15-min TTL (mitigates delayed replay)
+             3. Hardware fingerprint bind check at first Hello (CSR hw_fp
+                must match enroll ceremony record)
+             4. Gateway cert pinning (agent must also trust gateway)
+             5. Anomaly: duplicate hw_fingerprint from different IPs →
+                revoke + alert
+```
+
+### KC2 — Insider Admin Threat
+
+```
+[Malicious admin with valid console access]
+         │
+         │ wants to: read keystroke content of specific employee
+         ▼
+[Attempt 1: direct API call /v1/keystroke/content]
+         │
+         │ ← Blocked: no such endpoint exists (Phase 1 invariant)
+         ▼
+[Attempt 2: enable DLP via UI to gain decryption path]
+         │
+         │ ← Blocked: UI has no enable button (ADR 0013)
+         │ ← dlp-enable.sh requires DPO + IT-Sec + Legal signatures
+         ▼
+[Attempt 3: impersonate DLP service AppRole]
+         │
+         │ ← Blocked: Secret ID provisioning requires ceremony
+         │ ← Vault audit logs every secret_id read attempt
+         ▼
+[Attempt 4: modify policy to capture more]
+         │
+         │ ← Blocked: policy validator rejects invariant violation
+         │ ← Policy signing requires dual control
+         ▼
+[Attempt 5: direct DB query on ciphertext]
+         │
+         │ ← ciphertext present, but no PE-DEK exists in default state
+         │ ← Vault transit/derive never called, mathematical impossibility
+         ▼
+[Residual: read screen captures within legal scope (audited)]
+         │
+         └── All access logged in audit hash chain + Evidence Locker
+             CC6.1; DPO can verify post-hoc; employee can request via
+             transparency portal
+```
+
+### KC3 — DSR Erasure Abuse
+
+```
+[Internal attacker wants to wipe colleague's data]
+         │
+         ▼
+[Submit fake DSR on behalf of victim]
+         │
+         │ ← Blocked: DSR submission requires victim's own OIDC auth +
+         │   challenge (Keycloak), attacker can't forge
+         ▼
+[Attacker obtains victim's password / cookie]
+         │
+         ▼
+[Fake DSR submitted as victim]
+         │
+         │ ← DPO review stage: DPO verifies identity, may require
+         │   additional proof (ID scan, HR confirmation)
+         │ ← 7-day cooling period for erasure requests > N records
+         ▼
+[DPO approves under duress / compromised]
+         │
+         │ ← Audit log: every DPO action signed, hash-chained
+         │ ← Evidence Locker P7.1: erasure bundle kept
+         │ ← Ops: PITR backup retention 30 days — recovery possible
+         ▼
+[Detection: unusual DSR pattern / victim complaint]
+         │
+         ▼
+[Response: restore from PITR; rotate compromised credentials;
+ post-mortem + DPO role review]
+```
+
+### KC4 — Pipeline Replay Abuse
+
+```
+[Attacker with Auditor role (read-only)]
+         │
+         │ attempts: replay old policy to reinstate less-strict rules
+         ▼
+[Call /v1/pipeline/replay with bundle_id]
+         │
+         │ ← Blocked: replay requires `pipeline_replay` permission
+         │   (DPO-only)
+         ▼
+[Attacker with DPO role (legitimate)]
+         │
+         │ replays old DSR-erasure event to "undo" the erasure
+         ▼
+[Replay handler: validates bundle signature + schema version]
+         │
+         │ ← DSR erasure is idempotent: replay is a no-op if target
+         │   already erased
+         │ ← Replay itself audited (replay.requested + replay.completed)
+         ▼
+[Residual: attacker can replay non-idempotent events]
+         │
+         │ Mitigation: all events MUST be designed idempotent or
+         │ carry replay-fence (Phase 7 #73 schema versioning)
+         ▼
+[Detection: replay-per-actor metric > threshold]
+```
+
+### KC5 — Policy Push Tampering
+
+```
+[Attacker with Admin role wants malicious policy deployed]
+         │
+         ▼
+[Edit policy JSON to include keystroke.content_enabled=true]
+         │
+         │ ← Blocked: server validator rejects ADR 0013 invariant
+         │   violation BEFORE signing
+         ▼
+[Bypass validator by direct DB write]
+         │
+         │ ← Blocked: policy_versions table append-only; INSERT only
+         │ ← Gateway fetches latest row AND verifies signature
+         │   against Control Plane Root Key
+         │ ← Direct DB write has no valid signature
+         ▼
+[Forge signature via stolen signing key]
+         │
+         │ ← Signing key lives in Vault transit, exportable=false
+         │ ← Vault audit logs every sign call
+         │ ← Key rotation on suspicion
+         ▼
+[Attack cost: must compromise Vault + stay under audit radar]
+         │
+         ▼
+[Detection: Vault transit sign rate anomaly;
+           Control Plane Key usage without approved change ticket]
+         │
+         ▼
+[Response: rotate Control Plane Key + re-sign all valid artifacts +
+           revoke old signature version]
+```
+
+---
+
 ## Residual Risks Flagged
 
 1. Endpoint compromise is out of scope: if a single endpoint is fully compromised before enrollment, its PE-DEK and live content are lost for that endpoint. This is a design boundary, not a bug.

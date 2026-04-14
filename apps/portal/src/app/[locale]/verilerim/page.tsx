@@ -15,8 +15,10 @@ import {
   Calendar,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import Link from "next/link";
+import { Download } from "lucide-react";
 import { getSession } from "@/lib/auth/session";
-import { getMyData } from "@/lib/api/transparency";
+import { getMyData, getMyDataSummary } from "@/lib/api/transparency";
 import { WhatMonitoredCard } from "@/components/data-cards/what-monitored-card";
 import { RetentionCard } from "@/components/data-cards/retention-card";
 import { formatDate } from "@/lib/utils";
@@ -124,6 +126,20 @@ export default async function VerilerimPage(): Promise<JSX.Element> {
     // Show static layout even without API data
   }
 
+  // Per-category 30-day counts — scaffold endpoint, null on 404
+  const countByKey: Record<string, number> = {};
+  try {
+    const summary = await getMyDataSummary(session.accessToken);
+    if (summary) {
+      for (const c of summary.categories) {
+        countByKey[c.category] = c.count_last_30d;
+      }
+    }
+  } catch {
+    // degrade silently — card just won't show the count
+  }
+  const haveCounts = Object.keys(countByKey).length > 0;
+
   return (
     <div className="space-y-8 animate-fade-in">
       <header className="page-header">
@@ -165,8 +181,39 @@ export default async function VerilerimPage(): Promise<JSX.Element> {
               legalBasis={config.legalBasis}
               retentionPeriod={config.retentionPeriod}
               isSensitive={config.isSensitive ?? false}
+              recentCount={haveCounts ? (countByKey[config.key] ?? 0) : undefined}
             />
           ))}
+        </div>
+      </section>
+
+      {/* Self-service data download CTA */}
+      <section className="card bg-portal-50/60 border-portal-200" aria-labelledby="download-cta-heading">
+        <div className="flex items-start gap-4">
+          <div
+            className="w-10 h-10 rounded-xl bg-portal-100 flex items-center justify-center flex-shrink-0"
+            aria-hidden="true"
+          >
+            <Download className="w-5 h-5 text-portal-600" />
+          </div>
+          <div className="flex-1">
+            <h2
+              id="download-cta-heading"
+              className="text-base font-semibold text-warm-900"
+            >
+              {t("downloadCtaTitle")}
+            </h2>
+            <p className="text-sm text-warm-600 mt-1 leading-relaxed">
+              {t("downloadCtaDesc")}
+            </p>
+            <Link
+              href={`/${locale}/verilerim/indir`}
+              className="mt-3 inline-flex items-center gap-2 bg-portal-600 hover:bg-portal-700 text-white font-medium py-2 px-4 rounded-xl text-sm transition-colors"
+            >
+              <Download className="w-4 h-4" aria-hidden="true" />
+              {t("downloadCtaButton")}
+            </Link>
+          </div>
         </div>
       </section>
 

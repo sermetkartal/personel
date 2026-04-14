@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 import { getTranslations, getLocale } from "next-intl/server";
 import { getSession } from "@/lib/auth/session";
 import { LegalTerm } from "@/components/common/legal-term";
+import { AcknowledgePanel } from "@/components/aydinlatma/acknowledge-panel";
+
+const AYDINLATMA_VERSION = "1.0.0";
+const AYDINLATMA_LAST_UPDATED = "2026-04-13";
 
 export async function generateMetadata(): Promise<{ title: string }> {
   const t = await getTranslations("aydinlatma");
@@ -36,13 +40,12 @@ export default async function AydinlatmaPage(): Promise<JSX.Element> {
         <p className="mt-2 text-warm-600">{t("subtitle")}</p>
         <div className="mt-3 flex items-center gap-3">
           <span className="badge-neutral">{t("lastVersion")}</span>
-          <button
-            type="button"
+          <a
+            href="#ack-heading"
             className="text-xs text-portal-600 hover:underline"
-            aria-label={t("downloadPdf")}
           >
-            {t("downloadPdf")}
-          </button>
+            {t("jumpToAck")}
+          </a>
         </div>
       </header>
 
@@ -267,6 +270,14 @@ export default async function AydinlatmaPage(): Promise<JSX.Element> {
           ))}
         </aside>
       </div>
+
+      {/* Acknowledge panel — PDF download + "Kabul Ediyorum" checkbox */}
+      <AcknowledgePanel
+        accessToken={session.accessToken}
+        version={AYDINLATMA_VERSION}
+        lastUpdated={AYDINLATMA_LAST_UPDATED}
+        alreadyAcknowledged={session.firstLoginAcknowledged}
+      />
     </div>
   );
 }

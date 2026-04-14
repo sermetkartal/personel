@@ -22,8 +22,19 @@ async function request<T>(
 ): Promise<T> {
   const { method = "GET", body, accessToken, signal } = options;
 
-  // Enforce scope: only /v1/me/* and /v1/system/dlp-state are allowed
-  if (!path.startsWith("/v1/me") && !path.startsWith("/v1/system/dlp-state")) {
+  // Enforce scope: only employee-facing endpoints are allowed
+  // /v1/me/* — employee data + DSR + live-view-history + acknowledge
+  // /v1/system/dlp-state — tenant DLP banner state (read-only, no PII)
+  // /v1/transparency/* — aydınlatma metni acknowledge + pdf download
+  // /v1/dsr/{id} — polling single DSR by id (employee can only poll own, server-enforced)
+  const allowedPrefixes = [
+    "/v1/me",
+    "/v1/system/dlp-state",
+    "/v1/transparency",
+    "/v1/dsr/",
+  ];
+  const allowed = allowedPrefixes.some((p) => path.startsWith(p));
+  if (!allowed) {
     throw new Error(
       `[portal-api-client] Access denied: path "${path}" is not in the allowed employee scope.`
     );
