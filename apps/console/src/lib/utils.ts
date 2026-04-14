@@ -9,20 +9,28 @@ export function cn(...inputs: ClassValue[]): string {
 
 /**
  * Format a date string for display in Turkish locale.
+ * Returns "—" for null/undefined/invalid input rather than throwing
+ * RangeError — the UI gracefully degrades when the backend omits a
+ * timestamp (e.g. endpoint has never reported in yet).
  */
 export function formatDateTR(
-  date: string | Date,
+  date: string | Date | null | undefined,
   pattern = "d MMMM yyyy, HH:mm",
 ): string {
+  if (date == null) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "—";
   return format(d, pattern, { locale: tr });
 }
 
 /**
  * Format a date as relative time ("2 saat önce") in Turkish.
+ * Returns "—" for null/undefined/invalid input.
  */
-export function formatRelativeTR(date: string | Date): string {
+export function formatRelativeTR(date: string | Date | null | undefined): string {
+  if (date == null) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
+  if (isNaN(d.getTime())) return "—";
   return formatDistanceToNow(d, { addSuffix: true, locale: tr });
 }
 

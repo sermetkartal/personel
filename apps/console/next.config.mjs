@@ -67,7 +67,17 @@ const nextConfig = {
             "default-src 'self'",
             "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
             "style-src 'self' 'unsafe-inline'",
-            `connect-src 'self' ${process.env.NEXT_PUBLIC_API_BASE_URL ?? ""} ${process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? ""} ${process.env.NEXT_PUBLIC_LIVEKIT_URL ?? ""}`,
+            (() => {
+              const api = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
+              const kc = process.env.NEXT_PUBLIC_KEYCLOAK_URL ?? "";
+              const lk = process.env.NEXT_PUBLIC_LIVEKIT_URL ?? "";
+              // WebSocket endpoints for audit stream + live view pubsub
+              // derive from API base URL (http -> ws, https -> wss).
+              const apiWs = api
+                ? api.replace(/^http/, "ws")
+                : "";
+              return `connect-src 'self' ${api} ${kc} ${lk} ${apiWs}`;
+            })(),
             "img-src 'self' data: blob: https:",
             "frame-ancestors 'none'",
           ]

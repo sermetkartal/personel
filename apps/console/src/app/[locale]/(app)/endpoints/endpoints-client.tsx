@@ -475,8 +475,8 @@ export function EndpointsClient({
                       {endpoint.agent_version ?? "—"}
                     </td>
                     <td className="px-4 py-3">
-                      <Badge variant={STATUS_BADGE_VARIANTS[endpoint.status]}>
-                        {t(`status.${endpoint.status}`)}
+                      <Badge variant={STATUS_BADGE_VARIANTS[endpoint.status] ?? "outline"}>
+                        {t(`status.${endpoint.status ?? "offline"}`)}
                       </Badge>
                     </td>
                     <td className="px-4 py-3 text-muted-foreground hidden sm:table-cell">
