@@ -2,11 +2,136 @@
 
 > **Bu dosya, Personel repository'sine giren her Claude Code oturumu (ve insan geliştirici) tarafından ilk okunması gereken dosyadır.** Projenin "neyi", "neden", "nasıl" ve "nerede" durduğunu tek sayfada özetler. Ayrıntılar için ilgili belgelere link verir — aynı içeriği tekrarlamaz.
 >
-> Versiyon: 2.7 — Wave 9 otonom sprint TAM TAMAM (6/6 sprint, 12 commit, ~10k satır kod). KVKK menü reorganizasyon + KVKK backend/UI + Settings genişletmeleri (external services, CA mode, retention, backup) + Admin dual-control bypass + operator runbooks. Wave 8 + Wave 9 deploy bekliyor. — 2026-04-14
+> Versiyon: 2.8 — Wave 9 deploy tamamlandı, 5 runtime bug fix çıkarıldı (CSP ws, console API proxy, DSR admin, NATS liveview subject, notifications stub). Canlı sistem 192.168.5.44'te aktif. Canlı izleme backend tam hazır ama agent publisher (ADR 0019 Phase 2) hâlâ stub — tek eksik parça. — 2026-04-15
 
 ---
 
-## 0. WAVE 9 — OTONOM SPRINT HANDOVER (2026-04-14 başladı)
+## 0. WAVE 9+ — CANLI SİSTEM DURUMU (2026-04-15)
+
+### 🟢 Üretim Erişim Bilgileri
+
+| Servis | URL | Kimlik |
+|---|---|---|
+| Admin Console | http://192.168.5.44:3000/tr | admin / admin123 |
+| Şeffaflık Portalı | http://192.168.5.44:3001/tr | (çalışan SSO) |
+| Admin API | http://192.168.5.44:8000 | Bearer JWT |
+| Keycloak | http://192.168.5.44:8080/admin | admin / admin123 (master realm) |
+| MinIO | http://192.168.5.44:9000 | minioadmin / (.env) |
+| Vault | https://192.168.5.44:8200 | /tmp/vault-init.json root_token |
+
+### 🚀 Çalışan Container'lar (vm3 — 192.168.5.44)
+
+Tüm 13 container `Up`. Backend tam canlı.
+
+- **App tier**: `personel-api`, `personel-gateway`, `personel-enricher`, `personel-console`, `personel-portal`
+- **Data tier**: `personel-postgres` (healthy), `personel-clickhouse` (unhealthy — pre-existing Keeper quorum bug), `personel-nats` (healthy — tek node'a indirildi), `personel-minio` (healthy), `personel-vault` (healthy), `personel-opensearch-01` (healthy), `personel-keycloak-01` (healthy), `personel-keeper-01` (unhealthy — CH cluster sorununun kaynağı)
+
+### 📊 Wave 8 + Wave 9 + Runtime Fix'ler — Commit Listesi (19 commit)
+
+Tümü `main` branch'e push'landı.
+
+| # | Commit | Wave | Kapsam |
+|---|---|---|---|
+| 1 | `51f6665` | W9 Handover | CLAUDE.md Wave 9 handover block |
+| 2 | `4791685` | W9 S1 | KVKK menü + 6 scaffold sayfa + redirect |
+| 3 | `b7089b7` | W9 S2A | KVKK backend (migrations 0038+0039, kvkk paketi, 19 test) |
+| 4 | `9c0e34b` | Progress | CLAUDE.md update |
+| 5 | `0eacdb1` | W9 S2C | KVKK sayfa UI content + forms |
+| 6 | `bec1926` | W9 S4 | Admin dual-control bypass + ADR 0026 + migration 0040 |
+| 7 | `26ec8e3` | W9 S5 | Operator runbooks + Keycloak mapper fix |
+| 8 | `73e01e9` | Progress | CLAUDE.md update |
+| 9 | `0e46ad5` | W9 S3A | Settings backend (migrations 0041-0045, 33 test) |
+| 10 | `7abfa24` | W9 S3B | Settings UI (5 sayfa, 134 i18n key) |
+| 11 | `3d35537` | W9 S6 | CLAUDE.md v2.7 + smoke test wave 8/9 additions |
+| 12 | `077bff4` | Progress | Sprint 3C deploy plan |
+| 13 | `72ffcf6` | W9 S3C | MaxMind GeoIP (enricher) + integrations test connection |
+| 14 | `ebdce51` | Fix | view:system RBAC (status page TS error) |
+| 15 | `4ce3c7c` | Deploy report | Windows agent binary swap + verification |
+| 16 | `8d58db0` | Runtime fix | NEXT_PUBLIC_API_BASE_URL build arg name fix |
+| 17 | `27f71e9` | Runtime fix | CSP ws:// + defensive status/date fallbacks |
+| 18 | `aa8d55f` | Runtime fix | Proxy API requests through Next.js server |
+| 19 | `ed0b4d7` | Runtime fix | DSR admin + liveview subject + notifications stub |
+
+### 🔧 Deploy Sonrası Çıkan 5 Runtime Bug ve Fix'leri
+
+Canlı deploy + gerçek tarayıcı login denemesinde çıkan sorunlar:
+
+1. **`NEXT_PUBLIC_API_BASE_URL` bundle'da yoktu** — Dockerfile `NEXT_PUBLIC_API_URL` ARG istiyordu ama kod `NEXT_PUBLIC_API_BASE_URL` okuyordu. Build time env hiç set edilmedi, bundle'a `http://localhost:8080` fallback gömüldü. Fix: Dockerfile ARG ismi düzeltildi + KEYCLOAK_URL/LIVEKIT_URL/TENANT_ID arg'ları eklendi (commit `8d58db0`).
+
+2. **CSP WebSocket'i bloklu yordu** — `connect-src` sadece http hosts içeriyordu, `ws://192.168.5.44:8000/v1/audit/stream` bloklandı. Fix: `connect-src`'a `ws://` scheme'i API host'undan türetilerek eklendi (commit `27f71e9`).
+
+3. **Client-side API çağrıları auth header'sız gidiyordu** — Login sonrası `_accessToken` in-memory store hiçbir zaman set edilmiyordu çünkü `setTokens()` callback'i hiçbir yerde çağrılmıyordu. httpOnly cookie JS'den okunamaz. Fix: Next.js API proxy route `/api/proxy/[...path]` eklendi, tüm client fetch'ler bu proxy üzerinden gidiyor, server-side cookie okunup Authorization header inject ediliyor. Bearer token browser bundle'ına hiç girmez (commit `aa8d55f`).
+
+4. **`/v1/dsr` 403 admin için** — Backend route `auth.RequireRole(auth.RoleDPO)` idi, admin DSR yönetemezdi. ADR 0026 admin-equal-to-DPO kararıyla çelişkiliydi. Fix: `RequireRole(RoleDPO, RoleAdmin)`. Erasure fulfilment hâlâ DPO-only (ADR 0026 istisna). Console RBAC zaten Sprint 4'te güncellenmişti, Go tarafı da hizaya geldi (commit `ed0b4d7`).
+
+5. **`/v1/live-view/requests` 500 "no response from stream"** — NATS publisher `liveview.v1.start.*` subject'i kullanıyordu ama `live_view_control` JetStream filter'ı `live_view.control.>`. Hiçbir stream publish'i yakalamıyor, JetStream ack dönmüyordu. Fix: publisher subject'i `live_view.control.start.*` ve `live_view.control.stop.*` olarak düzeltildi (commit `ed0b4d7`).
+
+6. **`/v1/notifications` 404** — Dashboard her sayfada çağırıyor ama endpoint yoktu. Fix: `/v1/notifications` stub handler eklendi, `{items:[], unread_count:0}` döner. Gerçek notifications Phase 2.11 (commit `ed0b4d7`).
+
+Ayrıca pre-existing ama deploy sırasında çıkan:
+- **Console `view:system` Action enum'da yoktu** — `/tr/status` sayfası `can(role, "view:system")` çağırıyordu, TS build fail. Fix: `canViewSystem` + Action union entry (commit `ebdce51`).
+
+### 🎥 CANLI İZLEME ALTYAPI DURUMU (Detaylı)
+
+| Bileşen | Durum | Dosya / Notlar |
+|---|---|---|
+| **API `/v1/live-view/*` endpoint'leri** | ✅ CANLI | `apps/api/internal/liveview/service.go` — request/approve/terminate/list |
+| **Admin dual-control bypass** | ✅ CANLI | ADR 0026, Sprint 4 (commit `bec1926`). Admin direkt APPROVED state |
+| **API → NATS publisher** | ✅ CANLI | `apps/api/internal/nats/publisher.go` — subject fix `live_view.control.*` (commit `ed0b4d7`) |
+| **NATS `live_view_control` stream** | ✅ CANLI | Subject filter `live_view.control.>`, JetStream aktif |
+| **Gateway NATS consumer** | ✅ CANLI | `apps/gateway/internal/liveview/router.go` — bidi stream üzerinden agent'a push |
+| **Gateway → Agent bidi stream** | ✅ CANLI | `ServerMessage_LiveViewStart/Stop` proto mesajları, transport layer çalışıyor |
+| **Console LiveKit viewer** | ✅ CANLI | `apps/console/src/components/live-view/livekit-viewer.tsx` — `livekit-client` npm paketi, gerçek WebRTC |
+| **Agent LiveView komut alımı** | ⚠️ STUB | `apps/agent/crates/personel-transport/src/client.rs:580` — `TODO Phase 2: start screen capture` |
+| **Agent DXGI → LiveKit publisher** | ❌ STUB | `apps/agent/crates/personel-livestream/src/lib.rs` — tamamen TODO, ADR 0019 Phase 2 |
+| **LiveKit server container** | ⚠️ DURMUŞ | `livekit/livekit-server:v1.6.0` imaj hazır, compose'da tanımlı, `docker compose up -d livekit` ile başlatılır |
+| **Audit stream WebSocket** | ⚠️ AUTH YOK | `/v1/audit/stream` endpoint çalışıyor ama browser WebSocket'te token iletemiyor — kozmetik, dashboard'u etkilemez |
+
+**Sonuç:** Backend akışı %100 hazır, UI viewer hazır. **Tek eksik**: agent tarafı DXGI Desktop Duplication → LiveKit room publish pipeline. Bu ADR 0019 Phase 2 işi, ~2-3 gün tahmini. LiveKit server container'ı da ayrıca başlatılması gerekiyor.
+
+Admin şu an canlı izleme başlatabilir → session APPROVED state'e geçer → komut agent'a ulaşır → agent **hiçbir stream publish etmez** → console'da kara ekran görünür.
+
+### 🛠 Wave 9+ Yapılacaklar (önceliklendirilmiş)
+
+**P0 — Canlı izleme tam çalışsın:**
+1. **LiveKit server başlat** (1 dk): `docker compose --profile livekit up -d livekit`, `.env`'e `LIVEKIT_API_KEY` + `LIVEKIT_API_SECRET` ekle
+2. **Agent livestream Phase 2** (2-3 gün): `personel-livestream` crate gerçek DXGI capture + VP8/H264 encode + LiveKit room publish. `transport/client.rs:580` TODO'sunu gerçek trigger ile değiştir. Agent config'e `[livestream]` bölümü.
+3. **WebSocket audit stream auth** (opsiyonel, 2 saat): `/v1/audit/stream` query param `?token=` destekle veya SameSite=lax cookie iletimi
+
+**P1 — Pre-existing altyapı sorunları (Wave 9 dışı ama etkili):**
+4. **ClickHouse cluster sorunu**: Keeper 3-node config (vm3:9181 + vm5:9181 + TBD) ama tek node çalışıyor → `events_raw` replica `is_readonly=1` → enricher batcher "Table is not initialized yet". Fix: NATS gibi CH + Keeper'ı single-node config'e indir. Mevcut `received_at` 17:43'te duruyor, yeni event'ler NATS'te birikiyor ama CH'ye akmıyor.
+5. **PersonelAgent SCM handshake bug**: Agent service mode'da 30s içinde SERVICE_RUNNING status raporlayamıyor (Wave 8 öncesi beri var). Workaround: agent console mode'da `Start-Process -WindowStyle Hidden` ile detached çalışıyor. Fix: `apps/agent/crates/personel-agent/src/service.rs`'te init sequence'i async yapıp SCM SetServiceStatus'u erken gönder.
+
+**P2 — Deploy polish:**
+6. **Kalıcı runtime env**: vm3'teki dev-mode şeyleri (`INSECURE_COOKIES=1`, `DEV_DEFAULT_ROLE=admin`, dev tokens) üretim setup'ı için doğru Vault secret'lara çevir
+7. **Production CA ceremony** (operator iş): Wave 5 Wave 1 runbook'ları koş
+8. **NATS cluster restoration**: 3-node config geri aç, quorum'a vm5 + 3. node dahil et
+9. **Keycloak user attribute**: her yeni tenant user'ına `tenant_id` attribute'u manuel atamak yerine realm bootstrap script'ine ekle
+
+**P3 — Test Connection opsiyonel:**
+10. Sprint 3B'de disabled bırakılan "Test Bağlantı" butonları — backend endpoint hazır (`/v1/settings/integrations/{service}/test`, commit `72ffcf6`), sadece UI'dan disabled kaldırılması lazım. Muhtemelen Sprint 3B → Wave 9+ geçişinde unutulan re-enable.
+
+**P4 — Sprint 6 son kuyruk:**
+11. Pilot walkthrough screenshot placeholder'ları canlı sistem üzerinden çek (deploy bittiğinden demo öncesi)
+12. Final smoke test canlı koşum — `final-smoke-test.sh` + Wave 8/9 ek doğrulama adımları (`infra/runbooks/final-smoke-test.md §8`)
+
+### 🏗 vm3 Deploy Disiplini — Operator Runtime Notları
+
+Yeni deploy yaparken bu yolları takip:
+
+1. **git stash** lokal dev shortcut config'lerini (api.yaml, proto pb.go) kenara alır
+2. **git pull origin main** → Wave 9 commit'leri gelir
+3. **git stash pop** + `git checkout HEAD -- apps/api/go.mod apps/api/go.sum apps/gateway/pkg/proto/` (go.mod/pb.go için main versiyonu korunsun)
+4. **Postgres migration apply** — schema_migrations tablosuna manuel INSERT `(version, dirty=false)` çünkü golang-migrate tool yerine elle psql uyguluyoruz
+5. **Table ownership fix** — `ALTER TABLE user_consent/tenants_integrations/backup_targets/backup_runs OWNER TO app_admin_api` (API start sonrası RLS için şart)
+6. **Docker rebuild** — `docker compose -f docker-compose.yaml -f docker-compose.dev-override.yaml build <svc>`. Console için explicit `docker build -f ... --build-arg NEXT_PUBLIC_*=...` kullan (compose build args .env'den otomatik set edilmiyor)
+7. **Docker recreate** — `docker compose up -d` **KULLANMA** (dlp service build fail'ı zinciri kırar). Onun yerine `docker rm -f <svc>` + `docker run` manuel + `docker network connect` ile 4 network'e bağla: `personel_data`, `personel_app`, `personel_vault-net`, `personel_monitoring`
+8. **NATS recovery** — restart sonrası stream leader election süresi ~10s. Gateway'i `nats: no response from stream` alırsa NATS restart beklenmeli
+9. **Network name pinning** — Keycloak + MinIO `personel-keycloak-01` gibi `-01` suffix'li isimlerle çalışıyor, compose bunu tanımlıyor ama up sırasında bazen conflict çıkarıyor. Yeniden yarat yerine `docker start` kullan.
+
+---
+
+## 0.1. WAVE 9 — OTONOM SPRINT HANDOVER (2026-04-14 başladı)
 
 > **Bu bölüm context kaybı durumunda yeniden devam için kritik.** Yeni oturum buraya bakıp nerede kaldığını görebilmeli.
 
@@ -1780,6 +1905,43 @@ Commit atma — parent yapacak."
 ## 10. Known Tech Debt (Faz 1 Polish Listesi)
 
 Faz 1 Reality Check sonrası kalan açık maddeler — polish sprint için:
+
+### 🎥 Canlı İzleme — ADR 0019 Phase 2 (kritik, 2-3 gün)
+
+- [ ] **`personel-livestream` crate gerçek implementation** — `apps/agent/crates/personel-livestream/src/lib.rs` şu an tamamen `TODO`. Backend + UI hazır, tek eksik agent publisher:
+  - DXGI Desktop Duplication API ile ekran capture (çoklu monitor önce primary)
+  - H.264 veya VP8 encoder binding (OpenH264 crate veya Intel Media SDK)
+  - `livekit` Rust SDK ile room bağlantısı + video track publish
+  - Agent config'e `[livestream]` bölümü: LiveKit URL, API key reference (Vault'tan)
+  - `apps/agent/crates/personel-transport/src/client.rs:580` TODO'sunu gerçek trigger ile değiştir
+  - Stop handler + backpressure (agent offline olursa session timeout)
+  - Frame rate limit (CPU budget <2% enforce)
+- [ ] **LiveKit server container başlatılmalı** — `livekit/livekit-server:v1.6.0` imajı vm3'te mevcut ama çalışmıyor. Compose'da tanımlı. `.env`'de `LIVEKIT_API_KEY` + `LIVEKIT_API_SECRET` + `LIVEKIT_PORT` env var'ları set edilip `docker compose up -d livekit` koşulmalı.
+- [ ] **Audit stream WebSocket auth** — `/v1/audit/stream` query param `?token=` destekle (browser WebSocket header gönderemiyor). Şu an bağlantı silent fail, dashboard'u etkilemiyor ama real-time audit UI kopuk.
+
+### 🔥 Pre-existing Altyapı Sorunları (Wave 9 deploy sırasında kalan)
+
+- [ ] **ClickHouse cluster → single-node indirme**: Keeper 3-node config (192.168.5.44:9181 + 192.168.5.32:9181 + TBD) ama sadece vm3 node çalışıyor. Replicas `is_readonly=1` → enricher batcher hata: `events_raw: prepare batch: code 667, Table is not initialized yet`. NATS stream'de yeni event'ler birikiyor (2100+) ama ClickHouse'a akmıyor. Son ingest: `received_at=2026-04-14 17:43:22`. NATS gibi geçici single-node config'e indirmek veya Keeper'ı node 1-only modda kurmak. Eski veriler etkilenmiyor (338K row korunmuş).
+- [ ] **PersonelAgent Windows service SCM handshake timeout**: Service mode'da 30s içinde `SetServiceStatus(SERVICE_RUNNING)` gönderemiyor → Windows SCM "hizmet başlatılamadı" ile durduruyor. Wave 8 öncesinden beri var. Workaround: Console mode'da `Start-Process -WindowStyle Hidden` ile detached çalışıyor. Fix: `apps/agent/crates/personel-agent/src/service.rs`'te startup sequence async yapılıp SCM status `SERVICE_START_PENDING` → `SERVICE_RUNNING` erken bildirim.
+
+### 🔐 Runtime Güvenlik Polish (Wave 9 deploy shortcut'ları)
+
+Pilot ortama özel, üretimde kaldırılmalı:
+
+- [ ] **Console `INSECURE_COOKIES=1`** — HTTP üzerinden çalıştığı için aktif. Üretimde HTTPS + TLS cert alındıktan sonra kaldırılmalı.
+- [ ] **Console `DEV_DEFAULT_ROLE=admin`** — Role extraction henüz JWT claims'ten `realm_access.roles` okumaya bağlanmadı. `apps/console/src/app/api/auth/callback/route.ts:125` üretim öncesi düzgün parse yapmalı.
+- [ ] **Console `NEXTAUTH_SECRET=dev-secret-change-in-prod`** — `openssl rand -base64 32` ile değiştir.
+- [ ] **Postgres `sslmode=disable`** — Wave 5 Wave 1 runbook (`postgres-tls-migration.md`) ile `verify-full`'a geç.
+- [ ] **Vault root token `/tmp/vault-init.json`** — operator ceremony ile Shamir unseal key dağıtımı (docs/security/runbooks/vault-setup.md).
+- [ ] **NATS auth yok** — operator JWT + NKeys migration (`nats-prod-auth-migration.md`).
+- [ ] **Keycloak admin/admin123** — password strength policy + rotate.
+
+### 📦 Wave 9 Sprint 3C Yarım Kalan
+
+- [ ] **Test Connection butonları re-enable** — Backend endpoint canlı (`POST /v1/settings/integrations/{service}/test`, commit `72ffcf6`), 5 servis için format validation + Cloudflare canonical verify. Ama Sprint 3B UI'da disabled bırakılmıştı. Sprint 3C backend deploy edildi ama UI re-enable unutuldu. Kolay fix: `external-integrations-client.tsx`'te disabled={true} kaldır.
+- [ ] **Commercial CA CSR flow** — Müşteri şu an internal/Let's Encrypt kullanacağı için skip edildi. İleriye bırakıldı.
+- [ ] **MaxMind mmdb ilk indirme** — `maxmind-download.sh` script hazır, systemd timer hazır, `/etc/personel/maxmind.env` dosyası operator tarafından elle oluşturulmalı (license key `docs/.secrets-local.md`'den).
+- [ ] **Pilot walkthrough 15 screenshot placeholder** — canlı sistem üzerinden alınacak (demo öncesi 1 gün).
 
 ### Compliance & Legal
 
