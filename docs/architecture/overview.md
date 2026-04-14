@@ -87,6 +87,22 @@ Detaylar: `docs/architecture/live-view-protocol.md`.
 
 Detaylar: `docs/architecture/mvp-scope.md`.
 
+## 10. Faz 2-9 Eklentileri (2026-04 roadmap)
+
+Faz 1 MVP sonrası aşağıdaki genişlemeler yapılmıştır:
+
+- **Faz 2** (Wave 1-3, 14 yeni collector): file_system + network gerçek (ETW + WFP), browser_history (Chrome/Firefox), cloud_storage sync watcher, email_metadata, office_activity, system_events, bluetooth/mtp devices, device_status, geo_ip (MaxMind), window_url_extraction, clipboard_content_redacted
+- **Faz 3** (ekran capture): multi-monitor, adaptive frequency, sensitivity exclusion, WebP encoding, delta encoding, OCR preprocessing, PE-DEK at rest, click-aware capture
+- **Faz 4** (agent stability): real anti-tamper, OTA update, crash dumps, CPU/RAM throttle, battery/game mode, offline queue eviction, GPO deployment
+- **Faz 5** (backend hardening): Vault prod-grade, Postgres TLS + replica, ClickHouse 2-node + Keeper, NATS cluster + JWT/NKeys, MinIO distributed + WORM, OpenSearch HA, Keycloak Infinispan HA, cert rotation, backup automation
+- **Faz 6** (API completeness): endpoint wipe/refresh/deactivate/bulk/commands, DSR fulfill-access/erasure, audit streaming (WebSocket), search (audit + events), ClickHouse reports, DSR 30-day SLA, service-to-service API keys, per-tenant rate limit
+- **Faz 7** (data pipeline): schema versioning (v1→v2), DLQ, replay, storage tiering (hot/warm/cold), ZSTD compression tuning, deduplication, schema registry, data quality monitoring
+- **Faz 8** (ML/analytics): Llama 3.2 3B GGUF classifier + regex fallback, Tesseract+PaddleOCR pipeline with KVKK redaction, UBA isolation forest, productivity scoring, risk scoring, trend analysis, PDF/Excel export, custom dashboards
+- **Faz 9** (console UI): endpoint management, live view viewer, audit search, policy editor, DSR fulfillment UI, user/tenant management, real-time dashboards, mobile responsive, WCAG 2.1 AA, i18n complete
+- **Faz 3.0 SOC 2** (active): Evidence locker dual-write (Postgres + WORM), 9 wired collectors (CC6.1, CC6.3, CC7.1, CC7.3, CC8.1, CC9.1, A1.2, P5.1, P7.1), coverage endpoint, signed pack export
+
+Endpoint listesi: `docs/architecture/api-surface.md`.
+
 ## 9. Risk Özeti
 
 | Risk | Etki | Azaltma |

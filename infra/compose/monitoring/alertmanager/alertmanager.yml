@@ -1,0 +1,86 @@
+# =============================================================================
+# Personel Platform — AlertManager Configuration (Faz 13 #137)
+# TR: Alarm gruplama, sessizleştirme, Slack webhook iskeleti.
+# =============================================================================
+
+global:
+  resolve_timeout: 5m
+  smtp_smarthost: 'smtp.example.com:587'
+  smtp_from: 'personel-alerts@example.com'
+  smtp_auth_username: 'CHANGEME'
+  smtp_auth_password: 'CHANGEME'
+
+# Route tree — group then dispatch
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  receiver: 'default-slack'
+  routes:
+    # Critical alerts → page immediately
+    - matchers:
+        - severity="critical"
+      receiver: 'pager'
+      group_wait: 10s
+      continue: true
+
+    # DSR SLA alerts → DPO email + Slack
+    - matchers:
+        - alertname=~"DSRSlaWarn|DSRSlaOverdue"
+      receiver: 'dpo-alerts'
+      continue: false
+
+    # Flow 7 (employee-initiated disable) — HR + security
+    - matchers:
+        - alertname="Flow7EmployeeDisable"
+      receiver: 'hr-security'
+
+    # KVKK compliance gaps
+    - matchers:
+        - alertname=~"KVKK.*|RetentionOverrun"
+      receiver: 'compliance'
+
+# Inhibition rules — suppress child alerts when parent fires
+inhibit_rules:
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['alertname', 'cluster', 'service']
+
+# Receivers
+receivers:
+  - name: 'default-slack'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/CHANGEME/CHANGEME/CHANGEME'
+        channel: '#personel-alerts'
+        title: '{{ .GroupLabels.alertname }} @ {{ .GroupLabels.service }}'
+        text: '{{ range .Alerts }}{{ .Annotations.description }}\n{{ end }}'
+        send_resolved: true
+
+  - name: 'pager'
+    webhook_configs:
+      - url: 'https://events.pagerduty.com/v2/enqueue'
+        send_resolved: true
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/CHANGEME/CHANGEME/CHANGEME'
+        channel: '#personel-critical'
+
+  - name: 'dpo-alerts'
+    email_configs:
+      - to: 'dpo@example.com'
+        headers:
+          Subject: '[KVKK] {{ .GroupLabels.alertname }}'
+
+  - name: 'hr-security'
+    email_configs:
+      - to: 'hr-security@example.com'
+
+  - name: 'compliance'
+    email_configs:
+      - to: 'compliance@example.com'
+
+# Templates (optional)
+templates:
+  - '/etc/alertmanager/templates/*.tmpl'

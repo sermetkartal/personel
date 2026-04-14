@@ -44,6 +44,38 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNATTENDED="${UNATTENDED:-false}"
 SKIP_IMAGES="${SKIP_IMAGES:-false}"
 SKIP_PREFLIGHT="${SKIP_PREFLIGHT:-false}"
+STRICT_PREFLIGHT="${STRICT_PREFLIGHT:-false}"
+REPORT_FILE="${REPORT_FILE:-/var/log/personel/install-report.json}"
+INSTALL_STARTED_AT=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+INSTALL_STEPS_JSON="["
+INSTALL_STEPS_SEP=""
+
+record_step() {
+  local name="$1" status="$2" duration="$3" detail="${4:-}"
+  INSTALL_STEPS_JSON="${INSTALL_STEPS_JSON}${INSTALL_STEPS_SEP}{\"step\":\"${name}\",\"status\":\"${status}\",\"duration_s\":${duration},\"detail\":\"${detail//\"/\\\"}\"}"
+  INSTALL_STEPS_SEP=","
+}
+
+emit_report() {
+  INSTALL_STEPS_JSON="${INSTALL_STEPS_JSON}]"
+  mkdir -p "$(dirname "${REPORT_FILE}")" 2>/dev/null || true
+  local ended_at total_s
+  ended_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  total_s=${SECONDS}
+  cat > "${REPORT_FILE}" <<EOF
+{
+  "version": "${PERSONEL_VERSION:-0.1.0}",
+  "started_at": "${INSTALL_STARTED_AT}",
+  "ended_at": "${ended_at}",
+  "total_seconds": ${total_s},
+  "target_seconds": 7200,
+  "unattended": ${UNATTENDED},
+  "steps": ${INSTALL_STEPS_JSON}
+}
+EOF
+  log "Install report written to ${REPORT_FILE}"
+}
+trap emit_report EXIT
 
 # Colors for output
 RED='\033[0;31m'; YELLOW='\033[1;33m'; GREEN='\033[0;32m'
@@ -78,14 +110,62 @@ require_root() {
 # ---------------------------------------------------------------------------
 for arg in "$@"; do
   case "${arg}" in
-    --unattended)   UNATTENDED=true   ;;
-    --skip-images)  SKIP_IMAGES=true  ;;
+    --unattended)     UNATTENDED=true   ;;
+    --skip-images)    SKIP_IMAGES=true  ;;
     --skip-preflight) SKIP_PREFLIGHT=true ;;
+    --strict)         STRICT_PREFLIGHT=true ;;
+    --report=*)       REPORT_FILE="${arg#*=}" ;;
     --help|-h)
-      echo "Usage: $0 [--unattended] [--skip-images] [--skip-preflight]"
+      cat <<'USAGE'
+Usage: install.sh [flags]
+
+Flags:
+  --unattended        non-interactive (CI/staging)
+  --skip-images       skip docker image pull (offline install)
+  --skip-preflight    skip preflight check (not recommended)
+  --strict            treat preflight WARN as FAIL
+  --report=PATH       write install-report.json (default /var/log/personel/install-report.json)
+
+Target runtime: 2 hours for 500-endpoint pilot (per CLAUDE.md §0).
+USAGE
       exit 0 ;;
   esac
 done
+
+# ---------------------------------------------------------------------------
+# STEP 0a: OS detection + package prerequisites
+# ---------------------------------------------------------------------------
+detect_os() {
+  if [[ -f /etc/os-release ]]; then
+    # shellcheck source=/dev/null
+    source /etc/os-release
+    OS_FAMILY="unknown"
+    case "${ID}" in
+      ubuntu|debian) OS_FAMILY="debian" ;;
+      rhel|rocky|almalinux|centos) OS_FAMILY="rhel" ;;
+      *) OS_FAMILY="unknown" ;;
+    esac
+  else
+    OS_FAMILY="unknown"
+  fi
+  export OS_FAMILY OS_ID="${ID:-unknown}" OS_VER="${VERSION_ID:-unknown}"
+}
+
+install_packages() {
+  local pkgs=(curl jq gpg ca-certificates openssl python3 nftables)
+  case "${OS_FAMILY}" in
+    debian)
+      DEBIAN_FRONTEND=noninteractive apt-get update -qq
+      DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${pkgs[@]}" >/dev/null
+      ;;
+    rhel)
+      dnf install -y -q "${pkgs[@]}" >/dev/null
+      ;;
+    *)
+      warn "Unknown OS family — skipping package install; ensure: ${pkgs[*]}"
+      ;;
+  esac
+}
 
 # ---------------------------------------------------------------------------
 # STEP 0: Root check
@@ -105,11 +185,24 @@ echo ""
 # ---------------------------------------------------------------------------
 step "STEP 1/12: Preflight Checks"
 
+t0=${SECONDS}
+detect_os
+log "Detected OS family: ${OS_FAMILY} (${OS_ID} ${OS_VER})"
+install_packages
+
 if [[ "${SKIP_PREFLIGHT}" != "true" ]]; then
-  "${SCRIPTS_DIR}/preflight-check.sh" || die "Preflight checks failed. Resolve issues before continuing."
+  PRE_FLAGS=""
+  [[ "${STRICT_PREFLIGHT}" == "true" ]] && PRE_FLAGS="--strict"
+  # shellcheck disable=SC2086
+  if ! "${SCRIPTS_DIR}/preflight-check.sh" ${PRE_FLAGS}; then
+    record_step preflight fail $((SECONDS - t0)) "hard fail"
+    die "Preflight checks failed. Resolve issues before continuing."
+  fi
+  record_step preflight pass $((SECONDS - t0)) ""
   log "Preflight checks passed."
 else
   warn "Skipping preflight checks (--skip-preflight). Not recommended for production."
+  record_step preflight skip $((SECONDS - t0)) "--skip-preflight"
 fi
 
 # ---------------------------------------------------------------------------
@@ -444,6 +537,15 @@ step "STEP 11/12: Smoke Tests"
 
 log "Running post-install smoke tests..."
 "${INFRA_DIR}/tests/smoke.sh" || warn "Some smoke tests failed — check output above"
+
+log "Running post-install validation..."
+if [[ -x "${SCRIPTS_DIR}/post-install-validate.sh" ]]; then
+  "${SCRIPTS_DIR}/post-install-validate.sh" --report=/var/log/personel/post-install-validate.json \
+    || warn "Post-install validation reported issues — see /var/log/personel/post-install-validate.json"
+  record_step post_install_validate pass $((SECONDS)) ""
+else
+  warn "post-install-validate.sh not executable — skipping"
+fi
 
 # ---------------------------------------------------------------------------
 # STEP 12: First admin user

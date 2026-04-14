@@ -102,3 +102,31 @@ flowchart LR
 2. **Policy push**: Admin → API → Policy Engine → NATS subject `policy.v1.<tenant>.<endpoint>` → Gateway → Agent (on its bi-di stream).
 3. **Live view**: Admin requests → API writes `live_view_requests` → HR approval → Audit log → API issues short-lived LiveKit token → Agent receives live-view control message on existing stream → Agent joins LiveKit room → Admin Console joins room.
 4. **Update**: Release pipeline signs artifact → Update Service → Canary cohort → Rollout → Agent verifies signature → Staged restart.
+
+## Phase 2-9 Container Additions
+
+The diagram above is the Faz 1 MVP baseline. Faz 2-9 adds the following
+containers and flows — consult `c4-container-phase-2.md` for the full Phase 2
+diagram:
+
+| Container | Technology | Phase | Responsibility |
+|---|---|---|---|
+| **ml-classifier** | Python FastAPI + llama-cpp-python | 2.3 | Activity category classification (Llama 3.2 3B + regex fallback). Exposed on `net_ml` isolated network. Called by enricher with 50 ms timeout. |
+| **ocr-service** | Python Tesseract + PaddleOCR | 2.8 | Screenshot text extraction. KVKK m.6 redaction (TCKN, IBAN, credit card, phone, email) applied **before** extracted text leaves the service. |
+| **uba-detector** | Python sklearn isolation forest | 2.6 | User Behavior Analytics. 7 features (off_hours, app_diversity, data_egress, screenshot_rate, file_access_rate, policy_violations, new_host_ratio). KVKK m.11/g advisory-only disclaimer. |
+| **livrec-service** | Go | 2.8 | Live view session recording (per-session WebM, independent LVMK Vault key hierarchy, dual-control playback, 30-day retention, DPO-only export). Defined by ADR 0019. |
+| **search-api** | Part of Admin API | 6 | `/v1/search/audit` + `/v1/search/events` — OpenSearch full-text query orchestration. |
+| **pipeline-ops** | Part of Admin API | 7 | `/v1/pipeline/dlq` + `/v1/pipeline/replay` — NATS JetStream DLQ inspection and re-processing from offset. |
+| **scoring-engine** | Part of Admin API | 8 | `/v1/reports/ch/productivity` + `/risk-score` — aggregation over ClickHouse using UBA features and productivity rules. |
+| **trends-aggregator** | Part of Admin API | 8 | `/v1/reports/trends` — weekly/monthly/quarterly rollups over ClickHouse materialized views. |
+| **notifications** | Part of Admin API | 9 | Real-time WebSocket audit stream (`/v1/audit/stream`) + push notifications for DSR SLA approaching. |
+| **mobile-bff** | Part of Admin API (`/v1/mobile/*`) | 2.9 | Mobile admin app endpoints. Decided against separate service for operational simplicity. |
+| **evidence-locker** | Part of Admin API (`internal/evidence`) | 3.0 | Dual-write to Postgres + MinIO WORM (audit-worm bucket shared with audit chain). Ed25519 signing via Vault transit. 9 wired collectors. |
+
+The following data flows are added in Phase 2-9:
+
+5. **ML classification**: Enricher → ml-classifier → category/confidence → write to `events_enriched` ClickHouse table.
+6. **OCR pipeline**: Screenshot capture → MinIO → ocr-service consumer → redacted text → OpenSearch index.
+7. **UBA scoring**: Nightly batch → uba-detector reads ClickHouse features → writes risk_score to Postgres + emits alerts on threshold.
+8. **Evidence pack export**: DPO → `/v1/dpo/evidence-packs?period=...` → API queries evidence_items (Postgres), reads canonical bytes from WORM, streams signed ZIP with manifest + per-item signatures.
+9. **DSR fulfilment**: Employee → Portal → API → multi-store query (Postgres + ClickHouse + MinIO + OpenSearch) → PDF/CSV/JSON export → MinIO presigned URL → email → P7.1 evidence emission.

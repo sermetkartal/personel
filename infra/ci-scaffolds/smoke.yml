@@ -1,0 +1,75 @@
+# Faz 14 #155 — Staged smoke workflow.
+#
+# NOT yet in .github/workflows/ — requires `workflow` OAuth scope.
+# Promote via:
+#
+#   git mv infra/ci-scaffolds/smoke.yml .github/workflows/smoke.yml
+#   git commit -m "ci(smoke): activate smoke workflow"
+#   git push
+#
+# Once live: runs on every PR against main within 3 minutes,
+# targeting a pre-warmed pilot stack.
+name: smoke
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    - cron: '*/30 * * * *'  # every 30 minutes
+  workflow_dispatch:
+
+concurrency:
+  group: smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build smoke binary
+        working-directory: apps/qa
+        run: go build -o ./bin/smoke ./cmd/smoke
+
+      - name: Fetch admin token (Keycloak password grant)
+        id: token
+        run: |
+          TOKEN=$(curl -fsSL -X POST "${PERSONEL_KEYCLOAK_URL:-http://192.168.5.44:8080}/realms/personel/protocol/openid-connect/token" \
+            -d grant_type=password \
+            -d client_id=console \
+            -d username="${PERSONEL_ADMIN_USER:-admin}" \
+            -d password="${PERSONEL_ADMIN_PASSWORD}" | jq -r .access_token)
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "::error::failed to fetch admin token"
+            exit 1
+          fi
+          echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+        env:
+          PERSONEL_ADMIN_PASSWORD: ${{ secrets.PERSONEL_ADMIN_PASSWORD }}
+
+      - name: Run smoke
+        working-directory: apps/qa
+        run: |
+          ./bin/smoke \
+            --api "${PERSONEL_API_URL:-http://192.168.5.44:8000}" \
+            --gateway "${PERSONEL_GATEWAY_URL:-http://192.168.5.44:9443}" \
+            --console "${PERSONEL_CONSOLE_URL:-http://192.168.5.44:3000}" \
+            --portal "${PERSONEL_PORTAL_URL:-http://192.168.5.44:3001}" \
+            --admin-token "${{ steps.token.outputs.token }}" \
+            --out smoke-report.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-report
+          path: apps/qa/smoke-report.json
+          retention-days: 7

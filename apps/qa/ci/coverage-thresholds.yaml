@@ -1,0 +1,73 @@
+# Faz 14 #146 — Per-module coverage floors enforced by cmd/coverage-gate.
+#
+# Default: every module listed via --*-cover flags must be at least
+# `default_floor_percent`. Modules matching any substring in
+# `critical_packages` are bumped to `critical_floor_percent`.
+#
+# Specific overrides in `modules:` win over both floors (use for
+# scaffolds and legacy crates that cannot yet reach 60%).
+#
+# Invariant: lowering a threshold here without a linked ADR is a
+# CI-caught policy violation; adding new modules is allowed.
+
+default_floor_percent: 60.0
+critical_floor_percent: 80.0
+
+# Critical packages — these touch KVKK-gated paths, cryptographic
+# invariants, or Phase 1 exit criteria. ANY drift here fails the
+# gate even if overall coverage is green.
+critical_packages:
+  - audit          # hash-chain + WORM
+  - auth           # OIDC + RBAC middleware
+  - dsr            # KVKK m.11 fulfilment
+  - endpoint       # enroll + wipe + bulk ops
+  - scoring        # productivity / risk (employee-visible)
+  - evidence       # SOC 2 dual-write locker
+  - liveview       # dual-control state machine
+  - policy         # signed policy push
+  - personel-crypto  # Rust envelope + DPAPI
+  - personel-policy  # Rust engine + Ed25519 verify
+  - personel-queue   # Rust SQLCipher offline buffer
+
+# Per-module explicit thresholds. Use this sparingly — each entry is
+# a tech debt signal. Format: <module-path>: <floor_percent>
+modules:
+  # Go backend
+  apps/api/internal/audit: 85.0
+  apps/api/internal/auth: 80.0
+  apps/api/internal/dsr: 80.0
+  apps/api/internal/endpoint: 75.0
+  apps/api/internal/evidence: 80.0
+  apps/api/internal/liveview: 75.0
+  apps/api/internal/policy: 75.0
+  apps/api/internal/httpserver: 65.0
+  apps/api/internal/scoring: 70.0
+  apps/api/internal/search: 60.0
+  apps/api/internal/hris: 50.0        # Phase 2.11 scaffold — raise when real
+  apps/api/internal/siem: 50.0        # Phase 2.11 scaffold
+  apps/api/internal/mobile: 60.0
+  apps/gateway/internal/grpcserver: 65.0
+  apps/gateway/internal/nats: 70.0
+  apps/gateway/internal/enricher: 60.0
+  apps/gateway/internal/heartbeat: 70.0
+
+  # Rust agent
+  apps/agent/crates/personel-core: 70.0
+  apps/agent/crates/personel-crypto: 85.0
+  apps/agent/crates/personel-queue: 80.0
+  apps/agent/crates/personel-policy: 80.0
+  apps/agent/crates/personel-collectors: 55.0   # many win32 paths untestable on CI linux
+  apps/agent/crates/personel-transport: 60.0
+  apps/agent/crates/personel-os: 40.0          # stub-heavy; rises after win runner
+  apps/agent/crates/personel-agent: 50.0
+  apps/agent/crates/personel-watchdog: 45.0
+  apps/agent/crates/personel-updater: 55.0
+
+  # Frontend
+  apps/console: 55.0   # raise to 65 once Faz 9 UI tests land
+  apps/portal: 50.0    # trust-UX; much of it is static copy
+
+  # Python services (Phase 2 scaffolds)
+  apps/ml-classifier: 65.0
+  apps/uba-detector: 60.0
+  apps/ocr-service: 60.0

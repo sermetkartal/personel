@@ -203,3 +203,40 @@ All events share an envelope:
 ## Retention Matrix Pointer
 
 Concrete per-class retention periods and KVKK article references live in `data-retention-matrix.md`. Event authors must update both files in lock-step.
+
+## Phase 2 + Phase 8 Event Additions
+
+The 36 events above are the Phase 1 canonical set. Phase 2 Wave 1-3 added
+16 new event kinds via `EventKind` enum expansion in
+`apps/agent/crates/personel-core/src/event.rs`:
+
+| # | Event Name | Collector | Retention | PII |
+|---|---|---|---|---|
+| 37 | `browser.history_visited` | browser_history.rs (Chromium) | hot→warm | CONTENT |
+| 38 | `browser.firefox_history_visited` | firefox_history.rs | hot→warm | CONTENT |
+| 39 | `browser.url_extracted` | window_url_extraction.rs | hot→warm | CONTENT |
+| 40 | `cloud_storage.sync_event` | cloud_storage.rs (OneDrive/Dropbox/Drive/iCloud/Box) | hot→warm | CONTENT |
+| 41 | `email.metadata_observed` | email_metadata.rs (PST/OST + MAPI COM phase 2) | hot→warm | CONTENT (metadata only — never body) |
+| 42 | `office.recent_file_opened` | office_activity.rs (Word/Excel/PowerPoint MRU) | hot→warm | CONTENT |
+| 43 | `system.power_state_changed` | system_events.rs (WM_POWERBROADCAST) | hot | NONE |
+| 44 | `system.login` | system_events.rs (WTS session notification) | hot→warm | IDENTIFIER |
+| 45 | `system.logout` | system_events.rs | hot→warm | IDENTIFIER |
+| 46 | `system.av_deactivated` | system_events.rs (WMI AntiVirusProduct poll) | warm | IDENTIFIER |
+| 47 | `bluetooth.device_paired` | bluetooth_devices.rs (BluetoothFindFirstDevice diff) | hot→warm | IDENTIFIER |
+| 48 | `bluetooth.device_unpaired` | bluetooth_devices.rs | hot→warm | IDENTIFIER |
+| 49 | `mtp.device_attached` | mtp_devices.rs (SetupAPI PORTABLE_DEVICES + WPD COM phase 2) | hot→warm | IDENTIFIER |
+| 50 | `mtp.device_removed` | mtp_devices.rs | hot→warm | IDENTIFIER |
+| 51 | `device.status_snapshot` | device_status.rs (CPU/RAM/disk/battery/screen/locked) | hot | NONE |
+| 52 | `network.geo_ip_resolved` | geo_ip.rs (maxminddb 0.24 + 24h dedup) | hot→warm | CONTENT |
+
+Phase 8 (analytics) also introduces derived **aggregate** events that live
+in ClickHouse materialized views rather than the raw event stream:
+
+- `analytics.category_classified` — ml-classifier output on window focus change
+- `analytics.risk_score_computed` — uba-detector nightly batch result
+- `analytics.productivity_score_daily` — scoring-engine rollup
+- `ocr.text_extracted_redacted` — ocr-service output, KVKK m.6 redaction applied
+
+These are **not** ingested via the agent → gateway path; they are written
+directly by server-side services and carry different schema versions
+(see `docs/architecture/event-schema-registry.md`).

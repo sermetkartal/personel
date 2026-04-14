@@ -1,0 +1,57 @@
+{
+  "name": "500_faz14_hardened",
+  "description": "Faz 14 #149 — hardened 500-endpoint load test. 10 batches/second per agent, 10 minute steady state, asserts enrollment 100% / p95 ingest < 500ms / no DLQ / no OOM.",
+  "agent_count": 500,
+  "ramp_duration_sec": 60,
+  "steady_duration_sec": 600,
+  "ramp_down_sec": 30,
+  "gateway_addr": "192.168.5.44:9443",
+  "tenant_id": "be459dac-1a79-4054-b6e1-fa934a927315",
+  "seed": 42,
+  "phase1_criteria": [
+    "EC-2",
+    "EC-3",
+    "EC-5",
+    "EC-6",
+    "EC-7"
+  ],
+  "pass_criteria": {
+    "enrollment_success_rate_pct": 100.0,
+    "ingest_p95_ms": 500,
+    "ingest_p99_ms": 1500,
+    "dlq_message_count": 0,
+    "oom_events": 0,
+    "gateway_cpu_max_pct": 70,
+    "api_cpu_max_pct": 60,
+    "nats_queue_max_depth": 1000,
+    "clickhouse_write_p95_ms": 200
+  },
+  "event_profile": {
+    "batches_per_second_per_agent": 10,
+    "events_per_batch_mean": 25,
+    "events_per_batch_stddev": 5,
+    "event_kind_distribution": {
+      "window_foreground": 0.30,
+      "keyboard_stats": 0.15,
+      "process_lifecycle": 0.10,
+      "network_flow": 0.15,
+      "file_system": 0.10,
+      "browser_history": 0.05,
+      "device_status": 0.05,
+      "screenshot_metadata": 0.05,
+      "clipboard_metadata": 0.02,
+      "system_event": 0.03
+    }
+  },
+  "resource_sampling": {
+    "interval_sec": 10,
+    "targets": [
+      "personel-gateway",
+      "personel-api",
+      "personel-enricher",
+      "personel-nats",
+      "personel-clickhouse",
+      "personel-minio"
+    ]
+  }
+}

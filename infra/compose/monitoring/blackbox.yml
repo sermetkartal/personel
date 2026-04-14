@@ -1,0 +1,42 @@
+# =============================================================================
+# Personel Platform — Blackbox exporter (Faz 13 #137)
+# TR: HTTP + TCP + DNS probe modülleri. MinIO + OpenSearch + Keycloak gözetimi.
+# =============================================================================
+
+modules:
+  http_2xx:
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [200, 201]
+      method: GET
+      preferred_ip_protocol: ip4
+      fail_if_ssl: false
+
+  http_401:
+    # Used to probe auth-gated endpoints expected to return 401 when healthy
+    prober: http
+    timeout: 5s
+    http:
+      valid_status_codes: [401, 403]
+      method: GET
+
+  tcp_connect:
+    prober: tcp
+    timeout: 5s
+
+  minio_healthz:
+    prober: http
+    timeout: 5s
+    http:
+      method: GET
+      valid_status_codes: [200]
+      preferred_ip_protocol: ip4
+      fail_if_body_not_matches_regexp: []
+
+  dns_udp:
+    prober: dns
+    timeout: 5s
+    dns:
+      query_name: keycloak.personel.local
+      query_type: A

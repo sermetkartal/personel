@@ -1,0 +1,21 @@
+# =============================================================================
+# Personel Platform — Grafana Loki datasource provisioning (Faz 13 #138)
+# TR: docker-compose.monitoring.yaml ile bu dosyayı grafana'nın
+#     /etc/grafana/provisioning/datasources altına bind et.
+# =============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: false
+    jsonData:
+      maxLines: 5000
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: 'trace_id=(\w+)'
+          name: TraceID
+          url: '$${__value.raw}'

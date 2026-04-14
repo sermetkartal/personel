@@ -119,3 +119,34 @@ Legal Hold, `docs/architecture/bounded-contexts.md` "Audit & Compliance" bağlam
 | Security Engineer | Teknik kontrol ve anahtar iptali akışı |
 | Operator | ClickHouse TTL ve MinIO lifecycle politikalarının uygulanması |
 | Compliance Auditor | Yıllık uyum incelemesi |
+
+## Faz 2 + Faz 8 Yeni Veri Kategorileri
+
+Faz 2 (collector fleet genişlemesi) ve Faz 8 (ML/Analytics) yeni veri
+sınıflarını ekler. Bunların saklama süreleri:
+
+| Veri Sınıfı | Saklama (Varsayılan) | Maksimum | Depolama | KVKK Dayanağı |
+|---|---|---|---|---|
+| **Browser history (Chromium + Firefox)** | 90 gün | 180 gün | ClickHouse hot→warm | m.4, m.5 — verimlilik amacıyla |
+| **Cloud storage sync olayları** | 90 gün | 180 gün | ClickHouse hot→warm | m.5 (veri sızıntısı tespiti) |
+| **E-posta metadata (PST/OST)** | 180 gün | 365 gün | ClickHouse warm | m.5 — içerik **asla** toplanmaz |
+| **Office MRU (son kullanılan dosyalar)** | 90 gün | 180 gün | ClickHouse hot→warm | m.5 |
+| **Sistem olayları (login, lock, AV)** | 180 gün | 365 gün | ClickHouse warm | m.12 (güvenlik) |
+| **Bluetooth cihaz eşleşme** | 365 gün | 730 gün | ClickHouse warm | m.5 (güvenlik) |
+| **MTP cihaz bağlantısı** | 365 gün | 730 gün | ClickHouse warm | m.5 |
+| **Cihaz durum anlık (CPU/RAM/battery)** | 30 gün | 30 gün | ClickHouse hot | m.4 |
+| **GeoIP çözümleme** | 60 gün | 90 gün | ClickHouse hot | m.4 |
+| **Pencere URL çıkarımı (browser title parse)** | 90 gün | 180 gün | ClickHouse hot→warm | m.4, m.5 |
+| **ML kategori çıktısı (enriched event)** | 180 gün | 365 gün | ClickHouse warm | m.4 — türetilmiş veri |
+| **OCR ekstresi (redacted)** | 30 gün | 90 gün | OpenSearch + MinIO | m.4, m.6 — m.6 otomatik redaksiyon |
+| **UBA risk skor (nightly)** | 365 gün | 730 gün | Postgres | m.5 — güvenlik, m.11/g itiraz hakkı |
+| **Prodüktivite skoru (günlük)** | 365 gün | 730 gün | Postgres | m.4 |
+| **Evidence locker kayıtları (SOC 2)** | 5 yıl | 10 yıl | Postgres + MinIO WORM | m.12 — denetim kanıtı |
+| **DSR başvuru + cevap** | 5 yıl | 10 yıl | Postgres + MinIO | m.13 — 5 yıl idari uyum |
+
+### Özel notlar
+
+- **Browser history**: Sadece `url` + `title` + `visited_at`. **Asla** çerez, password, bookmark, history arama sorgusu, form içerik.
+- **E-posta metadata**: Sadece `sender`, `recipients`, `subject`, `timestamp`, `pst_size_delta`. **Asla** body, attachment content, preview.
+- **OCR çıktısı**: KVKK m.6 redaksiyonu servis sınırı içinde uygulanır (TCKN, IBAN, kredi kartı Luhn, telefon, email → `[TAG]`).
+- **UBA skor**: KVKK m.11/g gereği çalışan bu skora itiraz edebilir; skor **istişari** olarak işaretlenir (disclaimer her API cevabında).

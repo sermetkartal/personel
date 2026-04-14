@@ -1,0 +1,85 @@
+# Faz 14 #148 — Staged Playwright E2E workflow.
+#
+# This file is NOT live in .github/workflows yet; the bot that created
+# it lacks the `workflow` OAuth scope. Human with scope must:
+#
+#   git mv infra/ci-scaffolds/e2e.yml .github/workflows/e2e.yml
+#   git commit -m "ci(e2e): activate Playwright smoke workflow"
+#   git push
+#
+# Once live, it runs on every PR and nightly against the pilot stack.
+name: e2e-playwright
+
+on:
+  pull_request:
+    paths:
+      - 'apps/console/**'
+      - 'apps/portal/**'
+      - 'apps/api/**'
+      - 'apps/qa/test/e2e-playwright/**'
+      - '.github/workflows/e2e.yml'
+  schedule:
+    - cron: '0 2 * * *'  # nightly 02:00 UTC
+  workflow_dispatch:
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - name: Install Playwright deps
+        working-directory: apps/qa/test/e2e-playwright
+        run: |
+          pnpm install
+          pnpm exec playwright install --with-deps chromium firefox
+
+      - name: Boot pilot compose stack
+        working-directory: infra/compose
+        run: |
+          cp .env.example .env
+          docker compose up -d postgres keycloak vault clickhouse nats minio
+          docker compose up -d api console portal gateway enricher
+          sleep 30
+          docker compose ps
+
+      - name: Seed showcase data
+        run: |
+          curl -fsSL -X POST http://localhost:8000/v1/admin/seed/showcase \
+            -H "Authorization: Bearer $(cat .admin-token)" \
+            --retry 5 --retry-delay 5 || echo "seed skipped"
+
+      - name: Run Playwright
+        working-directory: apps/qa/test/e2e-playwright
+        env:
+          PERSONEL_CONSOLE_URL: http://localhost:3000
+          PERSONEL_PORTAL_URL: http://localhost:3001
+          PERSONEL_KEYCLOAK_URL: http://localhost:8080
+          PERSONEL_API_URL: http://localhost:8000
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            apps/qa/reports/playwright-report/
+            apps/qa/reports/playwright-results.json
+          retention-days: 14
