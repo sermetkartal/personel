@@ -15,23 +15,23 @@ grpc:
 
 nats:
   urls:
-    - "nats://nats.internal:4222"
+    - "nats://nats:4222"
   creds_file: ""                     # leave empty if NATS auth is not configured
   connect_timeout: "10s"
   max_reconnect: -1                  # reconnect indefinitely
   publish_timeout: "5s"
 
 postgres:
-  dsn: "postgres://personel_gw:changeme@postgres.internal:5432/personel?sslmode=verify-full&sslrootcert=/etc/personel/tls/root_ca.crt"
+  dsn: "postgres://personel_gw:gw123@postgres:5432/personel?sslmode=disable"
   max_conns: 20
   min_conns: 2
   conn_timeout: "10s"
   query_timeout: "5s"
 
 vault:
-  addr: "https://vault.internal:8200"
-  role_id: ""                        # injected via PERSONEL_GATEWAY_VAULT_ROLE_ID
-  secret_id: ""                      # injected via PERSONEL_GATEWAY_VAULT_SECRET_ID
+  addr: "https://vault:8200"
+  role_id: "3737d80c-7b47-07df-9c36-20d68b628f6e"
+  secret_id: "ab201190-ae49-7b98-198a-7f87791d9929"
   ca_cert: "/etc/personel/tls/root_ca.crt"
 
 observability:

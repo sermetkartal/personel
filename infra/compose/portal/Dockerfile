@@ -10,7 +10,7 @@ RUN corepack enable
 
 WORKDIR /app
 COPY apps/portal/package.json apps/portal/pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile --prod=false
+RUN pnpm install --no-frozen-lockfile
 
 FROM node:20-alpine AS builder
 

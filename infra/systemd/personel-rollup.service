@@ -1,0 +1,10 @@
+[Unit]
+Description=Personel CH→PG telemetry rollup
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/kartal/personel/infra/scripts/rollup-ch-to-pg.sh
+User=kartal
+StandardOutput=journal
+StandardError=journal

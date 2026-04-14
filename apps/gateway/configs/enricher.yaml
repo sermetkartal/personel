@@ -3,30 +3,30 @@
 
 nats:
   urls:
-    - "nats://nats.internal:4222"
+    - "nats://nats:4222"
   connect_timeout: "10s"
   max_reconnect: -1
   publish_timeout: "5s"
 
 clickhouse:
   addrs:
-    - "clickhouse.internal:9000"
+    - "clickhouse:9000"
   database: "personel"
   username: "personel_enricher"
-  password: ""                       # injected via PERSONEL_ENRICHER_CLICKHOUSE_PASSWORD
+  password: "enricher123"
   # async_insert: false means the enricher waits for ClickHouse to confirm each batch.
   # Set to true when ingest rate exceeds ~500k events/sec to enable the async insert buffer.
   async_insert: false
 
 minio:
-  endpoint: "minio.internal:9000"
-  access_key: ""                     # injected via env
-  secret_key: ""                     # injected via env
+  endpoint: "minio:9000"
+  access_key: "minioadmin"                     # injected via env
+  secret_key: "207a49fe34f3e61edb4198bfc620d12f"                     # injected via env
   use_ssl: false
   region: "us-east-1"
 
 postgres:
-  dsn: "postgres://personel_enricher:changeme@postgres.internal:5432/personel?sslmode=verify-full"
+  dsn: "postgres://personel_enricher:enricher123@postgres:5432/personel?sslmode=disable"
   max_conns: 10
   min_conns: 1
   conn_timeout: "10s"

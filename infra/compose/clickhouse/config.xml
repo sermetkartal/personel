@@ -141,4 +141,12 @@
          deployment adds macros.xml / replication config here and can
          re-enable this line. Fixed 2026-04-11. -->
     <!-- <include_from>/etc/clickhouse-server/config.d/*.xml</include_from> -->
+    <user_directories>
+        <users_xml>
+            <path>/etc/clickhouse-server/users.xml</path>
+        </users_xml>
+        <local_directory>
+            <path>/var/lib/clickhouse/access/</path>
+        </local_directory>
+    </user_directories>
 </clickhouse>

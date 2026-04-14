@@ -144,6 +144,13 @@ func byteSliceToUUID(b []byte) string {
 // protoPayloadToMap converts the proto event payload to a map[string]interface{}
 // for JSON serialisation. Marshals the payload field using standard JSON.
 func protoPayloadToMap(ev *personelv1.Event) map[string]interface{} {
+	if raw := ev.GetMeta().GetRawPayloadJson(); raw != "" {
+		var m map[string]interface{}
+		if err := json.Unmarshal([]byte(raw), &m); err == nil && m != nil {
+			return m
+		}
+		return map[string]interface{}{"raw": raw}
+	}
 	result := make(map[string]interface{})
 	if ev.Payload == nil {
 		return result

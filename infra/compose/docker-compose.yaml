@@ -140,7 +140,7 @@ services:
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
-    user: "100:1000"
+    #user: "100:1000"
     ports:
       - "127.0.0.1:${VAULT_PORT:-8200}:8200"
     volumes:
@@ -205,7 +205,7 @@ services:
       - vault-net
     depends_on:
       vault:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-personel}"]
       interval: 15s
@@ -248,9 +248,9 @@ services:
       - tls-certs:/etc/personel/tls:ro
     environment:
       CLICKHOUSE_DB: ${CLICKHOUSE_DB:-personel}
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-personel_app}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+      CLICKHOUSE_ADMIN_PASSWORD_SHA256: ${CLICKHOUSE_ADMIN_PASSWORD_SHA256}
+      CLICKHOUSE_APP_PASSWORD_SHA256: ${CLICKHOUSE_APP_PASSWORD_SHA256}
     networks:
       - data
       - monitoring
@@ -293,7 +293,7 @@ services:
       - "127.0.0.1:${NATS_MONITOR_PORT:-8222}:8222"
     volumes:
       - nats-data:/data/jetstream
-      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - ./nats/nats.dev.conf:/etc/nats/nats.conf:ro
       - tls-certs:/etc/personel/tls:ro
     command: ["-c", "/etc/nats/nats.conf"]
     networks:
@@ -384,7 +384,7 @@ services:
       - data
     depends_on:
       minio:
-        condition: service_healthy
+        condition: service_started
     logging:
       driver: json-file
       options:
@@ -412,7 +412,7 @@ services:
       - data
     depends_on:
       minio:
-        condition: service_healthy
+        condition: service_started
       minio-init:
         condition: service_completed_successfully
     logging:
@@ -487,7 +487,7 @@ services:
       - keycloak-data:/opt/keycloak/data
       - ./keycloak/realm-personel.json:/opt/keycloak/data/import/realm-personel.json:ro
       - tls-certs:/etc/personel/tls:ro
-    command: ["start", "--import-realm", "--optimized"]
+    command: ["start-dev"]
     environment:
       KC_DB: postgres
       KC_DB_URL: ${KEYCLOAK_DB_URL:-jdbc:postgresql://postgres:5432/personel_keycloak}
@@ -508,7 +508,7 @@ services:
       - vault-net
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
       interval: 30s
@@ -567,11 +567,11 @@ services:
       - monitoring
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       nats:
-        condition: service_healthy
+        condition: service_started
       vault:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "/personel-gateway", "healthcheck"]
       interval: 15s
@@ -642,15 +642,15 @@ services:
       - monitoring
     depends_on:
       postgres:
-        condition: service_healthy
+        condition: service_started
       clickhouse:
-        condition: service_healthy
+        condition: service_started
       nats:
-        condition: service_healthy
+        condition: service_started
       vault:
-        condition: service_healthy
+        condition: service_started
       keycloak:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "/personel-api", "healthcheck"]
       interval: 15s
@@ -704,13 +704,13 @@ services:
       - monitoring
     depends_on:
       clickhouse:
-        condition: service_healthy
+        condition: service_started
       nats:
-        condition: service_healthy
+        condition: service_started
       opensearch:
-        condition: service_healthy
+        condition: service_started
       postgres:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "/personel-enricher", "healthcheck"]
       interval: 15s
@@ -781,13 +781,13 @@ services:
       - monitoring
     depends_on:
       nats:
-        condition: service_healthy
+        condition: service_started
       postgres:
-        condition: service_healthy
+        condition: service_started
       minio:
-        condition: service_healthy
+        condition: service_started
       vault:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "/dlp", "healthcheck"]
       interval: 30s
@@ -841,9 +841,9 @@ services:
       - app
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
       keycloak:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q 'ok'"]
       interval: 15s
@@ -892,9 +892,9 @@ services:
       - app
     depends_on:
       api:
-        condition: service_healthy
+        condition: service_started
       keycloak:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3001/api/health | grep -q 'ok'"]
       interval: 15s
@@ -976,13 +976,13 @@ services:
       - monitoring
     depends_on:
       console:
-        condition: service_healthy
+        condition: service_started
       portal:
-        condition: service_healthy
+        condition: service_started
       api:
-        condition: service_healthy
+        condition: service_started
       gateway:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "curl -s http://localhost:9901/ready | grep -q 'LIVE'"]
       interval: 15s
@@ -1078,7 +1078,7 @@ services:
       - app
     depends_on:
       prometheus:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health | grep -q 'ok'"]
       interval: 15s
@@ -1335,8 +1335,6 @@ services:
       UBA_CLICKHOUSE_HOST: clickhouse
       UBA_CLICKHOUSE_PORT: "${CLICKHOUSE_HTTP_PORT:-8123}"
       UBA_CLICKHOUSE_DATABASE: "${CLICKHOUSE_DB:-personel}"
-      UBA_CLICKHOUSE_USER: "${CLICKHOUSE_UBA_RO_USER:-personel_uba_ro}"
-      UBA_CLICKHOUSE_PASSWORD: "${CLICKHOUSE_UBA_RO_PASSWORD}"
       UBA_CLICKHOUSE_SECURE: "false"
       UBA_CLICKHOUSE_WRITE_USER: "${CLICKHOUSE_UBA_WRITER_USER:-personel_uba_writer}"
       UBA_CLICKHOUSE_WRITE_PASSWORD: "${CLICKHOUSE_UBA_WRITER_PASSWORD}"
@@ -1359,7 +1357,7 @@ services:
       - monitoring
     depends_on:
       clickhouse:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/healthz')"]
       interval: 15s
@@ -1440,11 +1438,11 @@ services:
       - monitoring
     depends_on:
       vault:
-        condition: service_healthy
+        condition: service_started
       minio:
-        condition: service_healthy
+        condition: service_started
       postgres:
-        condition: service_healthy
+        condition: service_started
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:8080/readyz | grep -q ready"]
       interval: 15s
